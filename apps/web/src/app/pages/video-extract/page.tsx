@@ -1,6 +1,6 @@
 import { type DownloadDisplayStatus } from '../../../domain/download-request/download-request';
 import { ErrorDetailsDisclosure } from '../../components/error-details-disclosure';
-import { PixelIcon, type PixelIconName } from '../../components/pixel-art';
+import { AppIcon, type AppIconName } from '../../components/app-icon';
 import { useVideoExtractLogic } from './_hooks/use-video-extract-logic';
 
 /** 처리 화면에서 표시할 영상 추출 단계. */
@@ -10,7 +10,7 @@ const STATUS_ITEMS = [
   { icon: 'completed', key: 'completed', label: '완료' },
 ] as const satisfies Array<{
   /** 상태 아이콘 이름. */
-  icon: PixelIconName;
+  icon: AppIconName;
   /** 표시 상태 key. */
   key: DownloadDisplayStatus;
   /** 화면 라벨. */
@@ -62,7 +62,7 @@ export function VideoExtractPage() {
           <label className={validation.kind === 'invalid' ? 'field field--wide has-error' : 'field field--wide'}>
             <span className="field-label">YouTube URL</span>
             <span className="url-input-frame">
-              <PixelIcon className="input-icon" name="link" />
+              <AppIcon className="input-icon" name="link" />
               <input
                 autoComplete="off"
                 aria-describedby={validation.kind === 'ready' ? undefined : 'video-source-url-feedback'}
@@ -87,12 +87,12 @@ export function VideoExtractPage() {
             <legend>추출 형식</legend>
             <label className={draft.mode === 'audio' ? 'segment is-selected' : 'segment'}>
               <input checked={draft.mode === 'audio'} type="radio" value="audio" {...register('mode', { onChange: handleModeChange })} />
-              <PixelIcon name="audio" />
+              <AppIcon name="audio" />
               오디오 (MP3)
             </label>
             <label className={draft.mode === 'video' ? 'segment is-selected' : 'segment'}>
               <input checked={draft.mode === 'video'} type="radio" value="video" {...register('mode', { onChange: handleModeChange })} />
-              <PixelIcon name="video" />
+              <AppIcon name="video" />
               비디오 (MP4)
             </label>
           </fieldset>
@@ -108,31 +108,25 @@ export function VideoExtractPage() {
           </fieldset>
 
           <button className="primary-button" disabled={!canSubmit} type="submit">
-            <PixelIcon name="download" />
+            <AppIcon name="download" />
             {isDownloadPending ? '요청 중' : '추출 요청'}
           </button>
+
+          {requestAvailabilityNotice ? (
+            <div className="notice-box" role={requestAvailabilityNotice.role}>
+              <span aria-hidden="true"><AppIcon name={requestAvailabilityNotice.role === 'status' ? 'processing' : 'failed'} /></span>
+              <p>{requestAvailabilityNotice.message}</p>
+              {requestAvailabilityNotice.showRetry ? <button
+                className="secondary-button secondary-button--compact"
+                disabled={workerHealthIsFetching}
+                type="button"
+                onClick={retryWorkerHealth}
+              >
+                다시 확인
+              </button> : null}
+            </div>
+          ) : null}
         </form>
-
-        {requestAvailabilityNotice ? (
-          <div className="notice-box" role={requestAvailabilityNotice.role}>
-            <span aria-hidden="true"><PixelIcon name={requestAvailabilityNotice.role === 'status' ? 'processing' : 'failed'} /></span>
-            <p>{requestAvailabilityNotice.message}</p>
-            {requestAvailabilityNotice.showRetry ? <button
-              className="secondary-button secondary-button--compact"
-              disabled={workerHealthIsFetching}
-              type="button"
-              onClick={retryWorkerHealth}
-            >
-              다시 확인
-            </button> : null}
-          </div>
-        ) : null}
-
-        <div className="notice-box" role="note">
-          <span aria-hidden="true"><PixelIcon name="info" /></span>
-          <p>즉시 다운로드가 아니라 작업 요청 방식입니다.</p>
-          <p>파일은 준비 후 일정 시간 뒤 삭제될 수 있습니다.</p>
-        </div>
       </section>
     );
   }
@@ -145,7 +139,7 @@ export function VideoExtractPage() {
         <div className="step-tabs" aria-label="작업 단계">
           {STATUS_ITEMS.map((item) => (
             <span className={statusJob.displayStatus === item.key ? 'step-tab is-selected' : 'step-tab'} key={item.key}>
-              <PixelIcon name={item.icon} />
+              <AppIcon name={item.icon} />
               {item.label}
             </span>
           ))}
@@ -172,8 +166,8 @@ export function VideoExtractPage() {
           <div><dt>보관 기간</dt><dd>완료 후 {statusJob.retentionDays}일</dd></div>
         </dl>
         <div className="result-actions result-actions--video">
-          <a className="download-button" href={downloadHref}><PixelIcon name="download" />다운로드</a>
-          <button className="secondary-button secondary-button--new-request" type="button" onClick={returnToRequest}><PixelIcon name="newRequest" />새 요청</button>
+          <a className="download-button" href={downloadHref}><AppIcon name="download" />다운로드</a>
+          <button className="secondary-button secondary-button--new-request" type="button" onClick={returnToRequest}><AppIcon name="newRequest" />새 요청</button>
         </div>
       </section>
     );
@@ -193,13 +187,13 @@ export function VideoExtractPage() {
 }
 
 /** 화면별 panel heading을 일정한 구조로 렌더링한다. */
-function PanelTitle(props: { /** 아이콘 이름. */ icon: PixelIconName; /** heading id. */ id: string; /** 제목. */ children: string }) {
-  return <div className="panel-title-row"><h2 id={props.id}><PixelIcon name={props.icon} />{props.children}</h2><span className="title-dots" aria-hidden="true" /></div>;
+function PanelTitle(props: { /** 아이콘 이름. */ icon: AppIconName; /** heading id. */ id: string; /** 제목. */ children: string }) {
+  return <div className="panel-title-row"><h2 id={props.id}><AppIcon name={props.icon} />{props.children}</h2><span className="title-dots" aria-hidden="true" /></div>;
 }
 
 /** 상태 제목과 안내 문구를 렌더링한다. */
-function StatusHead(props: { /** 상태 아이콘. */ icon: PixelIconName; /** 상태 색상. */ tone: string; /** 상태 제목. */ title: string; /** 상태 설명. */ message: string; /** 오류 알림 여부. */ isAlert?: boolean }) {
-  return <div className={`status-head status-head--${props.tone}`}><span className="status-icon" aria-hidden="true"><PixelIcon name={props.icon} /></span><div><h3>{props.title}</h3><p role={props.isAlert ? 'alert' : 'status'} aria-live="polite">{props.message}</p></div></div>;
+function StatusHead(props: { /** 상태 아이콘. */ icon: AppIconName; /** 상태 색상. */ tone: string; /** 상태 제목. */ title: string; /** 상태 설명. */ message: string; /** 오류 알림 여부. */ isAlert?: boolean }) {
+  return <div className={`status-head status-head--${props.tone}`}><span className="status-icon" aria-hidden="true"><AppIcon name={props.icon} /></span><div><h3>{props.title}</h3><p role={props.isAlert ? 'alert' : 'status'} aria-live="polite">{props.message}</p></div></div>;
 }
 
 /** 10칸 진행률과 보조 텍스트를 렌더링한다. */

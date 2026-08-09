@@ -27,7 +27,7 @@ import {
   waitForSubtitleJob,
 } from '../../../../api/mytube-extract.api';
 import { useNavigationLock } from '../../../components/navigation-lock-context';
-import { type PixelIconName } from '../../../components/pixel-art';
+import { type AppIconName } from '../../../components/app-icon';
 import { getExtractViewPhase } from '../../../utils/extract-view-phase.util';
 import { getWorkerHealthNotice } from '../../../utils/worker-health-notice.util';
 
@@ -568,10 +568,10 @@ function createStatusTitle(job: SubtitleJobResponse) {
   return '보관 기간이 지났습니다';
 }
 
-/** 표시 상태에 맞는 픽셀 아이콘 이름을 반환한다. */
+/** 표시 상태에 맞는 아이콘 이름을 반환한다. */
 function getStatusIconName(
   status: SubtitleJobResponse['displayStatus'],
-): PixelIconName {
+): AppIconName {
   if (status === 'completed') {
     return 'completed';
   }

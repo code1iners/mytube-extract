@@ -2,7 +2,7 @@ import { type MouseEvent } from 'react';
 import { NavLink, useLocation } from 'react-router';
 import { ROUTE_PATHS } from '../constants/route-paths.constant';
 import { useNavigationLock } from './navigation-lock-context';
-import { PixelIcon, type PixelIconName } from './pixel-art';
+import { AppIcon, type AppIconName } from './app-icon';
 
 /** 하단 탭 메뉴 메타데이터. */
 const BOTTOM_TAB_ITEMS = [
@@ -18,7 +18,7 @@ const BOTTOM_TAB_ITEMS = [
   },
 ] as const satisfies Array<{
   /** 탭 아이콘 이름. */
-  icon: PixelIconName;
+  icon: AppIconName;
   /** 탭 표시 라벨. */
   label: string;
   /** 이동할 route path. */
@@ -65,7 +65,7 @@ export function BottomTabBar() {
             to={item.path}
             onClick={handleClick}
           >
-            <PixelIcon name={item.icon} />
+            <AppIcon name={item.icon} />
             <span>{item.label}</span>
           </NavLink>
         );

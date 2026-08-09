@@ -1,8 +1,6 @@
-import { type ChangeEvent } from 'react';
-import { useLocation } from 'react-router';
-import { ROUTE_PATHS } from '../constants/route-paths.constant';
+import { useEffect, useRef, useState, type ChangeEvent } from 'react';
 import { type ThemePreference } from '../utils/theme-preference.util';
-import { PixelExtractorArt } from './pixel-art';
+import { AppMark } from './app-icon';
 
 /** AppHero 입력값. */
 type AppHeroProps = {
@@ -24,20 +22,61 @@ const THEME_OPTIONS = [
   value: ThemePreference;
 }>;
 
+/** 타이틀과 아이콘 사이 여백(px). CSS `.brand-lockup { gap }`과 값을 맞춘다. */
+const BRAND_LOCKUP_GAP = 12;
+
 /** 모든 route에서 공유하는 앱 상단 브랜드 영역. */
 export function AppHero(props: AppHeroProps) {
-  // Hooks.
+  // States.
 
-  /** 현재 브라우저 route 위치. */
-  const location = useLocation();
+  /** 타이틀이 줄바꿈될 만큼 좁은지 여부. true면 로고만 남기고 텍스트를 시각적으로 숨긴다. */
+  const [isTitleCramped, setIsTitleCramped] = useState(false);
 
-  // Computed.
+  // Refs.
 
-  /** route별 짧은 현재 작업 라벨. */
-  const pageLabel =
-    location.pathname === ROUTE_PATHS.subtitles
-      ? '영어 SRT 생성'
-      : '영상 추출';
+  /** 아이콘+타이틀을 감싸는 영역. 실제 가용 폭을 관찰한다. */
+  const lockupRef = useRef<HTMLDivElement>(null);
+  /** 로고 아이콘 폭을 재기 위한 ref. */
+  const markRef = useRef<HTMLDivElement>(null);
+  /** 줄바꿈 없이 렌더링해 타이틀의 필요 폭을 재는 숨김 측정용 element. */
+  const measureRef = useRef<HTMLParagraphElement>(null);
+
+  // Effects.
+
+  useEffect(
+    function observeTitleAvailableWidth() {
+      /** 아이콘+타이틀 영역. */
+      const lockupElement = lockupRef.current;
+
+      if (!lockupElement) {
+        return;
+      }
+
+      /** 실제 가용 폭과 타이틀이 필요로 하는 폭을 비교해 줄바꿈 여부를 다시 계산한다. */
+      function checkTitleFits() {
+        if (!lockupElement || !markRef.current || !measureRef.current) {
+          return;
+        }
+
+        /** 아이콘이 차지하는 폭(간격 포함). */
+        const markWidth = markRef.current.offsetWidth + BRAND_LOCKUP_GAP;
+        /** 타이틀에 남는 가용 폭. */
+        const availableWidth = lockupElement.clientWidth - markWidth;
+        /** 줄바꿈 없이 타이틀을 그리는 데 필요한 폭. */
+        const requiredWidth = measureRef.current.scrollWidth;
+
+        setIsTitleCramped(requiredWidth > availableWidth);
+      }
+
+      checkTitleFits();
+
+      const resizeObserver = new ResizeObserver(checkTitleFits);
+      resizeObserver.observe(lockupElement);
+
+      return () => resizeObserver.disconnect();
+    },
+    [],
+  );
 
   // Handlers.
 
@@ -48,11 +87,20 @@ export function AppHero(props: AppHeroProps) {
 
   return (
     <header className="console-hero">
-      <div className="brand-lockup">
-        <h1 id="page-title" className="page-title">
+      <div className="brand-lockup" ref={lockupRef}>
+        <div className="brand-mark" ref={markRef} aria-hidden="true">
+          <AppMark />
+        </div>
+        <h1
+          id="page-title"
+          className={isTitleCramped ? 'page-title page-title--hidden' : 'page-title'}
+        >
           MyTube <span>Extract</span>
         </h1>
-        <p className="hero-copy">{pageLabel}</p>
+        {/* 줄바꿈 여부만 재는 항상-숨김 측정용 사본. 실제 폭 계산에 쓰인다. */}
+        <p aria-hidden="true" className="page-title page-title--measure" ref={measureRef}>
+          MyTube Extract
+        </p>
       </div>
       <fieldset className="theme-control">
         <legend>테마</legend>
@@ -71,9 +119,6 @@ export function AppHero(props: AppHeroProps) {
           ))}
         </div>
       </fieldset>
-      <div className="pixel-extractor" aria-hidden="true">
-        <PixelExtractorArt />
-      </div>
     </header>
   );
 }
