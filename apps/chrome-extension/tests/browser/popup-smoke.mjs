@@ -25,7 +25,7 @@ const realApiBaseUrl =
   process.env.MYTUBE_EXTRACT_API_BASE_URL ??
   process.env.WXT_MEDIA_NEST_API_BASE_URL ??
   process.env.MEDIA_NEST_API_BASE_URL ??
-  'https://media-nest.codeliners.cc';
+  'https://mytube-extract-api.codeliners.cc';
 /** Built popup에 주입되는 MyTube Extract API origin. */
 const expectedApiOrigin = new URL(realApiBaseUrl).origin;
 

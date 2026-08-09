@@ -12,7 +12,7 @@ const missingReferences = [];
 /** 검증 실패 목록. */
 const validationErrors = [];
 /** 기본 운영 MyTube Extract API 서버 주소. */
-const DEFAULT_API_BASE_URL = 'https://media-nest.codeliners.cc';
+const DEFAULT_API_BASE_URL = 'https://mytube-extract-api.codeliners.cc';
 
 /** 존재해야 하는 파일 참조를 확인한다. */
 function assertOutputFileExists(referencePath, ownerPath) {

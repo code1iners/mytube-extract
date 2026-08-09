@@ -75,7 +75,7 @@ describe('download URL behavior', () => {
         sourceUrl: 'https://example.com/private',
       } as never),
     ).toMatchObject({
-      apiBaseUrl: 'https://media-nest.codeliners.cc',
+      apiBaseUrl: 'https://mytube-extract-api.codeliners.cc',
       filename: 'saved',
       mode: 'video',
       sourceUrl: '',
@@ -85,7 +85,7 @@ describe('download URL behavior', () => {
 
   it('resolves API base URLs from WXT environment values', () => {
     expect(resolveDefaultApiBaseUrl(' http://127.0.0.1:3030 ')).toBe('http://127.0.0.1:3030');
-    expect(resolveDefaultApiBaseUrl(undefined)).toBe('https://media-nest.codeliners.cc');
+    expect(resolveDefaultApiBaseUrl(undefined)).toBe('https://mytube-extract-api.codeliners.cc');
   });
 
   it('rejects unsupported API protocols and invalid download inputs', () => {

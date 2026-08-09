@@ -41,15 +41,15 @@ describe('WXT config', () => {
       expect.arrayContaining(['storage', 'downloads', 'activeTab']),
     );
     expect(testableConfig.manifest?.host_permissions).toEqual([
-      'https://media-nest.codeliners.cc/*',
+      'https://mytube-extract-api.codeliners.cc/*',
     ]);
     expect(testableConfig.manifest?.host_permissions).not.toContain('<all_urls>');
   });
 
   it('builds host permissions from the configured API origin only', () => {
     expect(createApiHostPermission('http://127.0.0.1:3030')).toBe('http://127.0.0.1:3030/*');
-    expect(createApiHostPermission('https://media-nest.codeliners.cc')).toBe(
-      'https://media-nest.codeliners.cc/*',
+    expect(createApiHostPermission('https://mytube-extract-api.codeliners.cc')).toBe(
+      'https://mytube-extract-api.codeliners.cc/*',
     );
   });
 });

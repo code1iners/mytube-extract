@@ -1,5 +1,5 @@
 /** 운영 MyTube Extract API 서버 주소. */
-export const PRODUCTION_API_BASE_URL = 'https://media-nest.codeliners.cc';
+export const PRODUCTION_API_BASE_URL = 'https://mytube-extract-api.codeliners.cc';
 
 /** 로컬 MyTube Extract API 서버 주소. */
 export const LOCAL_API_BASE_URL = 'http://127.0.0.1:5011';

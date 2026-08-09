@@ -173,10 +173,10 @@ describe('popup download model', () => {
     await model.submitDownload();
 
     expect(dependencies.myTubeExtractClient.assertServerAvailable).toHaveBeenCalledWith(
-      'https://media-nest.codeliners.cc',
+      'https://mytube-extract-api.codeliners.cc',
     );
     expect(dependencies.downloads.startDownload).toHaveBeenCalledWith(
-      'https://media-nest.codeliners.cc/audio?url=https%3A%2F%2Fwww.youtube.com%2Fwatch%3Fv%3Dabc123_DEF0',
+      'https://mytube-extract-api.codeliners.cc/audio?url=https%3A%2F%2Fwww.youtube.com%2Fwatch%3Fv%3Dabc123_DEF0',
     );
   });
 
@@ -211,7 +211,7 @@ describe('popup download model', () => {
     expect(dependencies.myTubeExtractClient.assertServerAvailable).toHaveBeenCalledTimes(1);
     expect(dependencies.downloads.startDownload).toHaveBeenCalledTimes(1);
     expect(dependencies.downloads.startDownload).toHaveBeenCalledWith(
-      'https://media-nest.codeliners.cc/audio?url=https%3A%2F%2Fwww.youtube.com%2Fwatch%3Fv%3Dabc123_DEF0',
+      'https://mytube-extract-api.codeliners.cc/audio?url=https%3A%2F%2Fwww.youtube.com%2Fwatch%3Fv%3Dabc123_DEF0',
     );
     expect(model.getSnapshot().status).toMatchObject({
       kind: 'download-started',
@@ -249,7 +249,7 @@ describe('popup download model', () => {
     await submit;
 
     expect(dependencies.downloads.startDownload).toHaveBeenCalledWith(
-      'https://media-nest.codeliners.cc/audio?url=https%3A%2F%2Fwww.youtube.com%2Fwatch%3Fv%3Dabc123_DEF0',
+      'https://mytube-extract-api.codeliners.cc/audio?url=https%3A%2F%2Fwww.youtube.com%2Fwatch%3Fv%3Dabc123_DEF0',
     );
   });
 
@@ -318,7 +318,7 @@ describe('popup download model', () => {
       }),
     );
     expect(dependencies.downloads.startDownload).toHaveBeenCalledWith(
-      'https://media-nest.codeliners.cc/video?url=https%3A%2F%2Fwww.youtube.com%2Fwatch%3Fv%3Dabc123_DEF0&resolution=720',
+      'https://mytube-extract-api.codeliners.cc/video?url=https%3A%2F%2Fwww.youtube.com%2Fwatch%3Fv%3Dabc123_DEF0&resolution=720',
     );
   });
 });

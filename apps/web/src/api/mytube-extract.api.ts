@@ -126,7 +126,7 @@ export type CreateDownloadJobRequest = {
 const LOCAL_API_BASE_URL = 'http://127.0.0.1:5011';
 
 /** 운영 MyTube Extract API 서버 주소. */
-const PRODUCTION_API_BASE_URL = 'https://media-nest.codeliners.cc';
+const PRODUCTION_API_BASE_URL = 'https://mytube-extract-api.codeliners.cc';
 
 /** 기본 다운로드 job polling 간격. */
 const DEFAULT_POLL_INTERVAL_MS = 2500;

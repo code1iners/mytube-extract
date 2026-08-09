@@ -51,8 +51,8 @@ cp apps/chrome-extension/.env.example apps/chrome-extension/.env
 - `EXPECTED_YT_DLP_VERSION`: 런타임 검증 시 기대하는 yt-dlp 버전
 - `EXPECTED_FFMPEG_LOCATION`: 런타임 검증 시 기대하는 ffmpeg 실행 파일 경로
 - `EXPECTED_FFMPEG_VERSION`: 런타임 검증 시 기대하는 ffmpeg 버전 문자열
-- `VITE_MYTUBE_EXTRACT_API_BASE_URL`: web 앱이 호출할 API base URL. 비워두면 dev는 `http://127.0.0.1:5011`, production은 `https://media-nest.codeliners.cc`
-- `WXT_MYTUBE_EXTRACT_API_BASE_URL`: Chrome 확장 프로그램이 호출할 API base URL. 비워두면 `https://media-nest.codeliners.cc`
+- `VITE_MYTUBE_EXTRACT_API_BASE_URL`: web 앱이 호출할 API base URL. 비워두면 dev는 `http://127.0.0.1:5011`, production은 `https://mytube-extract-api.codeliners.cc`
+- `WXT_MYTUBE_EXTRACT_API_BASE_URL`: Chrome 확장 프로그램이 호출할 API base URL. 비워두면 `https://mytube-extract-api.codeliners.cc`
 
 ## Run With Node.js
 
@@ -234,7 +234,7 @@ http://localhost:3000/popup.html
 
 ```bash
 WXT_MYTUBE_EXTRACT_API_BASE_URL=http://127.0.0.1:5011 pnpm --filter chrome-extension run dev
-WXT_MYTUBE_EXTRACT_API_BASE_URL=https://media-nest.codeliners.cc pnpm --filter chrome-extension run build
+WXT_MYTUBE_EXTRACT_API_BASE_URL=https://mytube-extract-api.codeliners.cc pnpm --filter chrome-extension run build
 ```
 
 자동 open을 끄려면 아래처럼 실행한다.
