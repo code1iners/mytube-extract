@@ -55,9 +55,9 @@
 - `SUBTITLE_UPLOAD_MAX_BYTES`: 자막 원본 영상 업로드 최대 byte. 설정하지 않으면 500MiB
 - `SUBTITLE_UPLOAD_TOKEN_SECRET`: R2 direct upload session token 서명 secret. 설정하지 않으면 `R2_SECRET_ACCESS_KEY`를 fallback으로 사용한다.
 - `SUBTITLE_AUDIO_MAX_BYTES`: worker의 local Whisper 처리 보호용 추출 audio 최대 byte. 설정하지 않으면 512MiB
-- `WHISPER_CLI_PATH`: worker가 실행할 `whisper.cpp` CLI binary 경로
-- `WHISPER_MODEL_BASE_EN_PATH`: `base_en` 선택 시 worker가 사용할 `base.en` model 파일 경로
-- `WHISPER_MODEL_SMALL_EN_PATH`: `small_en` 선택 시 worker가 사용할 `small.en` model 파일 경로
+- `WHISPER_CLI_PATH`: worker가 실행할 `whisper.cpp` CLI binary 경로. worker 기동 시 preflight로 존재 여부를 검증하며, 없으면 worker 전체가 기동을 거부한다(download job 포함).
+- `WHISPER_MODEL_BASE_EN_PATH`: `base_en` 선택 시 worker가 사용할 `base.en` model 파일 경로. `WHISPER_CLI_PATH`와 동일하게 worker 기동 시 preflight 대상이며, 실제로 `base_en`을 요청하지 않더라도 파일이 없으면 worker가 기동하지 않는다.
+- `WHISPER_MODEL_SMALL_EN_PATH`: `small_en` 선택 시 worker가 사용할 `small.en` model 파일 경로. `WHISPER_MODEL_BASE_EN_PATH`와 동일하게 worker 기동 preflight 대상이다.
 - `WHISPER_THREADS`: `whisper.cpp` 실행 thread 수. 설정하지 않으면 4
 - `WHISPER_LANGUAGE`: 자막 생성 언어. CTA 1 기본값은 `en`
 - `MEDIA_DOWNLOAD_TIMEOUT_MS`: 호환용 직접 다운로드 생성 작업 timeout

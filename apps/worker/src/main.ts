@@ -41,6 +41,7 @@ import {
   createYtDlpFormat,
   DEFAULT_SUBTITLE_AUDIO_MAX_BYTES,
   DEFAULT_WHISPER_LANGUAGE,
+  detectMissingWhisperPaths,
   normalizeSubtitleWorkerFailureCode,
   normalizeWhisperSrt,
   normalizeExtractedAssetTitle,
@@ -150,6 +151,24 @@ const r2Client = new S3Client({
 async function main() {
   process.on('SIGINT', shutdown);
   process.on('SIGTERM', shutdown);
+
+  /** Whisper 런타임 의존성 preflight 검증. */
+  const cliPath = process.env.WHISPER_CLI_PATH?.trim();
+  const baseEnPath = process.env.WHISPER_MODEL_BASE_EN_PATH?.trim();
+  const smallEnPath = process.env.WHISPER_MODEL_SMALL_EN_PATH?.trim();
+
+  const missing = detectMissingWhisperPaths({
+    cliExists: cliPath ? existsSync(cliPath) : false,
+    baseEnExists: baseEnPath ? existsSync(baseEnPath) : false,
+    smallEnExists: smallEnPath ? existsSync(smallEnPath) : false,
+  });
+
+  if (missing.length > 0) {
+    console.error(
+      `Fatal: Whisper runtime dependencies not found: ${missing.join(', ')}`,
+    );
+    process.exit(1);
+  }
 
   startHeartbeat();
 

@@ -17,6 +17,7 @@ import {
   createWorkerHeartbeatUpsertArgs,
   createYtDlpFormat,
   DEFAULT_SUBTITLE_AUDIO_MAX_BYTES,
+  detectMissingWhisperPaths,
   normalizeSubtitleWorkerFailureCode,
   normalizeWhisperSrt,
   normalizeExtractedAssetTitle,
@@ -303,4 +304,48 @@ assert.deepEqual(
       id: 'default',
     },
   },
+);
+assert.deepEqual(
+  detectMissingWhisperPaths({
+    cliExists: true,
+    baseEnExists: true,
+    smallEnExists: true,
+  }),
+  [],
+);
+assert.deepEqual(
+  detectMissingWhisperPaths({
+    cliExists: false,
+    baseEnExists: true,
+    smallEnExists: true,
+  }),
+  ['WHISPER_CLI_PATH'],
+);
+assert.deepEqual(
+  detectMissingWhisperPaths({
+    cliExists: true,
+    baseEnExists: false,
+    smallEnExists: true,
+  }),
+  ['WHISPER_MODEL_BASE_EN_PATH'],
+);
+assert.deepEqual(
+  detectMissingWhisperPaths({
+    cliExists: true,
+    baseEnExists: true,
+    smallEnExists: false,
+  }),
+  ['WHISPER_MODEL_SMALL_EN_PATH'],
+);
+assert.deepEqual(
+  detectMissingWhisperPaths({
+    cliExists: false,
+    baseEnExists: false,
+    smallEnExists: false,
+  }),
+  [
+    'WHISPER_CLI_PATH',
+    'WHISPER_MODEL_BASE_EN_PATH',
+    'WHISPER_MODEL_SMALL_EN_PATH',
+  ],
 );

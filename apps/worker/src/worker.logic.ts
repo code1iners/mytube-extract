@@ -449,3 +449,30 @@ export function createWorkerHeartbeatUpsertArgs(now = new Date()) {
     },
   };
 }
+
+/** Whisper 기동 시 필수 파일 누락 여부를 판정한다. */
+export function detectMissingWhisperPaths(input: {
+  /** CLI 바이너리 존재 여부. */
+  cliExists: boolean;
+  /** base_en 모델 존재 여부. */
+  baseEnExists: boolean;
+  /** small_en 모델 존재 여부. */
+  smallEnExists: boolean;
+}): string[] {
+  /** 누락된 경로 목록. */
+  const missing: string[] = [];
+
+  if (!input.cliExists) {
+    missing.push('WHISPER_CLI_PATH');
+  }
+
+  if (!input.baseEnExists) {
+    missing.push('WHISPER_MODEL_BASE_EN_PATH');
+  }
+
+  if (!input.smallEnExists) {
+    missing.push('WHISPER_MODEL_SMALL_EN_PATH');
+  }
+
+  return missing;
+}

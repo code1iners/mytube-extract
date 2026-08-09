@@ -184,6 +184,8 @@ GET /subtitles/jobs/{JOB_ID}/file
 /whisper.cpp/models/ggml-small.en.bin
 ```
 
+⚠️ **중요**: whisper.cpp 저장소를 clone만 해서는 실제 모델 파일이 없다. 저장소에는 `for-tests-*.bin` 더미 파일(~575KB)만 포함되어 있다. 실제 모델을 받으려면 `models/download-ggml-model.sh base.en` 및 `models/download-ggml-model.sh small.en`을 실행하거나 [Hugging Face ggerganov/whisper.cpp](https://huggingface.co/ggerganov/whisper.cpp)에서 수동으로 다운로드한 뒤, 압축 해제한 `ggml-*.bin` 파일을 `WHISPER_CPP_HOST_DIR/models/`에 배치해야 한다. worker는 기동 시점에 두 모델 파일 존재 여부를 검증하고, 둘 중 하나라도 없으면 즉시 종료된다.
+
 호환용 직접 비디오 다운로드:
 
 ```text
