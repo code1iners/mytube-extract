@@ -1,12 +1,49 @@
 services:
-  worker:
+  api:
     build:
       context: .
-      dockerfile: apps/worker/Dockerfile
-    image: mytube-extract-worker:latest
-    container_name: mytube-extract-worker
+      dockerfile: apps/api/Dockerfile
+    image: mytube-extract-api:latest
+    container_name: mytube-extract-api
     restart: unless-stopped
-    env_file:
-      - docker-compose.env
-    volumes:
-      - ${WHISPER_CPP_HOST_DIR:?Set WHISPER_CPP_HOST_DIR}:/whisper.cpp:ro
+    environment:
+      NODE_ENV: production
+      PORT: 5011
+      DATABASE_URL: ${DATABASE_URL:-}
+      R2_ENDPOINT: ${R2_ENDPOINT:-}
+      R2_BUCKET: ${R2_BUCKET:-}
+      R2_ACCESS_KEY_ID: ${R2_ACCESS_KEY_ID:-}
+      R2_SECRET_ACCESS_KEY: ${R2_SECRET_ACCESS_KEY:-}
+      R2_PUBLIC_BASE_URL: ${R2_PUBLIC_BASE_URL:-}
+      ASSET_RETENTION_DAYS: ${ASSET_RETENTION_DAYS:-7}
+      WORKER_HEARTBEAT_STALE_MS: ${WORKER_HEARTBEAT_STALE_MS:-15000}
+      SUBTITLE_UPLOAD_MAX_BYTES: ${SUBTITLE_UPLOAD_MAX_BYTES:-1073741824}
+      SUBTITLE_UPLOAD_TOKEN_SECRET: ${SUBTITLE_UPLOAD_TOKEN_SECRET:-}
+    ports:
+      - "5011:5011"
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:5011/health').then((response) => process.exit(response.ok ? 0 : 1)).catch(() => process.exit(1));"]
+      interval: 30s
+      timeout: 5s
+      start_period: 10s
+      retries: 3
+
+  cloudflared:
+    image: cloudflare/cloudflared:2026.7.3
+    container_name: mytube-extract-cloudflared
+    restart: unless-stopped
+    command: tunnel --no-autoupdate run
+    environment:
+      # 원격 관리(remotely-managed) 터널은 토큰만으로 실행되며, ingress 라우팅은 Cloudflare 대시보드가 관리한다.
+      TUNNEL_TOKEN: ${CLOUDFLARE_TUNNEL_TOKEN:-}
+      # tunnel ready가 조회하는 /ready 엔드포인트를 열기 위해 필요하다.
+      TUNNEL_METRICS: 0.0.0.0:2000
+    depends_on:
+      api:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "cloudflared", "tunnel", "ready"]
+      interval: 30s
+      timeout: 5s
+      start_period: 10s
+      retries: 3

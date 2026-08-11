@@ -12,11 +12,16 @@ Docker 실행 환경의 정확한 runtime dependency 계약은 [API 현재 구�
 
 ## Environment
 
-Docker Compose 통합 실행은 `docker-compose.env.example`을 기준으로 실행 환경 파일을 만든다.
+Docker Compose 실행은 공통, API, worker, cloudflared 역할별 env example을 기준으로 실행 환경 파일을 만든다.
 
 ```bash
-cp docker-compose.env.example docker-compose.env
+cp docker-compose.shared.env.example docker-compose.shared.env
+cp docker-compose.api.env.example docker-compose.api.env
+cp docker-compose.worker.env.example docker-compose.worker.env
+cp docker-compose.cloudflared.env.example docker-compose.cloudflared.env
 ```
+
+API 배포는 `docker-compose.yml`과 `shared + api + cloudflared` env를 사용한다. Worker 배포는 `docker-compose.yml`에 `docker-compose.worker.yml`을 병합하고 `shared + worker` env만 읽는다. 실제 env 파일은 Git 추적과 Docker build context에서 제외한다.
 
 앱 단독 실행은 앱별 env example을 기준으로 한다.
 
@@ -32,7 +37,7 @@ cp apps/chrome-extension/.env.example apps/chrome-extension/.env
 - `PORT`: 서버 포트. 기본값은 `5011`
 - `FFMPEG_LOCATION`: ffmpeg 실행 파일 경로
 - `DATABASE_URL`: Prisma가 사용하는 PostgreSQL 연결 URL
-- `DIRECT_URL`: Prisma migration에서 사용할 직접 PostgreSQL 연결 URL
+- `DIRECT_URL`: Prisma migration에서만 사용할 직접 PostgreSQL 연결 URL. API와 worker runtime에는 주입하지 않음
 - `R2_ENDPOINT`, `R2_BUCKET`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`: R2 S3 compatible storage 설정
 - `R2_PUBLIC_BASE_URL`: S3 API read fallback에 사용할 public object base URL
 - `ASSET_RETENTION_DAYS`: 추출 asset 보관 기간. 기본값은 `7`
@@ -98,7 +103,7 @@ curl http://127.0.0.1:5011/health
 worker 상태 확인:
 
 ```bash
-docker compose ps worker
+docker ps --filter "name=mytube-extract-worker"
 ```
 
 로그 확인:
@@ -126,7 +131,7 @@ pnpm --filter api run verify:runtime
 git pull --ff-only
 pnpm --filter @mytube-extract/db run migrate:deploy
 pnpm worker:deploy
-docker compose ps worker
+docker ps --filter "name=mytube-extract-worker"
 curl http://127.0.0.1:5011/health
 ```
 
@@ -177,7 +182,7 @@ GET /subtitles/jobs/{JOB_ID}
 GET /subtitles/jobs/{JOB_ID}/file
 ```
 
-`whisper.cpp` 모델은 자동 다운로드하지 않는다. Docker Compose 기준으로 아래 파일을 수동 준비한 뒤 `docker-compose.env`에 container 내부 경로를 지정한다.
+`whisper.cpp` 모델은 자동 다운로드하지 않는다. Docker Compose 기준으로 아래 파일을 수동 준비한 뒤 `docker-compose.worker.env`에 host mount와 container 내부 경로를 지정한다.
 
 ```text
 /whisper.cpp/models/ggml-base.en.bin

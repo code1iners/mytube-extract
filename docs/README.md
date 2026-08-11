@@ -12,6 +12,9 @@
 - 공통 브랜드 가이드라인: `docs/brand-guidelines.md`
 - 공통 디자인 시스템 Foundation: `docs/DESIGN.md`
 - Chrome 확장 프로그램 브랜딩 적용: `docs/chrome-extension/branding-direction.md`
+- API 로컬 배포: `docs/deployment/api-local-deployment.md`
+- Cloudflare Tunnel 배포: `docs/deployment/cloudflared-tunnel-setup.md`
+- 배포 알려진 이슈: `docs/deployment/known-issues.md`
 - 호환용 자막 업로드 제거 조건: `docs/deprecated/subtitle-legacy-multipart-upload.md`
 - 미구현 과제: `docs/unimplemented/current-unimplemented.md`
 

@@ -49,7 +49,10 @@ lerna-debug.log*
 # dotenv environment variable files
 .env
 /.env.example
-docker-compose.env
+docker-compose.shared.env
+docker-compose.api.env
+docker-compose.worker.env
+docker-compose.cloudflared.env
 .env.production
 .env.development.local
 .env.test.local

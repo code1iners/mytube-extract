@@ -41,13 +41,16 @@
 - 기본 포트: `PORT` 환경 변수가 없으면 `5011`
 - 환경 파일: `.env.{NODE_ENV}`, `.env` 순서로 로드
 - API 단독 실행 환경 변수 예시는 `apps/api/.env.example`에 둔다.
-- Docker Compose 통합 실행 환경 변수 예시는 `docker-compose.env.example`에 둔다.
-- `apps/api/.env`, `docker-compose.env`는 로컬 실행 파일로 취급하고 저장소 추적 대상에서 제외한다.
+- Docker Compose 실행 환경 변수 예시는 `docker-compose.{shared,api,worker,cloudflared}.env.example`에 역할별로 둔다.
+- API와 cloudflared는 `docker-compose.yml`, worker는 `docker-compose.worker.yml`에 정의하며 worker 명령은 두 파일을 병합한다.
+- `apps/api/.env`, `docker-compose.{shared,api,worker,cloudflared}.env`는 로컬 실행 파일로 취급하고 저장소 추적 대상에서 제외한다.
+- 실제 Docker Compose env 파일은 `.dockerignore`에서도 제외해 image build context로 전달하지 않는다.
 
 ## 주요 환경 변수
 
 - `FFMPEG_LOCATION`: youtube-dl-exec 실행 시 ffmpeg 위치로 전달
-- `DATABASE_URL`, `DIRECT_URL`: Prisma PostgreSQL 연결과 migration에 사용
+- `DATABASE_URL`: API와 worker runtime의 Prisma PostgreSQL 연결에 사용
+- `DIRECT_URL`: Prisma migration의 직접 PostgreSQL 연결에만 사용하며 API와 worker runtime에는 주입하지 않음
 - `R2_ENDPOINT`, `R2_BUCKET`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_PUBLIC_BASE_URL`: R2 S3 compatible storage와 public read fallback에 사용
 - `ASSET_RETENTION_DAYS`: 완료 asset 보관 기간. 설정하지 않으면 기본 7일
 - `WORKER_HEARTBEAT_STALE_MS`: API가 worker heartbeat를 사용 가능 상태로 인정하는 시간
