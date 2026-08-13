@@ -18,6 +18,12 @@
 - 호환용 자막 업로드 제거 조건: `docs/deprecated/subtitle-legacy-multipart-upload.md`
 - 미구현 과제: `docs/unimplemented/current-unimplemented.md`
 
+## Web Routes
+
+- 영상 요청: `docs/web/routes/video.md`
+- 자막 요청: `docs/web/routes/subtitles.md`
+- 브라우저 요청 내역: `docs/web/routes/history.md`
+
 ## 규칙
 
 - README는 실행 방법과 문서 지도를 담당하고 상세 계약을 중복하지 않는다.

@@ -1,6 +1,15 @@
-import { useEffect, useRef, useState, type ChangeEvent } from 'react';
+import {
+  useEffect,
+  useRef,
+  useState,
+  type ChangeEvent,
+  type MouseEvent,
+} from 'react';
+import { NavLink } from 'react-router';
+import { ROUTE_PATHS } from '../constants/route-paths.constant';
 import { type ThemePreference } from '../utils/theme-preference.util';
 import { AppMark } from './app-icon';
+import { useNavigationLock } from './navigation-lock-context';
 
 /** AppHero 입력값. */
 type AppHeroProps = {
@@ -27,6 +36,11 @@ const BRAND_LOCKUP_GAP = 12;
 
 /** 모든 route에서 공유하는 앱 상단 브랜드 영역. */
 export function AppHero(props: AppHeroProps) {
+  // Hooks.
+
+  /** 추출 요청 중 route 이동 차단 상태. */
+  const { navigationLocked } = useNavigationLock();
+
   // States.
 
   /** 타이틀이 줄바꿈될 만큼 좁은지 여부. true면 로고만 남기고 텍스트를 시각적으로 숨긴다. */
@@ -85,6 +99,13 @@ export function AppHero(props: AppHeroProps) {
     props.onThemePreferenceChange(event.currentTarget.value as ThemePreference);
   }
 
+  /** 추출 요청 중 요청 내역 route로 이동하지 않는다. */
+  function handleHistoryClick(event: MouseEvent<HTMLAnchorElement>) {
+    if (navigationLocked) {
+      event.preventDefault();
+    }
+  }
+
   return (
     <header className="console-hero">
       <div className="brand-lockup" ref={lockupRef}>
@@ -102,23 +123,33 @@ export function AppHero(props: AppHeroProps) {
           MyTube Extract
         </p>
       </div>
-      <fieldset className="theme-control">
-        <legend>테마</legend>
-        <div className="theme-toggle">
-          {THEME_OPTIONS.map((option) => (
-            <label className="theme-toggle__option" key={option.value}>
-              <input
-                checked={props.themePreference === option.value}
-                name="theme-preference"
-                type="radio"
-                value={option.value}
-                onChange={handleThemeChange}
-              />
-              <span>{option.label}</span>
-            </label>
-          ))}
-        </div>
-      </fieldset>
+      <div className="hero-utilities">
+        <NavLink
+          aria-disabled={navigationLocked || undefined}
+          className={navigationLocked ? 'history-link is-disabled' : 'history-link'}
+          to={ROUTE_PATHS.history}
+          onClick={handleHistoryClick}
+        >
+          요청 내역
+        </NavLink>
+        <fieldset className="theme-control">
+          <legend>테마</legend>
+          <div className="theme-toggle">
+            {THEME_OPTIONS.map((option) => (
+              <label className="theme-toggle__option" key={option.value}>
+                <input
+                  checked={props.themePreference === option.value}
+                  name="theme-preference"
+                  type="radio"
+                  value={option.value}
+                  onChange={handleThemeChange}
+                />
+                <span>{option.label}</span>
+              </label>
+            ))}
+          </div>
+        </fieldset>
+      </div>
     </header>
   );
 }

@@ -2,12 +2,10 @@ import {
   type DownloadDraft,
   type DownloadResponse,
   downloadDraftSchema,
-  isTerminalStatus,
 } from '../domain/download-request/download-request';
 import {
   type SubtitleWhisperModel,
   type SubtitleJobResponse,
-  isSubtitleTerminalStatus,
 } from '../domain/subtitle-request/subtitle-request';
 
 /** fetch 호환 함수. */
@@ -38,34 +36,6 @@ export type WorkerHealthResponse = {
     /** 최근 heartbeat 기준 worker 사용 가능 여부. */
     available: boolean;
   };
-};
-
-/** 다운로드 job polling 옵션. */
-export type WaitForDownloadJobOptions = {
-  /** API base URL. */
-  apiBaseUrl?: string;
-  /** 테스트에서 대체할 fetch 함수. */
-  fetcher?: MyTubeExtractFetch;
-  /** polling 중단 신호. */
-  signal?: AbortSignal;
-  /** polling 간격. */
-  intervalMs?: number;
-  /** 상태 변경 콜백. */
-  onStatus?: (snapshot: DownloadResponse) => void;
-};
-
-/** 자막 job polling 옵션. */
-export type WaitForSubtitleJobOptions = {
-  /** API base URL. */
-  apiBaseUrl?: string;
-  /** 테스트에서 대체할 fetch 함수. */
-  fetcher?: MyTubeExtractFetch;
-  /** polling 중단 신호. */
-  signal?: AbortSignal;
-  /** polling 간격. */
-  intervalMs?: number;
-  /** 상태 변경 콜백. */
-  onStatus?: (snapshot: SubtitleJobResponse) => void;
 };
 
 /** direct R2 upload session 생성 응답. */
@@ -128,8 +98,8 @@ const LOCAL_API_BASE_URL = 'http://127.0.0.1:5011';
 /** 운영 MyTube Extract API 서버 주소. */
 const PRODUCTION_API_BASE_URL = 'https://mytube-extract-api.codeliners.cc';
 
-/** 기본 다운로드 job polling 간격. */
-const DEFAULT_POLL_INTERVAL_MS = 2500;
+/** 활성 job 상태 조회 간격. */
+export const JOB_STATUS_REFETCH_INTERVAL_MS = 2500;
 
 /** 기본 API 서버 주소. */
 export const DEFAULT_API_BASE_URL = import.meta.env.DEV
@@ -150,6 +120,42 @@ export class WorkerUnavailableError extends Error {
     location: '서비스 상태 확인',
     requestPath: '/health',
   };
+}
+
+/** job 상태 조회 HTTP 오류. */
+export class JobStatusRequestError extends Error {
+  constructor(responseStatus: number) {
+    super('Job status request failed.');
+    this.name = 'JobStatusRequestError';
+    this.responseStatus = responseStatus;
+  }
+
+  /** HTTP 응답 상태 코드. */
+  responseStatus: number;
+}
+
+/** 일시적인 job 상태 조회 오류만 재시도한다. */
+export function shouldRetryJobStatus(_failureCount: number, error: unknown) {
+  if (isAbortError(error)) {
+    return false;
+  }
+
+  /** HTTP 응답 상태 코드가 있는 오류 후보. */
+  const responseStatus =
+    error && typeof error === 'object' && 'responseStatus' in error
+      ? error.responseStatus
+      : undefined;
+
+  if (typeof responseStatus === 'number') {
+    return responseStatus >= 500;
+  }
+
+  return error instanceof TypeError;
+}
+
+/** job 상태 조회 재시도 지연을 최대 30초까지 늘린다. */
+export function getJobStatusRetryDelay(attemptIndex: number) {
+  return Math.min(1000 * 2 ** attemptIndex, 30_000);
 }
 
 /** worker health 응답 형식 오류. */
@@ -614,7 +620,7 @@ export async function getDownloadJob(
   );
 
   if (!response.ok) {
-    throw new Error('Download job status failed.');
+    throw new JobStatusRequestError(response.status);
   }
 
   return (await response.json()) as DownloadResponse;
@@ -643,48 +649,10 @@ export async function getSubtitleJob(
   );
 
   if (!response.ok) {
-    throw new Error('Subtitle job status failed.');
+    throw new JobStatusRequestError(response.status);
   }
 
   return (await response.json()) as SubtitleJobResponse;
-}
-
-/** 다운로드 job이 terminal 상태가 될 때까지 polling한다. */
-export async function waitForDownloadJob(
-  job: DownloadResponse,
-  options: WaitForDownloadJobOptions = {},
-) {
-  /** polling 간격. */
-  const intervalMs = options.intervalMs ?? DEFAULT_POLL_INTERVAL_MS;
-  /** 현재 상태 snapshot. */
-  let snapshot = job;
-
-  while (!isTerminalStatus(snapshot.displayStatus)) {
-    await wait(intervalMs, options.signal);
-    snapshot = await getDownloadJob(snapshot.jobId, options);
-    options.onStatus?.(snapshot);
-  }
-
-  return snapshot;
-}
-
-/** 자막 job이 terminal 상태가 될 때까지 polling한다. */
-export async function waitForSubtitleJob(
-  job: SubtitleJobResponse,
-  options: WaitForSubtitleJobOptions = {},
-) {
-  /** polling 간격. */
-  const intervalMs = options.intervalMs ?? DEFAULT_POLL_INTERVAL_MS;
-  /** 현재 상태 snapshot. */
-  let snapshot = job;
-
-  while (!isSubtitleTerminalStatus(snapshot.displayStatus)) {
-    await wait(intervalMs, options.signal);
-    snapshot = await getSubtitleJob(snapshot.jobId, options);
-    options.onStatus?.(snapshot);
-  }
-
-  return snapshot;
 }
 
 /** API base URL을 .env 입력값 기준으로 정규화한다. */
@@ -752,29 +720,14 @@ function sanitizeErrorText(value: string) {
     .slice(0, 1000);
 }
 
-/** polling 간격만큼 대기한다. */
-function wait(intervalMs: number, signal?: AbortSignal) {
-  if (signal?.aborted) {
-    return Promise.reject(createAbortError());
-  }
-
-  return new Promise<void>((resolve, reject) => {
-    /** polling timer 식별자. */
-    const timeout = globalThis.setTimeout(() => {
-      signal?.removeEventListener('abort', handleAbort);
-      resolve();
-    }, intervalMs);
-    /** abort 시 timer를 정리하고 promise를 종료한다. */
-    const handleAbort = () => {
-      globalThis.clearTimeout(timeout);
-      reject(createAbortError());
-    };
-
-    signal?.addEventListener('abort', handleAbort, { once: true });
-  });
-}
-
-/** 브라우저/테스트 환경 공통 AbortError를 만든다. */
-function createAbortError() {
-  return new DOMException('Aborted', 'AbortError');
+/** 브라우저와 query에서 전달된 중단 오류인지 확인한다. */
+function isAbortError(error: unknown) {
+  return (
+    error instanceof DOMException && error.name === 'AbortError'
+  ) || (
+    !!error &&
+    typeof error === 'object' &&
+    'name' in error &&
+    error.name === 'AbortError'
+  );
 }

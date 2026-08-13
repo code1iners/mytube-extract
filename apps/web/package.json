@@ -7,7 +7,8 @@
     "build": "tsc --noEmit && vite build && node tools/verify-pwa-package.js",
     "dev": "vite --host 0.0.0.0 --port 5010",
     "lint": "tsc --noEmit",
-    "test": "vitest run"
+    "test": "vitest run",
+    "test:browser": "pnpm run build && node tests/browser/request-history-smoke.mjs"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.4.0",

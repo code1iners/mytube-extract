@@ -2,58 +2,39 @@
 
 ## 목적
 
-MyTube Extract web 앱은 사용자가 브라우저에서 YouTube URL 기반 다운로드 job 또는 로컬 영상 기반 영어 SRT 생성 job을 만들고, 준비 상태를 확인한 뒤 완료된 파일을 받을 수 있게 하는 Vite CSR 앱이다.
-
-## 대상 사용자
-
-- YouTube URL로 오디오 또는 비디오 파일을 준비하려는 사용자
-- 직접 API endpoint를 호출하지 않고 job 상태를 보며 기다리고 싶은 사용자
-- 운영 API와 로컬 API 동작을 브라우저에서 확인하려는 개발자
-- 로컬 영상에서 영어 SRT 파일을 생성하려는 사용자
-
-## 핵심 가치
-
-- YouTube watch, Shorts, `youtu.be` URL을 입력해 추출 요청을 보낼 수 있다.
-- 오디오와 비디오 모드를 선택할 수 있다.
-- 오디오 `128`/`192`/`320`, 비디오 `360`/`720`/`1080` 품질을 선택할 수 있으며 기본값은 오디오 `320`, 비디오 `1080`이다.
-- `/downloads` job 상태를 polling해 `queued`, `processing`, `completed`, `failed`, `expired` 상태를 보여준다.
-- `/health` worker 상태를 확인해 worker 미가용 시 추출 요청을 막고 서비스 미가용 안내를 보여준다.
-- `/health` 상태 확인 문제나 화면 오류가 발생해도 빈 화면 대신 사용자 안내와 상세 원인 보기를 제공한다.
-- 완료된 job은 API의 `downloadUrl`을 절대 URL로 변환해 다운로드 링크를 제공한다.
-- 다운로드 파일명은 API의 `Content-Disposition` attachment 파일명을 따른다.
-- 하단 고정 탭으로 `영상 추출`과 `자막 추출` route를 오갈 수 있다.
-- 자막 추출 탭에서 로컬 `mp4`, `mov`, `webm` 영상을 선택해 영어 SRT 생성을 요청할 수 있다.
-- 자막 추출 탭에서 빠른 `base.en` 모델과 정확도 우선 `small.en` 모델을 선택하고 예상 처리 시간을 볼 수 있다.
+사용자가 브라우저에서 영상·오디오 또는 영어 SRT 추출을 접수하고, 같은 브라우저의 최근 요청을 다시 확인해 완료 파일을 받을 수 있게 한다.
 
 ## 현재 제공 범위
 
-- Vite CSR route shell
-- `/video` 영상 추출 route
-- `/subtitles` 자막 추출 route
-- `/`에서 `/video`로 redirect
-- fixed bottom tab navigation
-- React Hook Form + Zod 기반 URL, 모드, 품질 검증
-- `/downloads` job 생성
-- terminal 상태까지 `/downloads/:jobId` polling
-- `/health` worker 상태 확인과 미가용 상태 안내
-- 서비스 상태 오류와 화면 오류에 대한 사용자 안내, 상세 원인 보기
-- 완료 파일 다운로드 링크 표시
-- 자막 추출 완료 후 영어 SRT 다운로드 링크 표시
-- API attachment 파일명 기반 다운로드
-- PWA manifest와 icon build 검증
-- Vercel SPA fallback rewrite
+- `/video`: YouTube URL, 오디오/비디오 형식, 품질을 검증해 `POST /downloads` job을 접수한다.
+- `/subtitles`: 로컬 `mp4`, `mov`, `webm`을 R2 multipart로 업로드해 영어 SRT job을 접수한다.
+- `/history`: 같은 브라우저가 접수한 영상·자막 요청을 최신순 최대 20건 조회한다.
+- 상단의 항상 보이는 `요청 내역` 링크와 하단의 영상·자막 전환 탭을 제공하며 요청 접수 중에는 두 navigation surface의 route 이동을 막는다.
+- 요청 전 `GET /health`로 worker 가능 여부를 확인한다.
+- 요청 성공 시 최소 접수 정보만 localStorage에 저장하고 history deep link로 이동한다.
+- history는 API 응답만 상태·진행률·메시지·다운로드의 source of truth로 사용한다.
+- 진행 중 job만 polling하고 terminal job은 polling을 멈춘다.
+- completed는 API `downloadUrl`을 사용하고 failed/expired는 같은 종류의 재요청 링크를 제공한다.
+- network/5xx는 접수증을 유지하고 404만 해당 접수증 하나를 제거한다.
+- storage event로 다른 탭의 접수증 추가·삭제·재추가를 정확히 반영한다.
+- localStorage가 실패해도 유효한 history deep link의 job은 조회한다.
+
+## 사용자 데이터 범위
+
+- 저장: `kind`, UUID `jobId`, ISO `acceptedAt`
+- 미저장: 원본 URL, 파일명, 상태, 진행률, 메시지, 오류, `downloadUrl`
+- 같은 브라우저 profile의 localStorage에만 남으며 삭제·차단·다른 기기에서는 동기화되지 않는다.
 
 ## 현재 한계
 
-- 사용자 계정과 작업 이력은 없다.
-- 자막 추출은 영어 SRT 생성과 영어 SRT 다운로드만 제공한다.
-- `filename` 입력은 제공하지 않는다.
+- 계정, 인증, 사용자별 서버 목록 API, 브라우저·기기 간 동기화는 없다.
+- 검색, 필터, 페이지네이션, 전체 삭제, 작업 취소는 없다.
+- 자막은 영어 SRT만 제공한다.
 - polling 간격은 2500ms 고정이다.
-- 세부 진행률은 API 상태 기반 값만 표시한다.
-- API base URL은 환경 변수로만 정하고 화면에서 바꾸지 않는다.
-- 상세 원인 보기는 운영자 디버깅 보조용이며 외부 오류 수집 서비스는 없다.
+- 세부 진행률은 API가 제공하는 상태 기반 값만 표시한다.
 
-## Route 상세 문서
+## Route 문서
 
 - `docs/web/routes/video.md`
 - `docs/web/routes/subtitles.md`
+- `docs/web/routes/history.md`

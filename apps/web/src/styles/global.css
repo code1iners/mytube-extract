@@ -217,6 +217,37 @@ a {
   font-size: 12px;
 }
 
+.hero-utilities {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12px;
+}
+
+.history-link {
+  color: var(--color-text-primary);
+  font-size: 14px;
+  font-weight: 600;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.history-link[aria-current='page'] {
+  color: var(--color-action-primary);
+  text-decoration: underline;
+  text-underline-offset: 4px;
+}
+
+.history-link.is-disabled {
+  color: var(--color-text-disabled);
+  cursor: not-allowed;
+}
+
+.history-link:focus-visible {
+  outline: 2px solid var(--color-focus);
+  outline-offset: 4px;
+}
+
 /* pill 자체가 시스템/라이트/다크를 그대로 보여주므로 legend는 스크린리더용으로만 남긴다. */
 .theme-control legend {
   position: absolute;
@@ -870,6 +901,121 @@ input:focus-visible,
   gap: 18px;
 }
 
+.history-panel,
+.history-empty,
+.history-item article {
+  display: grid;
+  gap: 16px;
+}
+
+.history-description,
+.history-empty p,
+.history-item h3,
+.history-item p {
+  margin: 0;
+}
+
+.history-description,
+.history-empty p,
+.history-item__header p,
+.history-message {
+  color: var(--color-text-secondary);
+  line-height: 1.5;
+}
+
+.history-list {
+  display: grid;
+  gap: 12px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.history-item {
+  padding: 16px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface);
+}
+
+.history-item.is-highlighted {
+  border-color: var(--color-focus);
+}
+
+.history-item__header {
+  display: grid;
+  align-items: start;
+  gap: 12px;
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+
+.history-item h3 {
+  font-size: 18px;
+  line-height: 1.4;
+}
+
+.history-item__header p,
+.history-message {
+  margin-top: 4px;
+  font-size: 14px;
+}
+
+.history-message--error {
+  color: var(--color-status-failed);
+}
+
+.history-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--color-status-processing);
+  font-size: 14px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.history-status--queued { color: var(--color-status-queued); }
+.history-status--completed { color: var(--color-status-completed); }
+.history-status--failed { color: var(--color-status-failed); }
+.history-status--expired { color: var(--color-status-expired); }
+
+.history-progress {
+  display: grid;
+  align-items: center;
+  gap: 10px;
+  grid-template-columns: minmax(0, 1fr) auto;
+  color: var(--color-text-secondary);
+  font-size: 14px;
+}
+
+.history-progress progress {
+  width: 100%;
+  accent-color: var(--color-status-processing);
+}
+
+.history-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.history-actions .primary-button,
+.history-actions .secondary-button,
+.history-empty .primary-button {
+  min-height: 40px;
+  padding: 0 14px;
+  font-size: 14px;
+}
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
 .empty-route-panel p {
   margin: 0;
   color: var(--color-text-secondary);
@@ -1023,6 +1169,10 @@ input:focus-visible,
     grid-template-columns: minmax(0, 1fr) auto;
   }
 
+  .hero-utilities {
+    gap: 8px;
+  }
+
   .page-title {
     font-size: 24px;
   }
@@ -1128,6 +1278,19 @@ input:focus-visible,
     min-height: 26px;
     padding: 0 7px;
     font-size: 11px;
+  }
+
+  .console-hero {
+    align-items: start;
+  }
+
+  .hero-utilities {
+    flex-direction: column;
+    align-items: flex-end;
+  }
+
+  .history-item__header {
+    grid-template-columns: 1fr;
   }
 
   .result-actions,

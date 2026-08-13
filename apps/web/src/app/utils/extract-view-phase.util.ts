@@ -5,8 +5,6 @@ export type ExtractViewPhase = 'request' | 'processing' | 'result' | 'error';
 type ExtractViewPhaseInput = {
   /** API job이 생성된 뒤 요청 오류가 있는지 여부. */
   hasRequestError?: boolean;
-  /** 생성된 API job이 있는지 여부. */
-  hasActiveJob?: boolean;
   /** 요청을 전송했지만 API job이 아직 생성되지 않았는지 여부. */
   isSubmitting?: boolean;
   /** worker health 확인 오류 또는 미가용 여부. */
@@ -30,11 +28,6 @@ export function getExtractViewPhase(
 
   if (input.status === 'completed') {
     return 'result';
-  }
-
-  // 요청 전 health 오류는 설정 화면 안에서만 안내하고, 진행 중 job만 오류 화면으로 전환한다.
-  if (input.hasActiveJob && input.hasWorkerHealthError) {
-    return 'error';
   }
 
   // mutation이 진행 중이면 job 응답 전에도 설정 화면을 다시 보여 주지 않는다.

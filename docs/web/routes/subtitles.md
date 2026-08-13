@@ -3,62 +3,34 @@
 ## Route
 
 - path: `/subtitles`
-- source file: `apps/web/src/app/pages/subtitles-extract/page.tsx`
-- logic hook: `apps/web/src/app/pages/subtitles-extract/_hooks/use-subtitles-extract-logic.ts`
-- navigation entry: fixed bottom tab `자막 추출`
-- shared layout: `apps/web/src/app/components/app-layout.tsx`
-- shared hero: `apps/web/src/app/components/app-hero.tsx`
+- source: `apps/web/src/app/pages/subtitles-extract/page.tsx`
+- logic: `apps/web/src/app/pages/subtitles-extract/_hooks/use-subtitles-extract-logic.ts`
+- navigation: fixed bottom tab `자막 추출`
 
 ## 사용자 흐름
 
-1. 사용자가 fixed bottom navigation의 `자막 추출`을 누르거나 `/subtitles`에 직접 접근한다.
-2. 앱은 공통 `MyTube Extract` 상단 header 아래 영어 SRT 생성 요청 설정만 표시한다.
-3. 사용자가 로컬 영상 파일을 선택하거나 dropzone에 드롭한다.
-4. 앱은 `mp4`, `mov`, `webm` 파일인지 검증한다.
-5. 사용자가 Whisper 모델을 `빠름 · base.en` 또는 `정확도 · small.en` 중 선택한다.
-6. 앱은 영상 metadata에서 길이를 읽어 선택 모델 기준 예상 처리 시간을 표시한다.
-7. `영어 SRT 생성`을 누른다.
-8. 앱은 worker 상태를 확인한 뒤 `/subtitles/uploads`로 R2 direct upload session을 생성한다.
-9. 앱은 presigned URL에 영상 part를 직접 `PUT`으로 업로드하고 진행률을 표시한다.
-10. 앱은 `/subtitles/uploads/complete`로 자막 job을 생성한다.
-11. 요청 시작 직후부터 요청 설정을 숨기고 처리 상태만 표시하며, job 생성 뒤 terminal 상태까지 `/subtitles/jobs/:jobId`를 polling한다.
-12. 요청 생성 중이거나 terminal 상태 전이면 하단 navigation으로 다른 route 이동을 막는다.
-13. 완료되면 영어 SRT 다운로드와 `새 요청`만 표시한다. 요청·job 실패와 만료는 오류 화면에서 복구 동작만 표시한다.
+1. 사용자는 `mp4`, `mov`, `webm` 파일과 `base_en` 또는 `small_en` 모델을 선택한다.
+2. 앱은 영상 metadata로 예상 시간을 표시하고 `GET /health`로 worker를 확인한다.
+3. `POST /subtitles/uploads`로 multipart session을 만들고 presigned URL로 파일 part를 직접 업로드한다.
+4. `POST /subtitles/uploads/complete` 성공 응답의 UUID와 접수 시각을 자막 접수증으로 저장한다.
+5. 앱은 `/history?kind=subtitle&jobId=<uuid>`로 이동한다.
+6. 업로드 실패 시 `POST /subtitles/uploads/abort` 정리를 best-effort로 요청한다.
 
-## 현재 표시 내용
+## 상태와 오류
 
-- 제목: `영어 SRT 생성`
-- 입력: 로컬 영상 파일 선택/dropzone
-- 모델: `빠름 · base.en`, `정확도 · small.en`
-- 예상 시간: 영상 길이와 선택 모델 기준 대략치
-- CTA: `영어 SRT 생성`
-- 상태 단계: `파일 선택`, `대기`, `음성 추출`, `SRT 생성`, `완료`
-- 결과 액션: `영어 SRT 다운로드`, `새 요청`
+- mount 시 과거 접수증을 읽거나 `GET /subtitles/jobs/:jobId`를 호출하지 않는다.
+- session 생성부터 part upload와 complete 응답까지 하단 route 탭과 상단 `요청 내역` 링크의 이동 및 중복 제출을 막는다. 링크는 계속 표시하며 `aria-disabled="true"`를 제공한다.
+- complete 성공 뒤에는 요청 route가 navigation lock이나 polling을 유지하지 않는다.
+- 파일 검증, 413, direct upload, complete 실패 시 접수증을 저장하거나 history로 이동하지 않는다.
+- 접수 이후 상태 조회·polling·SRT download는 `/history`가 담당한다.
 
 ## API
 
-- `GET /health`: worker 사용 가능 여부 확인
-- `POST /subtitles/uploads`: R2 direct upload session 생성
-- R2 presigned URL `PUT`: 영상 part 직접 업로드
-- `POST /subtitles/uploads/complete`: R2 multipart upload 완료와 자막 job 생성
-- `POST /subtitles/uploads/abort`: 실패한 R2 multipart upload 정리
-- `GET /subtitles/jobs/:jobId`: job 상태 polling
-- `GET {downloadUrl}`: 완료 SRT 다운로드
-
-## 주요 상태
-
-- 입력 검증 실패: submit 비활성화
-- 최초 health 확인 중: 요청 설정을 유지하고 `서비스 상태를 확인 중입니다.`를 `role="status"`로 표시하며 재시도 버튼은 숨김
-- 요청 전 worker unavailable/health 확인 실패: 요청 설정을 유지하고 submit을 비활성화하며 `다시 확인`을 표시
-- 요청 실패 또는 진행 중 job의 worker unavailable/health 확인 실패: 오류 화면과 복구 동작 표시
-- 업로드 용량 초과: 선택한 파일 크기를 포함한 용량 초과 안내
-- R2 direct upload 실패: 실패 안내와 상세 원인 보기
-- 요청 전: 파일 선택, 모델, 예상 시간, 요청 설정만 표시
-- R2 direct upload 중: 업로드 진행률만 표시
-- queued/extracting_audio/transcribing: 처리 상태와 진행률만 표시
-- completed: API base URL과 `downloadUrl`을 결합한 다운로드 링크 및 `새 요청` 표시
-- failed/expired/요청 오류: 오류와 요청 설정 복귀 동작만 표시
-- in progress: 다른 하단 navigation route로 이동 차단
+- `GET /health`
+- `POST /subtitles/uploads`
+- R2 presigned URL `PUT`
+- `POST /subtitles/uploads/complete`
+- `POST /subtitles/uploads/abort`
 
 ## 미구현 범위
 
@@ -66,5 +38,7 @@
 
 ## 검증
 
+- `pnpm --filter web run test`
 - `pnpm --filter web run lint`
-- Browser smoke: `/subtitles` 직접 접근, 공통 hero 표시, `자막 추출` navigation active, fixed tab 표시, 하단 콘텐츠 겹침 없음
+- `pnpm run test:web:browser`
+- Browser: 새로고침 후 빈 form, 업로드 중 navigation lock, complete 성공 뒤 history 이동

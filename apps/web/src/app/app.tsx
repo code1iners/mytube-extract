@@ -3,6 +3,7 @@ import { ROUTE_PATHS, ROUTE_SEGMENTS } from './constants/route-paths.constant';
 import { AppLayout } from './components/app-layout';
 import { VideoExtractPage } from './pages/video-extract/page';
 import { SubtitlesExtractPage } from './pages/subtitles-extract/page';
+import { RequestHistoryPage } from './pages/request-history/page';
 
 /** MyTube Extract web router shell. */
 export function App() {
@@ -11,6 +12,7 @@ export function App() {
       <Routes>
         <Route element={<AppLayout />}>
           <Route index element={<Navigate replace to={ROUTE_PATHS.video} />} />
+          <Route element={<RequestHistoryPage />} path={ROUTE_SEGMENTS.history} />
           <Route element={<VideoExtractPage />} path={ROUTE_SEGMENTS.video} />
           <Route
             element={<SubtitlesExtractPage />}

@@ -44,14 +44,12 @@ describe('extract view phase', () => {
     ).toBe('request');
     expect(
       getExtractViewPhase({
-        hasActiveJob: true,
         hasWorkerHealthError: true,
         status: 'processing',
       }),
-    ).toBe('error');
+    ).toBe('processing');
     expect(
       getExtractViewPhase({
-        hasActiveJob: true,
         hasWorkerHealthError: true,
         status: 'completed',
       }),

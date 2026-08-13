@@ -1,5 +1,16 @@
 # MyTube Extract Current Unimplemented
 
+## 계정 기반 서버 요청 이력과 기기 간 동기화
+
+- 상태: 미구현
+- 대상 표면: `route /history`, API, 인증, DB
+- 현재 상태: Web `/history`는 같은 브라우저의 localStorage 접수증 최대 20건으로 영상·자막 status endpoint를 개별 조회한다. 계정, 서버 목록 API, 기기 간 동기화는 없다.
+- 필요성: localStorage 삭제·차단, 다른 브라우저 또는 다른 기기에서도 요청을 찾아야 하는 요구가 확인되면 필요하다.
+- 구현 조건: 인증·보존·소유권 정책과 사용자별 목록 API를 별도 설계한다.
+- 관련 근거:
+  - `apps/web/src/app/pages/request-history/page.tsx`
+  - `docs/web/routes/history.md`
+
 ## 긴 영상 자막 추출과 Whisper 준비 자동화
 
 - 상태: 미구현
