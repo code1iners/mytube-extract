@@ -10,11 +10,11 @@ Docker Compose 기반 API, worker, Cloudflare Tunnel 배포에서 확인된 이�
 - 해결 내용:
   - `TUNNEL_TOKEN`의 전역 필수 보간 가드를 제거했다.
   - Worker 서비스를 `docker-compose.worker.yml`로 분리하고 worker 명령에서만 병합한다.
-  - `worker:deploy`는 `docker-compose.shared.env`와 `docker-compose.worker.env`만 읽는다.
+  - `deploy:worker`는 `docker-compose.shared.env`와 `docker-compose.worker.env`만 읽는다.
   - Tunnel token 없이도 worker 구성을 파싱하고 배포할 수 있다.
 - 회귀 검증:
   - `CLOUDFLARE_TUNNEL_TOKEN` 없이 worker Compose 구성 검증
-  - 실제 `pnpm worker:deploy` 성공 확인
+  - 실제 `pnpm deploy:worker` 성공 확인
 
 ### API·Worker 컨테이너의 불필요한 시크릿 유입
 
@@ -62,7 +62,18 @@ Docker Compose 기반 API, worker, Cloudflare Tunnel 배포에서 확인된 이�
 - 회귀 검증:
   - 빈 `WORKER_LOOP_INTERVAL_MS`의 렌더링 결과가 `5000`인지 확인
   - 빈 `WHISPER_CPP_HOST_DIR`로 worker 구성을 파싱하면 non-zero인지 확인
-  - 실제 `pnpm worker:deploy` 후 heartbeat 갱신 확인
+  - 실제 `pnpm deploy:worker` 후 heartbeat 갱신 확인
+
+### 이미지 재빌드 후 컨테이너가 교체되지 않는 문제
+
+- 상태: 해결
+- 해결 내용:
+  - `deploy:worker`, `deploy:api` 모두 `up -d --build`만 사용해, Dockerfile `ARG` 값만 바뀐 경우 새 이미지가 빌드·태깅돼도 compose가 서비스 config hash 변화를 감지하지 못해 기존 컨테이너를 그대로 두는 경우가 있었다(`docker compose up` 로그가 `Running 1/0`으로 끝나며 컨테이너 재생성 없이 종료).
+  - 두 스크립트에 `--force-recreate`를 추가해 이미지가 새로 빌드될 때마다 컨테이너를 항상 교체하도록 했다.
+  - `worker:deploy` 스크립트명을 `deploy:api`와 짝을 맞춰 `deploy:worker`로 변경했다.
+- 회귀 검증:
+  - Dockerfile `ARG` 값만 바꾼 뒤 `pnpm deploy:worker` 실행 시 컨테이너 내부 실행 파일 버전이 새 값으로 바뀌는지 확인
+  - `docker inspect <container> --format '{{.Image}}'`가 `docker images -q <image>:latest`와 일치하는지 확인
 
 ### 배포 가이드의 Tunnel 전제와 명령 불일치
 

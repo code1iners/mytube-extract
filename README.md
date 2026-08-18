@@ -91,7 +91,7 @@ pnpm turbo run test
 
 ```bash
 pnpm dev
-pnpm worker:deploy
+pnpm deploy:worker
 ```
 
 API 상태 확인:
@@ -115,7 +115,7 @@ pnpm worker:logs
 worker 재시작/종료:
 
 ```bash
-pnpm worker:deploy
+pnpm deploy:worker
 pnpm worker:stop
 ```
 
@@ -130,7 +130,7 @@ pnpm --filter api run verify:runtime
 ```bash
 git pull --ff-only
 pnpm --filter @mytube-extract/db run migrate:deploy
-pnpm worker:deploy
+pnpm deploy:worker
 docker ps --filter "name=mytube-extract-worker"
 curl http://127.0.0.1:5011/health
 ```
@@ -148,7 +148,7 @@ pnpm --filter api run verify:runtime
 ```bash
 git log --oneline -5
 git checkout <known-good-commit>
-pnpm worker:deploy
+pnpm deploy:worker
 curl -fsS http://127.0.0.1:5011/health
 ```
 
@@ -157,7 +157,7 @@ curl -fsS http://127.0.0.1:5011/health
 ```bash
 git checkout main
 git pull --ff-only
-pnpm worker:deploy
+pnpm deploy:worker
 ```
 
 ## API
@@ -223,11 +223,11 @@ Chrome 확장 프로그램의 제품 범위와 기능 계약은 `docs/chrome-ext
 
 ```bash
 pnpm dev
-pnpm worker:deploy
+pnpm deploy:worker
 pnpm --filter chrome-extension run dev
 ```
 
-`pnpm dev`는 root script 기준 API watch server와 web Vite dev server만 실행한다. Worker는 별도 shell에서 `pnpm worker:deploy`로 Docker Compose 실행한다. Chrome extension dev preview는 별도 shell에서 `pnpm --filter chrome-extension run dev`를 실행한다.
+`pnpm dev`는 root script 기준 API watch server와 web Vite dev server만 실행한다. Worker는 별도 shell에서 `pnpm deploy:worker`로 Docker Compose 실행한다. Chrome extension dev preview는 별도 shell에서 `pnpm --filter chrome-extension run dev`를 실행한다.
 
 개발 중 바로 보는 UI는 wrapper가 여는 popup preview server다. Preview에서도 사용자가 원본 URL을 직접 입력해 상태와 레이아웃을 확인한다.
 
