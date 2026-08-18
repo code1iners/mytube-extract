@@ -156,6 +156,11 @@ function getYoutubeVideoId(url: URL): string {
   return '';
 }
 
+/** YouTube video ID 형식인지 확인한다. */
+export function isYoutubeVideoId(videoId: unknown): videoId is string {
+  return typeof videoId === 'string' && YOUTUBE_VIDEO_ID_PATTERN.test(videoId);
+}
+
 /** 다운로드 모드 값인지 확인한다. */
 export function isDownloadMode(mode: unknown): mode is DownloadMode {
   return mode === 'audio' || mode === 'video';

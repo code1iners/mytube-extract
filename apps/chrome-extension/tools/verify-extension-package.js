@@ -13,6 +13,8 @@ const missingReferences = [];
 const validationErrors = [];
 /** 기본 운영 MyTube Extract API 서버 주소. */
 const DEFAULT_API_BASE_URL = 'https://mytube-extract-api.codeliners.cc';
+/** 사용자 동의 후 요청할 YouTube host permission. */
+const YOUTUBE_HOST_PERMISSION = 'https://www.youtube.com/*';
 
 /** 존재해야 하는 파일 참조를 확인한다. */
 function assertOutputFileExists(referencePath, ownerPath) {
@@ -66,14 +68,45 @@ function verifyManifestReferences(manifest) {
   assertIncludes(manifest.permissions, 'storage', 'manifest.json permissions');
   assertIncludes(manifest.permissions, 'downloads', 'manifest.json permissions');
   assertIncludes(manifest.permissions, 'activeTab', 'manifest.json permissions');
+  assertIncludes(manifest.permissions, 'scripting', 'manifest.json permissions');
   assertIncludes(
     manifest.host_permissions,
     createExpectedApiHostPermission(),
     'manifest.json host_permissions',
   );
+  assertIncludes(
+    manifest.optional_host_permissions,
+    YOUTUBE_HOST_PERMISSION,
+    'manifest.json optional_host_permissions',
+  );
 
   if (manifest.host_permissions?.includes('<all_urls>')) {
     validationErrors.push('manifest.json host_permissions should not include <all_urls>');
+  }
+
+  if (manifest.host_permissions?.includes(YOUTUBE_HOST_PERMISSION)) {
+    validationErrors.push(
+      'YouTube host permission should remain optional until the user enables thumbnail buttons',
+    );
+  }
+
+  if (manifest.background?.service_worker !== 'background.js') {
+    validationErrors.push('manifest.json should define background.service_worker as background.js');
+  }
+
+  assertOutputFileExists('youtube-overlay.js', 'manifest.json');
+  assertOutputFileExists('fonts/PretendardVariable.woff2', 'manifest.json');
+
+  const hasYoutubeFontResource = (manifest.web_accessible_resources ?? []).some(
+    (resource) =>
+      resource.matches?.includes(YOUTUBE_HOST_PERMISSION) &&
+      resource.resources?.includes('fonts/PretendardVariable.woff2'),
+  );
+
+  if (!hasYoutubeFontResource) {
+    validationErrors.push(
+      'manifest.json web_accessible_resources should expose fonts/PretendardVariable.woff2 to YouTube',
+    );
   }
 }
 

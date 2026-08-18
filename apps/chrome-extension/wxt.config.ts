@@ -2,6 +2,8 @@ import { defineConfig } from 'wxt';
 
 /** 운영 MyTube Extract API 서버 주소. */
 const PRODUCTION_API_BASE_URL = 'https://mytube-extract-api.codeliners.cc';
+/** 최초 사용자 동의로 요청할 YouTube host permission. */
+const YOUTUBE_HOST_PERMISSION = 'https://www.youtube.com/*';
 
 /** 환경 변수 기반 API host permission을 만든다. */
 export function createApiHostPermission(
@@ -27,7 +29,14 @@ export default defineConfig({
   manifest: {
     name: 'MyTube Extract',
     description: 'YouTube 영상을 오디오 또는 비디오로 추출하는 보조 도구입니다.',
-    permissions: ['storage', 'downloads', 'activeTab'],
+    permissions: ['storage', 'downloads', 'activeTab', 'scripting'],
     host_permissions: [createApiHostPermission()],
+    optional_host_permissions: [YOUTUBE_HOST_PERMISSION],
+    web_accessible_resources: [
+      {
+        matches: [YOUTUBE_HOST_PERMISSION],
+        resources: ['fonts/PretendardVariable.woff2'],
+      },
+    ],
   },
 });

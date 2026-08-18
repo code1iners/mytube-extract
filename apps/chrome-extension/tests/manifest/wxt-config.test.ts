@@ -11,6 +11,15 @@ type TestableWxtConfig = {
     permissions?: string[];
     /** Chrome host permission 목록. */
     host_permissions?: string[];
+    /** 사용자 동의로 요청할 optional host permission 목록. */
+    optional_host_permissions?: string[];
+    /** 외부 페이지에 노출할 정적 리소스 목록. */
+    web_accessible_resources?: Array<{
+      /** 리소스를 노출할 대상 URL pattern. */
+      matches?: string[];
+      /** 노출할 정적 파일 목록. */
+      resources?: string[];
+    }>;
   };
 };
 
@@ -38,12 +47,30 @@ describe('WXT config', () => {
 
     expect(testableConfig.modules).toContain('@wxt-dev/module-react');
     expect(testableConfig.manifest?.permissions).toEqual(
-      expect.arrayContaining(['storage', 'downloads', 'activeTab']),
+      expect.arrayContaining(['storage', 'downloads', 'activeTab', 'scripting']),
     );
     expect(testableConfig.manifest?.host_permissions).toEqual([
       'https://mytube-extract-api.codeliners.cc/*',
     ]);
     expect(testableConfig.manifest?.host_permissions).not.toContain('<all_urls>');
+  });
+
+  it('requests the YouTube overlay host permission only as optional', () => {
+    /** 테스트 가능한 WXT config. */
+    const testableConfig = config as TestableWxtConfig;
+
+    expect(testableConfig.manifest?.optional_host_permissions).toEqual([
+      'https://www.youtube.com/*',
+    ]);
+    expect(testableConfig.manifest?.host_permissions).not.toContain(
+      'https://www.youtube.com/*',
+    );
+    expect(testableConfig.manifest?.web_accessible_resources).toEqual([
+      expect.objectContaining({
+        matches: ['https://www.youtube.com/*'],
+        resources: ['fonts/PretendardVariable.woff2'],
+      }),
+    ]);
   });
 
   it('builds host permissions from the configured API origin only', () => {

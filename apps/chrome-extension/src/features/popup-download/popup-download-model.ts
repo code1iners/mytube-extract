@@ -2,6 +2,10 @@ import { type DownloadsAdapter, createDownloadsAdapter } from '../../adapters/ch
 import { type StorageAdapter, createStorageAdapter } from '../../adapters/chrome/storage';
 import { type TabsAdapter, createTabsAdapter } from '../../adapters/chrome/tabs';
 import {
+  type YoutubeOverlayAdapter,
+  createYoutubeOverlayAdapter,
+} from '../../adapters/chrome/youtube-overlay';
+import {
   type DownloadOptions,
   DEFAULT_DOWNLOAD_OPTIONS,
   normalizeApiBaseUrl,
@@ -33,6 +37,18 @@ export type PopupDownloadModelDependencies = {
   tabs: TabsAdapter;
   /** MyTube Extract API client. */
   myTubeExtractClient: MyTubeExtractClient;
+  /** YouTube 썸네일 Overlay 권한 adapter. */
+  youtubeOverlay: YoutubeOverlayAdapter;
+};
+
+/** YouTube 썸네일 Overlay 권한 상태. */
+export type YoutubeOverlaySnapshot = {
+  /** 선택 Host Permission 활성화 여부. */
+  enabled: boolean;
+  /** Overlay 권한 상태. */
+  status: 'checking' | 'disabled' | 'enabled' | 'requesting' | 'denied' | 'error';
+  /** 사용자에게 표시할 권한 상태 문구. */
+  message: string;
 };
 
 /** Popup 화면 snapshot. */
@@ -45,6 +61,8 @@ export type PopupDownloadSnapshot = {
   options: DownloadOptions;
   /** 현재 상태. */
   status: PopupStatus;
+  /** YouTube 썸네일 Overlay 상태. */
+  youtubeOverlay: YoutubeOverlaySnapshot;
 };
 
 /** Popup model. */
@@ -53,6 +71,8 @@ export type PopupDownloadModel = {
   getSnapshot(): PopupDownloadSnapshot;
   /** Popup 초기화를 수행한다. */
   initialize(): Promise<void>;
+  /** YouTube 썸네일 Overlay를 활성화한다. */
+  activateYoutubeOverlay(): Promise<void>;
   /** 현재 탭 URL을 source URL 입력값으로 가져온다. */
   importCurrentTabUrl(): Promise<void>;
   /** 처리 결과 화면에서 요청 설정 화면으로 돌아간다. */
@@ -74,6 +94,11 @@ const INITIAL_SNAPSHOT: PopupDownloadSnapshot = {
   downloading: false,
   options: DEFAULT_DOWNLOAD_OPTIONS,
   status: MISSING_SOURCE_URL_STATUS,
+  youtubeOverlay: {
+    enabled: false,
+    message: 'YouTube 썸네일 버튼 권한을 확인하고 있습니다.',
+    status: 'checking',
+  },
 };
 
 /** Chrome runtime용 popup model을 만든다. */
@@ -83,6 +108,7 @@ export function createChromePopupDownloadModel(): PopupDownloadModel {
     downloads: createDownloadsAdapter(),
     tabs: createTabsAdapter(),
     myTubeExtractClient: createMyTubeExtractClient(),
+    youtubeOverlay: createYoutubeOverlayAdapter(),
   });
 }
 
@@ -136,11 +162,40 @@ export function createPopupDownloadModel(
     async initialize() {
       /** 저장된 option. */
       let options = DEFAULT_DOWNLOAD_OPTIONS;
+      /** YouTube 썸네일 Overlay 권한 상태. */
+      let youtubeOverlay: YoutubeOverlaySnapshot = {
+        enabled: false,
+        message: 'YouTube 썸네일 버튼 권한을 확인하고 있습니다.',
+        status: 'checking',
+      };
 
       try {
         options = await dependencies.storage.loadOptions();
       } catch {
         options = DEFAULT_DOWNLOAD_OPTIONS;
+      }
+
+      try {
+        /** 선택 Host Permission 활성화 여부. */
+        const enabled = await dependencies.youtubeOverlay.isEnabled();
+
+        youtubeOverlay = enabled
+          ? {
+              enabled: true,
+              message: 'YouTube 썸네일 버튼이 활성화되어 있습니다.',
+              status: 'enabled',
+            }
+          : {
+              enabled: false,
+              message: '권한을 허용하면 YouTube 썸네일에서 바로 추출할 수 있습니다.',
+              status: 'disabled',
+            };
+      } catch {
+        youtubeOverlay = {
+          enabled: false,
+          message: 'YouTube 썸네일 버튼 권한을 확인하지 못했습니다.',
+          status: 'error',
+        };
       }
 
       options = {
@@ -152,8 +207,52 @@ export function createPopupDownloadModel(
         renderReadyState({
           ...snapshot,
           options,
+          youtubeOverlay,
         }),
       );
+    },
+    async activateYoutubeOverlay() {
+      if (snapshot.youtubeOverlay.status === 'requesting') {
+        return;
+      }
+
+      setSnapshot({
+        ...snapshot,
+        youtubeOverlay: {
+          enabled: false,
+          message: 'YouTube 썸네일 버튼을 활성화하는 중입니다.',
+          status: 'requesting',
+        },
+      });
+
+      try {
+        /** 권한 요청과 현재 탭 Overlay 활성화 결과. */
+        const enabled = await dependencies.youtubeOverlay.requestAndEnable();
+
+        setSnapshot({
+          ...snapshot,
+          youtubeOverlay: enabled
+            ? {
+                enabled: true,
+                message: 'YouTube 썸네일 버튼이 활성화되어 있습니다.',
+                status: 'enabled',
+              }
+            : {
+                enabled: false,
+                message: '권한을 허용하지 않아 썸네일 버튼을 표시하지 않습니다.',
+                status: 'denied',
+              },
+        });
+      } catch {
+        setSnapshot({
+          ...snapshot,
+          youtubeOverlay: {
+            enabled: false,
+            message: 'YouTube 썸네일 버튼을 활성화하지 못했습니다. 다시 시도하세요.',
+            status: 'error',
+          },
+        });
+      }
     },
     async importCurrentTabUrl() {
       try {

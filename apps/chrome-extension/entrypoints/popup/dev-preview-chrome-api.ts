@@ -77,11 +77,16 @@ function createDevPreviewChromeApi({
   let currentOptions: DevPreviewStoredOptions = {
     ...storedOptions,
   };
+  /** Preview에서 시뮬레이션할 YouTube permission 상태. */
+  let youtubePermissionGranted = false;
 
   /** Popup이 사용하는 Chrome API subset. */
   const chromeApi = {
     runtime: {
       lastError: null,
+      sendMessage(_message: unknown, callback: (response: { ok: boolean }) => void) {
+        callback({ ok: true });
+      },
     },
     storage: {
       local: {
@@ -130,6 +135,21 @@ function createDevPreviewChromeApi({
             url: 'https://www.youtube.com/watch?v=abc123_DEF0',
           } as chrome.tabs.Tab,
         ]);
+      },
+    },
+    permissions: {
+      contains(
+        _permissions: chrome.permissions.Permissions,
+        callback: (granted: boolean) => void,
+      ) {
+        callback(youtubePermissionGranted);
+      },
+      request(
+        _permissions: chrome.permissions.Permissions,
+        callback: (granted: boolean) => void,
+      ) {
+        youtubePermissionGranted = true;
+        callback(true);
       },
     },
   };

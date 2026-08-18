@@ -28,11 +28,65 @@ function createDependencies(
     myTubeExtractClient: {
       assertServerAvailable: vi.fn().mockResolvedValue(undefined),
     },
+    youtubeOverlay: {
+      isEnabled: vi.fn().mockResolvedValue(false),
+      requestAndEnable: vi.fn().mockResolvedValue(true),
+    },
     ...overrides,
   };
 }
 
 describe('popup download model', () => {
+  it('shows the YouTube overlay activation state without changing the URL form flow', async () => {
+    /** Popup model dependency. */
+    const dependencies = createDependencies();
+    /** Popup download model. */
+    const model = createPopupDownloadModel(dependencies);
+
+    await model.initialize();
+
+    expect(model.getSnapshot()).toMatchObject({
+      youtubeOverlay: {
+        enabled: false,
+        status: 'disabled',
+      },
+    });
+
+    await model.activateYoutubeOverlay();
+
+    expect(dependencies.youtubeOverlay.requestAndEnable).toHaveBeenCalledTimes(1);
+    expect(model.getSnapshot()).toMatchObject({
+      youtubeOverlay: {
+        enabled: true,
+        status: 'enabled',
+      },
+    });
+  });
+
+  it('keeps the popup usable when the user denies the YouTube overlay permission', async () => {
+    /** Popup model dependency. */
+    const dependencies = createDependencies({
+      youtubeOverlay: {
+        isEnabled: vi.fn().mockResolvedValue(false),
+        requestAndEnable: vi.fn().mockResolvedValue(false),
+      },
+    });
+    /** Popup download model. */
+    const model = createPopupDownloadModel(dependencies);
+
+    await model.initialize();
+    await model.activateYoutubeOverlay();
+    await model.updateOption('sourceUrl', 'https://www.youtube.com/watch?v=abc123_DEF0');
+
+    expect(model.getSnapshot()).toMatchObject({
+      canDownload: true,
+      youtubeOverlay: {
+        enabled: false,
+        status: 'denied',
+      },
+    });
+  });
+
   it('starts with source URL input required instead of active tab detection', async () => {
     /** Popup model dependency. */
     const dependencies = createDependencies();

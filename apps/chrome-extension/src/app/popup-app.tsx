@@ -1,6 +1,6 @@
 import { type ChangeEvent, type FormEvent, useEffect, useRef, useState } from 'react';
 import { type PopupStatusKind } from '../domain/popup-state/popup-state';
-import { type PopupDownloadModel, type PopupDownloadSnapshot, createChromePopupDownloadModel } from '../features/popup-download/popup-download-model';
+import { type PopupDownloadModel, type PopupDownloadSnapshot, type YoutubeOverlaySnapshot, createChromePopupDownloadModel } from '../features/popup-download/popup-download-model';
 import { type ThemePreference, getThemePreference, setThemePreference } from '../shared/theme-preference';
 
 /** Popup에서 단독으로 보여 줄 화면 단계. */
@@ -118,6 +118,11 @@ export function PopupApp() {
     void getPopupModel().importCurrentTabUrl();
   }
 
+  /** YouTube 썸네일 Overlay 권한 요청과 현재 탭 활성화를 시작한다. */
+  function handleActivateYoutubeOverlay() {
+    void getPopupModel().activateYoutubeOverlay();
+  }
+
   /** 완료 또는 오류 화면에서 설정 form으로 돌아간다. */
   function handleReturnToForm() {
     void getPopupModel().returnToForm();
@@ -137,7 +142,7 @@ export function PopupApp() {
       <label className="popup-theme-control"><span>테마</span><select value={themePreference} onChange={handleThemeChange}><option value="system">시스템</option><option value="light">라이트</option><option value="dark">다크</option></select></label>
     </header>
     <p className="policy-strip">저작권 및 플랫폼 정책을 준수해 사용하세요.</p>
-    {viewPhase === 'request' ? <RequestForm snapshot={snapshot} selectedMode={selectedMode} adaptiveOption={adaptiveOption} sourceUrlFeedback={sourceUrlFeedback} submitLabel={submitLabel} onImportCurrentTabUrl={handleImportCurrentTabUrl} onModeChange={handleModeChange} onSubmit={handleSubmit} onTextOptionChange={handleTextOptionChange} /> : null}
+    {viewPhase === 'request' ? <RequestForm snapshot={snapshot} selectedMode={selectedMode} adaptiveOption={adaptiveOption} sourceUrlFeedback={sourceUrlFeedback} submitLabel={submitLabel} onActivateYoutubeOverlay={handleActivateYoutubeOverlay} onImportCurrentTabUrl={handleImportCurrentTabUrl} onModeChange={handleModeChange} onSubmit={handleSubmit} onTextOptionChange={handleTextOptionChange} /> : null}
     {viewPhase === 'processing' ? <StatusScreen label={statusLabel} message={snapshot.status.message} tone={statusTone} /> : null}
     {viewPhase === 'result' ? <StatusScreen label={statusLabel} message={snapshot.status.message} tone={statusTone} actionLabel="새 요청" onAction={handleReturnToForm} /> : null}
     {viewPhase === 'error' ? <StatusScreen label={statusLabel} message={snapshot.status.message} tone={statusTone} actionLabel="요청 설정으로 돌아가기" isAlert onAction={handleReturnToForm} /> : null}
@@ -145,14 +150,32 @@ export function PopupApp() {
 }
 
 /** popup의 요청 설정 form을 렌더링한다. */
-function RequestForm(props: { /** 현재 popup snapshot. */ snapshot: PopupDownloadSnapshot; /** 선택 mode. */ selectedMode: 'audio' | 'video'; /** mode별 옵션. */ adaptiveOption: AdaptiveOptionCopy; /** URL 입력 피드백. */ sourceUrlFeedback: SourceUrlFeedback | null; /** CTA 문구. */ submitLabel: string; /** 현재 탭 URL 가져오기. */ onImportCurrentTabUrl: () => void; /** mode 변경. */ onModeChange: (event: ChangeEvent<HTMLInputElement>) => void; /** form 제출. */ onSubmit: (event: FormEvent<HTMLFormElement>) => void; /** 텍스트 option 변경 handler 생성기. */ onTextOptionChange: <Key extends 'sourceUrl' | 'filename' | 'bitrate' | 'resolution'>(key: Key) => (event: ChangeEvent<HTMLInputElement>) => void }) {
+function RequestForm(props: { /** 현재 popup snapshot. */ snapshot: PopupDownloadSnapshot; /** 선택 mode. */ selectedMode: 'audio' | 'video'; /** mode별 옵션. */ adaptiveOption: AdaptiveOptionCopy; /** URL 입력 피드백. */ sourceUrlFeedback: SourceUrlFeedback | null; /** CTA 문구. */ submitLabel: string; /** YouTube 썸네일 Overlay 활성화. */ onActivateYoutubeOverlay: () => void; /** 현재 탭 URL 가져오기. */ onImportCurrentTabUrl: () => void; /** mode 변경. */ onModeChange: (event: ChangeEvent<HTMLInputElement>) => void; /** form 제출. */ onSubmit: (event: FormEvent<HTMLFormElement>) => void; /** 텍스트 option 변경 handler 생성기. */ onTextOptionChange: <Key extends 'sourceUrl' | 'filename' | 'bitrate' | 'resolution'>(key: Key) => (event: ChangeEvent<HTMLInputElement>) => void }) {
   return <form className="download-form" onSubmit={props.onSubmit}>
+    <YoutubeOverlayActivation overlay={props.snapshot.youtubeOverlay} onActivate={props.onActivateYoutubeOverlay} />
     <label className={props.sourceUrlFeedback?.hasInputError ? 'field source-field has-warning' : 'field source-field'}><span className="field-label">추출 URL</span><span className="field-description">YouTube watch, Shorts, youtu.be URL을 붙여넣으세요.</span><input aria-describedby={props.sourceUrlFeedback ? 'source-url-feedback' : undefined} aria-invalid={props.sourceUrlFeedback?.hasInputError || undefined} autoComplete="off" name="sourceUrl" placeholder="https://www.youtube.com/watch?v=..." type="url" value={props.snapshot.options.sourceUrl} onChange={props.onTextOptionChange('sourceUrl')} /><button className="secondary-button" disabled={props.snapshot.downloading} type="button" onClick={props.onImportCurrentTabUrl}>현재 탭 사용</button>{props.sourceUrlFeedback ? <p className={props.sourceUrlFeedback.hasInputError ? 'field-feedback field-feedback--error' : 'field-feedback'} id="source-url-feedback" role={props.sourceUrlFeedback.hasInputError ? 'alert' : undefined}>{props.sourceUrlFeedback.message}</p> : null}</label>
     <fieldset className="mode-group"><legend>추출 형식</legend><label className={props.selectedMode === 'audio' ? 'mode-option is-selected' : 'mode-option'}><input checked={props.selectedMode === 'audio'} name="mode" type="radio" value="audio" onChange={props.onModeChange} />오디오</label><label className={props.selectedMode === 'video' ? 'mode-option is-selected' : 'mode-option'}><input checked={props.selectedMode === 'video'} name="mode" type="radio" value="video" onChange={props.onModeChange} />비디오</label></fieldset>
     <label className="field"><span className="field-label">파일명</span><span className="field-description">비워두면 서버 기본값을 사용합니다.</span><input autoComplete="off" name="filename" type="text" value={props.snapshot.options.filename} onChange={props.onTextOptionChange('filename')} /></label>
     <label className="field"><span className="field-label">{props.adaptiveOption.label}</span><span className="field-description">{props.adaptiveOption.description}</span><input inputMode={props.adaptiveOption.inputMode} min="1" name={props.adaptiveOption.name} type="number" value={props.adaptiveOption.value} onChange={props.onTextOptionChange(props.adaptiveOption.name)} /></label>
     <button className="primary-button" disabled={!props.snapshot.canDownload} type="submit">{props.submitLabel}</button>
   </form>;
+}
+
+/** YouTube 썸네일 Overlay의 최초 활성화와 현재 권한 상태를 보여준다. */
+function YoutubeOverlayActivation(props: { /** Overlay 권한 상태. */ overlay: YoutubeOverlaySnapshot; /** 권한 요청 handler. */ onActivate: () => void }) {
+  // Computed.
+
+  /** 권한 요청 중 여부. */
+  const isRequesting = props.overlay.status === 'requesting';
+  /** 이미 권한이 허용된 상태인지 여부. */
+  const isEnabled = props.overlay.status === 'enabled';
+  /** 거부·오류 상태인지 여부. */
+  const isProblem = props.overlay.status === 'denied' || props.overlay.status === 'error';
+
+  return <div className="youtube-overlay-activation" aria-labelledby="youtube-overlay-title">
+    <div><strong id="youtube-overlay-title" className="youtube-overlay-activation__title">YouTube 썸네일 버튼</strong><p className={isProblem ? 'youtube-overlay-activation__message youtube-overlay-activation__message--problem' : 'youtube-overlay-activation__message'} role={isProblem ? 'alert' : 'status'} aria-live="polite">{props.overlay.message}</p></div>
+    {!isEnabled ? <button aria-label="YouTube 썸네일 버튼 활성화" className="secondary-button secondary-button--compact" disabled={isRequesting} type="button" onClick={props.onActivate}>{isRequesting ? '활성화 중' : '버튼 활성화'}</button> : null}
+  </div>;
 }
 
 /** 처리, 결과, 오류 단계의 단일 status screen을 렌더링한다. */

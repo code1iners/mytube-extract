@@ -64,6 +64,8 @@ const staticServer = await createStaticServer(extensionOutputRoot);
   try {
     await verifyLoadUnpackedPopup(extensionOutputRoot);
     console.error('[popup-smoke] load unpacked popup ok');
+    await verifyYoutubeOverlayActivationFlow(staticServer.origin);
+    console.error('[popup-smoke] YouTube overlay activation flow ok');
     await verifyMissingSourceUrlFlow(staticServer.origin);
     console.error('[popup-smoke] missing source URL flow ok');
     await verifyCurrentTabImportFlow(staticServer.origin);
@@ -167,6 +169,28 @@ function launchExtensionContext(userDataDir, outputRoot) {
     ],
     ignoreDefaultArgs: ['--disable-extensions'],
   });
+}
+
+/** Built popup에서 YouTube Overlay 최초 활성화 흐름을 확인한다. */
+async function verifyYoutubeOverlayActivationFlow(origin) {
+  /** Browser instance. */
+  const browser = await chromium.launch();
+  /** Browser page. */
+  const page = await browser.newPage();
+
+  try {
+    await installFakeChromeApi(page, {
+      storedOptions: {},
+      youtubePermissionGranted: false,
+    });
+    await page.goto(`${origin}/popup.html`, { timeout: 10000, waitUntil: 'domcontentloaded' });
+
+    await page.getByRole('button', { name: 'YouTube 썸네일 버튼 활성화' }).click();
+    await expectStatusText(page, 'YouTube 썸네일 버튼이 활성화되어 있습니다.');
+    await page.getByText('추출할 URL을 입력하세요.').waitFor({ timeout: 10000 });
+  } finally {
+    await browser.close();
+  }
 }
 
 /** Built popup에서 source URL 미입력 상태를 확인한다. */
@@ -378,11 +402,16 @@ async function installFakeChromeApi(page, options) {
   await page.addInitScript((chromeOptions) => {
     globalThis.__myTubeExtractStoredOptions = chromeOptions.storedOptions;
     globalThis.__myTubeExtractDownloadUrl = null;
+    globalThis.__myTubeExtractYoutubePermissionGranted =
+      chromeOptions.youtubePermissionGranted ?? false;
     globalThis.__myTubeExtractCurrentTabUrl =
       chromeOptions.currentTabUrl ?? 'https://www.youtube.com/watch?v=abc123_DEF0';
     globalThis.chrome = {
       runtime: {
         lastError: null,
+        sendMessage(_message, callback) {
+          callback({ ok: true });
+        },
       },
       storage: {
         local: {
@@ -411,6 +440,15 @@ async function installFakeChromeApi(page, options) {
               url: globalThis.__myTubeExtractCurrentTabUrl,
             },
           ]);
+        },
+      },
+      permissions: {
+        contains(_permissions, callback) {
+          callback(globalThis.__myTubeExtractYoutubePermissionGranted);
+        },
+        request(_permissions, callback) {
+          globalThis.__myTubeExtractYoutubePermissionGranted = true;
+          callback(true);
         },
       },
     };
