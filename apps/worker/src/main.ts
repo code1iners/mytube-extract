@@ -389,6 +389,8 @@ async function processJob(job: ClaimedDownloadJob) {
 
         return {
           addMetadata: true,
+          /** android_vr 기본 client의 세그먼트 403을 우회하는 player client. */
+          extractorArgs: 'youtube:player_client=web_embedded',
           format,
           jsRuntimes: 'node' as const,
           output: path,

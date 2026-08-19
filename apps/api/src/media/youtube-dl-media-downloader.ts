@@ -25,6 +25,8 @@ export class YoutubeDlMediaDownloader implements MediaDownloader {
     /** youtube-dl-exec에 전달할 API 공통 옵션. */
     const youtubeOptions = {
       addMetadata: true,
+      /** android_vr 기본 client의 세그먼트 403을 우회하는 player client. */
+      extractorArgs: 'youtube:player_client=web_embedded',
       format: options.format,
       jsRuntimes: 'node' as const,
       output: options.outputPath,
