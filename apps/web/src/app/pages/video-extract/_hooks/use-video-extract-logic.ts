@@ -345,7 +345,7 @@ export function useVideoExtractLogic() {
 }
 
 /** 빈 화면용 임시 상태 job을 만든다. */
-function createIdleJob(draft: DownloadDraft): DownloadResponse {
+export function createIdleJob(draft: DownloadDraft): DownloadResponse {
   return {
     createdAt: new Date().toISOString(),
     displayStatus: 'queued',
@@ -362,7 +362,7 @@ function createIdleJob(draft: DownloadDraft): DownloadResponse {
 }
 
 /** 상태 제목을 만든다. */
-function createStatusTitle(job: DownloadResponse) {
+export function createStatusTitle(job: DownloadResponse) {
   if (job.displayStatus === 'queued') {
     return '작업 대기 중입니다';
   }
@@ -383,7 +383,7 @@ function createStatusTitle(job: DownloadResponse) {
 }
 
 /** 표시 상태에 맞는 아이콘 이름을 반환한다. */
-function getStatusIconName(status: DownloadDisplayStatus): AppIconName {
+export function getStatusIconName(status: DownloadDisplayStatus): AppIconName {
   if (status === 'completed') {
     return 'completed';
   }
@@ -404,7 +404,7 @@ function getStatusIconName(status: DownloadDisplayStatus): AppIconName {
 }
 
 /** 진행률 상태 문구를 만든다. */
-function createProgressLabel(job: DownloadResponse) {
+export function createProgressLabel(job: DownloadResponse) {
   if (job.progress === null) {
     return '--';
   }
@@ -417,7 +417,7 @@ function createProgressLabel(job: DownloadResponse) {
 }
 
 /** worker health 상태 제목을 만든다. */
-function createWorkerHealthTitle(input: {
+export function createWorkerHealthTitle(input: {
   /** worker health 확인 실패 여부. */
   failed: boolean;
   /** worker 미가용 여부. */
@@ -435,7 +435,7 @@ function createWorkerHealthTitle(input: {
 }
 
 /** worker health 오류에서 사용자 열람용 상세 정보를 만든다. */
-function createWorkerHealthErrorDetail(
+export function createWorkerHealthErrorDetail(
   error: Error | null,
 ): UserVisibleErrorDetail | undefined {
   if (!error) {
@@ -456,7 +456,7 @@ function createWorkerHealthErrorDetail(
 }
 
 /** 오류 객체가 사용자 열람용 상세 정보를 포함하는지 확인한다. */
-function hasUserVisibleErrorDetail(
+export function hasUserVisibleErrorDetail(
   error: unknown,
 ): error is { detail: UserVisibleErrorDetail } {
   return (
@@ -465,7 +465,7 @@ function hasUserVisibleErrorDetail(
 }
 
 /** 요청 시각을 HH:mm 형식으로 표시한다. */
-function formatTime(value: string) {
+export function formatTime(value: string) {
   /** 날짜 파싱 결과. */
   const date = new Date(value);
 
@@ -480,6 +480,6 @@ function formatTime(value: string) {
 }
 
 /** 품질 표시값을 만든다. */
-function formatQuality(job: DownloadResponse) {
+export function formatQuality(job: DownloadResponse) {
   return job.type === 'audio' ? `${job.quality} kbps` : `${job.quality}p`;
 }

@@ -9,6 +9,7 @@
     "lint": "wxt prepare && tsc --noEmit",
     "postinstall": "wxt prepare",
     "test": "vitest run",
+    "test:cov": "vitest run --coverage",
     "test:browser": "wxt build && node tools/verify-extension-package.js && node tests/browser/popup-smoke.mjs && node tests/browser/youtube-overlay-smoke.mjs",
     "test:browser:dev": "MYTUBE_EXTRACT_POPUP_SMOKE_MODE=dev node tests/browser/popup-smoke.mjs",
     "test:browser:overlay": "wxt build && node tools/verify-extension-package.js && node tests/browser/youtube-overlay-smoke.mjs",

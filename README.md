@@ -287,3 +287,7 @@ pnpm turbo run build
 pnpm turbo run lint
 pnpm --filter api run verify:runtime
 ```
+
+`git push` 시 husky pre-push 훅이 `pnpm test`, `pnpm test:e2e`, `chrome-extension`의 `test:browser`를 순서대로 실행하며, 하나라도 실패하면 push가 차단된다. 훅은 `pnpm install`(root) 시 `prepare` 스크립트로 자동 활성화되므로 별도 설치 절차가 없다. 예외적으로 우회해야 하면 `HUSKY=0 git push`를 쓴다.
+
+`pnpm test:cov`(루트)는 api(Jest), web·chrome-extension(Vitest), worker·media-downloader(Node 내장 테스트 러너)의 커버리지를 한 번에 출력한다. pre-push 게이트에는 포함되지 않으며, 임계치 강제 없이 리포팅 용도로만 쓴다.

@@ -1,0 +1,5 @@
+set -e
+
+pnpm test
+pnpm test:e2e
+WXT_MYTUBE_EXTRACT_API_BASE_URL=https://mytube-extract-api.codeliners.cc pnpm --filter chrome-extension run test:browser

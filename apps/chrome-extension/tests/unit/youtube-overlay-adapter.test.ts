@@ -50,26 +50,76 @@ describe('YouTube overlay adapter', () => {
     await expect(adapter.requestAndEnable()).resolves.toBe(false);
     expect(chromeApi.runtime.sendMessage).not.toHaveBeenCalled();
   });
+
+  it('rejects isEnabled when chrome.runtime.lastError is set', async () => {
+    /** 테스트용 Chrome API. */
+    const chromeApi = createChromeApi({
+      lastError: { message: 'blocked' },
+      permissionGranted: true,
+    });
+    /** YouTube overlay adapter. */
+    const adapter = createYoutubeOverlayAdapter(chromeApi);
+
+    await expect(adapter.isEnabled()).rejects.toThrow(
+      'Could not read YouTube permission state.',
+    );
+  });
+
+  it('rejects requestAndEnable when chrome.runtime.lastError is set on the permission request', async () => {
+    /** 테스트용 Chrome API. */
+    const chromeApi = createChromeApi({
+      lastError: { message: 'blocked' },
+      permissionGranted: false,
+      permissionRequestGranted: true,
+    });
+    /** YouTube overlay adapter. */
+    const adapter = createYoutubeOverlayAdapter(chromeApi);
+
+    await expect(adapter.requestAndEnable()).rejects.toThrow(
+      'Could not request YouTube permission.',
+    );
+  });
+
+  it('rejects requestAndEnable when the content script does not confirm activation', async () => {
+    /** 테스트용 Chrome API. */
+    const chromeApi = createChromeApi({
+      permissionGranted: false,
+      permissionRequestGranted: true,
+      sendMessageResponse: { message: 'overlay script unavailable', ok: false },
+    });
+    /** YouTube overlay adapter. */
+    const adapter = createYoutubeOverlayAdapter(chromeApi);
+
+    await expect(adapter.requestAndEnable()).rejects.toThrow(
+      'overlay script unavailable',
+    );
+  });
 });
 
 /** 테스트용 Chrome API를 만든다. */
 function createChromeApi({
+  lastError = null,
   permissionGranted,
   permissionRequestGranted = permissionGranted,
+  sendMessageResponse = { ok: true },
 }: {
+  /** chrome.runtime.lastError 값. */
+  lastError?: { message: string } | null;
   /** 현재 권한 상태. */
   permissionGranted: boolean;
   /** 권한 요청 결과. */
   permissionRequestGranted?: boolean;
+  /** content script activation 응답. */
+  sendMessageResponse?: { message?: string; ok: boolean };
 }) {
   /** Chrome runtime lastError 값. */
   const runtime = {
-    lastError: null,
+    lastError,
     sendMessage: vi.fn(
       (
         _message: unknown,
-        callback: (response: { ok: boolean }) => void,
-      ) => callback({ ok: true }),
+        callback: (response: { message?: string; ok: boolean }) => void,
+      ) => callback(sendMessageResponse),
     ),
   };
 

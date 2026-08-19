@@ -14,7 +14,6 @@ import {
 import {
   createSafeDiagnosticLog,
   createSafeErrorLog,
-  getDownloaderDiagnostic,
   type YoutubeDlExecute,
 } from '@mytube-extract/media-downloader';
 import { spawn } from 'node:child_process';
@@ -43,13 +42,20 @@ import {
   DEFAULT_SUBTITLE_AUDIO_MAX_BYTES,
   DEFAULT_WHISPER_LANGUAGE,
   detectMissingWhisperPaths,
-  normalizeSubtitleWorkerFailureCode,
+  createSafeWorkerErrorDetail,
+  getSubtitleWorkerFailureCode,
+  getWorkerFailureCode,
+  isMissingObjectError,
   normalizeWhisperSrt,
   normalizeExtractedAssetTitle,
   parseEnvNumber,
+  readRequiredEnv,
+  readWhisperFileEnv,
   selectNextQueuedWorkerJob,
   SubtitleWorkerFailureCode,
+  SubtitleWorkerJobFailure,
   WorkerFailureCode,
+  WorkerJobFailure,
 } from './worker.logic';
 import { downloadExtractionJob } from './download-job';
 
@@ -804,19 +810,6 @@ async function markCompleted(jobId: string, assetId: string) {
   });
 }
 
-/** R2 S3 API가 object key를 못 찾은 경우인지 확인한다. */
-function isMissingObjectError(error: unknown) {
-  return (
-    typeof error === 'object' &&
-    error !== null &&
-    (('Code' in error &&
-      (error.Code === 'NoSuchKey' || error.Code === 'NotFound')) ||
-      ('$metadata' in error &&
-        (error.$metadata as { httpStatusCode?: number }).httpStatusCode ===
-          404))
-  );
-}
-
 /** job을 failed로 표시한다. */
 async function markFailed(jobId: string, errorCode: string, error: unknown) {
   /** DB에 보관할 source-safe 오류 상세. */
@@ -869,108 +862,6 @@ async function assertVideoPreflight(url: string, format: string) {
       decision.estimatedBytes ?? 'unknown'
     }`,
   );
-}
-
-/** worker job 실패 코드와 원인을 함께 전달하는 에러. */
-class WorkerJobFailure extends Error {
-  constructor(
-    /** DB에 저장할 실패 코드. */
-    readonly errorCode: WorkerFailureCode,
-    message: string,
-  ) {
-    super(message);
-    this.name = 'WorkerJobFailure';
-  }
-}
-
-/** 자막 worker job 실패 코드와 원인을 함께 전달하는 에러. */
-class SubtitleWorkerJobFailure extends Error {
-  constructor(
-    /** DB에 저장할 실패 코드. */
-    readonly errorCode: SubtitleWorkerFailureCode,
-    message: string,
-  ) {
-    super(message);
-    this.name = 'SubtitleWorkerJobFailure';
-  }
-}
-
-/** unknown error에서 DB에 저장할 실패 코드를 고른다. */
-function getWorkerFailureCode(error: unknown): WorkerFailureCode {
-  if (error instanceof WorkerJobFailure) {
-    return error.errorCode;
-  }
-
-  /** 공통 runner가 구조화한 yt-dlp 진단 정보. */
-  const diagnostic = getDownloaderDiagnostic(error);
-
-  if (diagnostic?.reason === 'youtube-auth-required') {
-    return 'YOUTUBE_AUTH_REQUIRED';
-  }
-
-  if (
-    error instanceof Error &&
-    (error.message.includes('Sign in to confirm you') ||
-      error.message.includes('LOGIN_REQUIRED'))
-  ) {
-    return 'YOUTUBE_AUTH_REQUIRED';
-  }
-
-  return 'EXTRACTION_FAILED';
-}
-
-/** controlled worker failure는 유지하고 upstream 오류는 redaction한 DB detail을 만든다. */
-function createSafeWorkerErrorDetail(error: unknown) {
-  if (error instanceof WorkerJobFailure) {
-    return error.message;
-  }
-
-  return createSafeDiagnosticLog(error) || createSafeErrorLog(error);
-}
-
-/** unknown error에서 자막 DB에 저장할 실패 코드를 고른다. */
-function getSubtitleWorkerFailureCode(
-  error: unknown,
-): SubtitleWorkerFailureCode {
-  if (error instanceof SubtitleWorkerJobFailure) {
-    return normalizeSubtitleWorkerFailureCode(error.errorCode);
-  }
-
-  return normalizeSubtitleWorkerFailureCode(undefined);
-}
-
-/** 필수 환경 변수를 읽는다. */
-function readRequiredEnv(name: string) {
-  /** 환경 변수 값. */
-  const value = process.env[name];
-
-  if (!value) {
-    throw new Error(`${name} is required`);
-  }
-
-  return value;
-}
-
-/** whisper.cpp 파일 경로 환경 변수를 job 실패로 바꿔 읽는다. */
-function readWhisperFileEnv(name: string) {
-  /** 환경 변수 값. */
-  const value = process.env[name]?.trim();
-
-  if (!value) {
-    throw new SubtitleWorkerJobFailure(
-      'TRANSCRIPTION_FAILED',
-      `${name} is required`,
-    );
-  }
-
-  if (!existsSync(value)) {
-    throw new SubtitleWorkerJobFailure(
-      'TRANSCRIPTION_FAILED',
-      `${name} does not exist: ${value}`,
-    );
-  }
-
-  return value;
 }
 
 /** 지정 시간만큼 쉰다. */

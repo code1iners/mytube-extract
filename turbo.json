@@ -51,7 +51,7 @@
     },
     "test:cov": {
       "dependsOn": ["build"],
-      "outputs": ["coverage/**"]
+      "outputs": []
     },
     "verify:runtime": {
       "cache": false

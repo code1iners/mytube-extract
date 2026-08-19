@@ -25,7 +25,8 @@
     "tunnel:stop": "docker compose --env-file docker-compose.shared.env --env-file docker-compose.api.env --env-file docker-compose.cloudflared.env stop cloudflared",
     "worker:dev": "pnpm --filter worker run dev",
     "worker:logs": "docker compose -f docker-compose.yml -f docker-compose.worker.yml --env-file docker-compose.shared.env --env-file docker-compose.worker.env logs -f --tail=100 worker",
-    "worker:stop": "docker compose -f docker-compose.yml -f docker-compose.worker.yml --env-file docker-compose.shared.env --env-file docker-compose.worker.env stop worker"
+    "worker:stop": "docker compose -f docker-compose.yml -f docker-compose.worker.yml --env-file docker-compose.shared.env --env-file docker-compose.worker.env stop worker",
+    "prepare": "husky"
   },
   "pnpm": {
     "overrides": {
@@ -34,6 +35,8 @@
     }
   },
   "devDependencies": {
+    "@vitest/coverage-v8": "4.1.9",
+    "husky": "^9.1.7",
     "playwright": "1.61.0",
     "turbo": "^2.8.4"
   }

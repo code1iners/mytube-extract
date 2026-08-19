@@ -10,7 +10,8 @@
     "format": "prettier --write \"src/**/*.ts\"",
     "lint": "tsc --noEmit",
     "start": "node --env-file-if-exists=.env dist/main.js",
-    "test": "node --test dist/*.spec.js"
+    "test": "node --test dist/*.spec.js",
+    "test:cov": "node --experimental-test-coverage --test-coverage-include=dist/**/*.js --test-coverage-exclude=dist/**/*.spec.js --test dist/*.spec.js"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1077.0",
