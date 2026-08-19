@@ -59,6 +59,7 @@ describe('YoutubeDlMediaDownloader', () => {
           addMetadata: true,
           audioFormat: 'mp3',
           extractAudio: true,
+          extractorArgs: 'youtube:player_client=web_embedded',
           ffmpegLocation: '/usr/bin/ffmpeg',
           format: 'bestaudio/best',
           jsRuntimes: 'node',

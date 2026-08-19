@@ -133,6 +133,31 @@ export function createYtDlpFormat(type: ExtractionType, quality: string) {
   return `bestvideo[height<=${quality}]+bestaudio/best`;
 }
 
+/** worker 다운로드 job에 전달할 yt-dlp 옵션을 만든다. */
+export function createDownloadYoutubeOptions(input: {
+  /** 존재가 확인된 ffmpeg 실행 파일 경로. */
+  ffmpegLocation?: string;
+  /** yt-dlp format selector. */
+  format: string;
+  /** yt-dlp output 경로. */
+  outputPath: string;
+  /** 추출 결과 type. */
+  type: ExtractionType;
+}) {
+  return {
+    addMetadata: true,
+    /** android_vr 기본 client의 세그먼트 403 Forbidden을 우회하는 player client. */
+    extractorArgs: 'youtube:player_client=web_embedded',
+    format: input.format,
+    jsRuntimes: 'node' as const,
+    output: input.outputPath,
+    ...(input.ffmpegLocation ? { ffmpegLocation: input.ffmpegLocation } : {}),
+    ...(input.type === ExtractionType.audio
+      ? { audioFormat: 'mp3' as const, extractAudio: true }
+      : { mergeOutputFormat: 'mp4' as const }),
+  };
+}
+
 /** yt-dlp metadata를 이용해 worker 처리 가능 여부를 사전 판단한다. */
 export function createVideoPreflightDecision(
   metadata: unknown,

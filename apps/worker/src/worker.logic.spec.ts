@@ -5,6 +5,7 @@ import {
   createAssetObjectKey,
   createContentDisposition,
   createContentType,
+  createDownloadYoutubeOptions,
   createExpiresAt,
   createSubtitleContentType,
   createSubtitleMessage,
@@ -44,6 +45,48 @@ assert.equal(
 assert.equal(
   createYtDlpFormat(ExtractionType.video, '720'),
   'bestvideo[height<=720]+bestaudio/best',
+);
+// android_vr 기본 client의 403 Forbidden 회귀를 막는 값이므로 명시적으로 고정한다.
+assert.equal(
+  createDownloadYoutubeOptions({
+    format: 'bestaudio[abr<=320]/best',
+    outputPath: '/tmp/output.mp3',
+    type: ExtractionType.audio,
+  }).extractorArgs,
+  'youtube:player_client=web_embedded',
+);
+assert.deepEqual(
+  createDownloadYoutubeOptions({
+    ffmpegLocation: '/usr/bin/ffmpeg',
+    format: 'bestaudio[abr<=320]/best',
+    outputPath: '/tmp/output.mp3',
+    type: ExtractionType.audio,
+  }),
+  {
+    addMetadata: true,
+    audioFormat: 'mp3',
+    extractAudio: true,
+    extractorArgs: 'youtube:player_client=web_embedded',
+    ffmpegLocation: '/usr/bin/ffmpeg',
+    format: 'bestaudio[abr<=320]/best',
+    jsRuntimes: 'node',
+    output: '/tmp/output.mp3',
+  },
+);
+assert.deepEqual(
+  createDownloadYoutubeOptions({
+    format: 'bestvideo[height<=1080]+bestaudio/best',
+    outputPath: '/tmp/output.mp4',
+    type: ExtractionType.video,
+  }),
+  {
+    addMetadata: true,
+    extractorArgs: 'youtube:player_client=web_embedded',
+    format: 'bestvideo[height<=1080]+bestaudio/best',
+    jsRuntimes: 'node',
+    mergeOutputFormat: 'mp4',
+    output: '/tmp/output.mp4',
+  },
 );
 assert.deepEqual(
   createVideoPreflightDecision(

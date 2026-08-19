@@ -30,6 +30,7 @@ import {
   createAssetObjectKey,
   createContentDisposition,
   createContentType,
+  createDownloadYoutubeOptions,
   createExpiresAt,
   createSubtitleContentType,
   createSubtitleResultObjectKey,
@@ -387,20 +388,15 @@ async function processJob(job: ClaimedDownloadJob) {
         /** ffmpeg 경로 환경 변수. */
         const ffmpegLocation = process.env.FFMPEG_LOCATION;
 
-        return {
-          addMetadata: true,
-          /** android_vr 기본 client의 세그먼트 403을 우회하는 player client. */
-          extractorArgs: 'youtube:player_client=web_embedded',
+        return createDownloadYoutubeOptions({
+          ffmpegLocation:
+            ffmpegLocation && existsSync(ffmpegLocation)
+              ? ffmpegLocation
+              : undefined,
           format,
-          jsRuntimes: 'node' as const,
-          output: path,
-          ...(ffmpegLocation && existsSync(ffmpegLocation)
-            ? { ffmpegLocation }
-            : {}),
-          ...(job.type === ExtractionType.audio
-            ? { audioFormat: 'mp3' as const, extractAudio: true }
-            : { mergeOutputFormat: 'mp4' as const }),
-        };
+          outputPath: path,
+          type: job.type,
+        });
       },
       execute: youtubeExec as unknown as YoutubeDlExecute,
       onRetry: ({ attempt, error }) => {
