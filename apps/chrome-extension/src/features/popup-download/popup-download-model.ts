@@ -1,10 +1,11 @@
-import { type DownloadsAdapter, createDownloadsAdapter } from '../../adapters/chrome/downloads';
+import { createDownloadsAdapter } from '../../adapters/chrome/downloads';
 import { type StorageAdapter, createStorageAdapter } from '../../adapters/chrome/storage';
 import { type TabsAdapter, createTabsAdapter } from '../../adapters/chrome/tabs';
 import {
   type YoutubeOverlayAdapter,
   createYoutubeOverlayAdapter,
 } from '../../adapters/chrome/youtube-overlay';
+import { type DownloadQuality } from '../../domain/download-job/download-job';
 import {
   type DownloadOptions,
   DEFAULT_DOWNLOAD_OPTIONS,
@@ -20,20 +21,27 @@ import {
   type PopupStatus,
   createDownloadFailedStatus,
   createInvalidSourceUrlStatus,
+  createJobProcessingStatus,
+  createJobQueuedStatus,
   createReadyStatus,
 } from '../../domain/popup-state/popup-state';
-import { buildDownloadUrl } from '../../services/mytube-extract/download-url';
+import {
+  type DownloadJobManager,
+  createDownloadJobManager,
+  createTimeoutPollingScheduler,
+} from '../download-jobs/download-job-manager';
 import {
   type MyTubeExtractClient,
   createMyTubeExtractClient,
 } from '../../services/mytube-extract/mytube-extract-client';
+import { sanitizeFilenameSegment } from '../../shared/sanitize-filename';
 
 /** Popup model dependency. */
 export type PopupDownloadModelDependencies = {
   /** Storage adapter. */
   storage: StorageAdapter;
-  /** Downloads adapter. */
-  downloads: DownloadsAdapter;
+  /** Download job manager. */
+  jobManager: DownloadJobManager;
   /** Tabs adapter. */
   tabs: TabsAdapter;
   /** MyTube Extract API client. */
@@ -104,11 +112,18 @@ const INITIAL_SNAPSHOT: PopupDownloadSnapshot = {
 
 /** Chrome runtime용 popup model을 만든다. */
 export function createChromePopupDownloadModel(): PopupDownloadModel {
+  /** Popup과 job manager가 함께 쓰는 API client. */
+  const myTubeExtractClient = createMyTubeExtractClient();
+
   return createPopupDownloadModel({
     storage: createStorageAdapter(),
-    downloads: createDownloadsAdapter(),
+    jobManager: createDownloadJobManager({
+      downloads: createDownloadsAdapter(),
+      myTubeExtractClient,
+      scheduler: createTimeoutPollingScheduler(),
+    }),
     tabs: createTabsAdapter(),
-    myTubeExtractClient: createMyTubeExtractClient(),
+    myTubeExtractClient,
     youtubeOverlay: createYoutubeOverlayAdapter(),
   });
 }
@@ -323,11 +338,28 @@ export function createPopupDownloadModel(
           submittedSnapshot.options.apiBaseUrl,
         );
 
-        /** Chrome downloads API에 전달할 다운로드 URL. */
-        const downloadUrl = buildDownloadUrl(submittedSnapshot.options);
+        await dependencies.jobManager.submitJob({
+          apiBaseUrl: submittedSnapshot.options.apiBaseUrl,
+          localFilename: resolveLocalFilename(submittedSnapshot.options.filename),
+          onStatusChange(job) {
+            if (job.status !== 'queued' && job.status !== 'processing') {
+              return;
+            }
 
-        await dependencies.downloads.startDownload(downloadUrl);
-        /** 다운로드 시작 후 다시 실행 가능한 snapshot. */
+            setSnapshot({
+              ...snapshot,
+              status:
+                job.status === 'queued'
+                  ? createJobQueuedStatus(job.message)
+                  : createJobProcessingStatus(job.message),
+            });
+          },
+          quality: resolveJobQuality(submittedSnapshot.options),
+          sourceUrl: submittedSnapshot.options.sourceUrl,
+          type: submittedSnapshot.options.mode,
+        });
+
+        /** job 완료 후 다시 실행 가능한 snapshot. */
         const completedSnapshot = renderReadyState({
           ...snapshot,
           downloading: false,
@@ -382,4 +414,17 @@ export function createPopupDownloadModel(
       }
     },
   };
+}
+
+/** 현재 모드에 해당하는 고정 품질 값을 job 생성 입력값으로 바꾼다. 팝업은 서버가 지원하는 고정 선택지만 노출하므로 항상 유효한 값이다. */
+function resolveJobQuality(options: DownloadOptions): DownloadQuality {
+  return (options.mode === 'audio' ? options.bitrate : options.resolution) as DownloadQuality;
+}
+
+/** 사용자가 입력한 파일명을 로컬 저장에 안전한 형태로 정리한다. 정리 후 비어 있거나 상대 경로 표기만 남으면 override하지 않는다. */
+function resolveLocalFilename(filename: string): string {
+  /** 경로 구분자·제어 문자를 제거한 파일명. */
+  const sanitized = sanitizeFilenameSegment(filename);
+
+  return sanitized === '.' || sanitized === '..' ? '' : sanitized;
 }

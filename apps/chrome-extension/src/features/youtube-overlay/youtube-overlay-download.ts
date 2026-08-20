@@ -4,6 +4,7 @@ import {
   isYoutubeVideoId,
 } from '../../domain/download-options/download-options';
 import { isQualityOption } from '../../domain/download-options/quality-options';
+import { sanitizeFilenameSegment } from '../../shared/sanitize-filename';
 import { type YoutubeOverlayDownloadRequest } from './youtube-overlay-message';
 
 /** YouTube 썸네일에서 Background로 전달받는 다운로드 입력. */
@@ -15,11 +16,7 @@ export type YoutubeOverlayDownloadInput = Pick<
 /** YouTube 제목에서 API 파일명으로 사용할 안전한 문자열을 만든다. */
 export function sanitizeYoutubeOverlayFilename(title: string, videoId: string): string {
   /** 경로·제어 문자를 공백으로 바꾼 영상 제목. */
-  const normalizedTitle = title
-    .replace(/[\\/\0\r\n]/g, ' ')
-    .replace(/[\u0000-\u001f\u007f]/g, ' ')
-    .replace(/\s+/g, ' ')
-    .trim();
+  const normalizedTitle = sanitizeFilenameSegment(title);
 
   if (
     !normalizedTitle ||

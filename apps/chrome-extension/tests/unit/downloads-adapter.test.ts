@@ -41,6 +41,34 @@ describe('Chrome downloads adapter', () => {
       adapter.startDownload('https://api.example/audio'),
     ).rejects.toThrow('Could not start the download.');
   });
+
+  it('passes a suggested filename through to chrome.downloads.download', async () => {
+    /** 테스트용 Chrome API. */
+    const chromeApi = createChromeApi({ downloadId: 7, lastError: null });
+    /** downloads adapter. */
+    const adapter = createDownloadsAdapter(chromeApi);
+
+    await adapter.startDownload('https://api.example/downloads/job-1/file', 'my clip.mp3');
+
+    expect(chromeApi.downloads.download).toHaveBeenCalledWith(
+      { filename: 'my clip.mp3', url: 'https://api.example/downloads/job-1/file' },
+      expect.any(Function),
+    );
+  });
+
+  it('omits filename when none is given', async () => {
+    /** 테스트용 Chrome API. */
+    const chromeApi = createChromeApi({ downloadId: 7, lastError: null });
+    /** downloads adapter. */
+    const adapter = createDownloadsAdapter(chromeApi);
+
+    await adapter.startDownload('https://api.example/audio');
+
+    expect(chromeApi.downloads.download).toHaveBeenCalledWith(
+      { url: 'https://api.example/audio' },
+      expect.any(Function),
+    );
+  });
 });
 
 /** 테스트용 Chrome API를 만든다. */

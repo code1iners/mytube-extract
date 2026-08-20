@@ -4,6 +4,8 @@ export type PopupStatusKind =
   | 'invalid-source-url'
   | 'ready'
   | 'checking-server'
+  | 'job-queued'
+  | 'job-processing'
   | 'download-started'
   | 'download-failed';
 
@@ -38,6 +40,22 @@ export const DOWNLOAD_STARTED_STATUS: PopupStatus = {
   kind: 'download-started',
   message: '추출 요청을 시작했습니다.',
 };
+
+/** job 대기 중 상태를 만든다. */
+export function createJobQueuedStatus(message: string): PopupStatus {
+  return {
+    kind: 'job-queued',
+    message,
+  };
+}
+
+/** job 처리 중 상태를 만든다. */
+export function createJobProcessingStatus(message: string): PopupStatus {
+  return {
+    kind: 'job-processing',
+    message,
+  };
+}
 
 /** 원본 URL 준비 상태를 만든다. */
 export function createReadyStatus(): PopupStatus {

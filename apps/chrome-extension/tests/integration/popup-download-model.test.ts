@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
+import { type DownloadJob } from '../../src/domain/download-job/download-job';
 import { DEFAULT_DOWNLOAD_OPTIONS } from '../../src/domain/download-options/download-options';
 import {
   type PopupDownloadModelDependencies,
@@ -9,6 +10,24 @@ import {
 type PopupDownloadModelDependencyOverrides = {
   [Key in keyof PopupDownloadModelDependencies]?: Partial<PopupDownloadModelDependencies[Key]>;
 };
+
+/** 테스트용 완료 job을 만든다. */
+function createCompletedJob(overrides: Partial<DownloadJob> = {}): DownloadJob {
+  return {
+    createdAt: '2026-06-24T05:32:00.000Z',
+    displayStatus: 'completed',
+    downloadUrl: 'https://mytube-extract-api.codeliners.cc/downloads/job-1/file',
+    errorCode: null,
+    jobId: 'job-1',
+    message: '추출이 완료되었습니다.',
+    progress: 100,
+    quality: '192',
+    retentionDays: 7,
+    status: 'completed',
+    type: 'audio',
+    ...overrides,
+  };
+}
 
 /** 테스트용 model dependency를 만든다. */
 function createDependencies(
@@ -28,9 +47,11 @@ function createDependencies(
       saveOptions: vi.fn().mockResolvedValue(undefined),
       ...overrides.storage,
     },
-    downloads: {
-      startDownload: vi.fn().mockResolvedValue(1),
-      ...overrides.downloads,
+    jobManager: {
+      getJobs: vi.fn().mockReturnValue([]),
+      submitJob: vi.fn().mockImplementation((input) => Promise.resolve(createCompletedJob())),
+      subscribe: vi.fn().mockReturnValue(() => {}),
+      ...overrides.jobManager,
     },
     tabs: {
       getCurrentTabUrl: vi.fn().mockResolvedValue('https://youtu.be/abc123_DEF0'),
@@ -230,7 +251,7 @@ describe('popup download model', () => {
     });
   });
 
-  it('uses the production API base URL when no WXT environment override exists', async () => {
+  it('creates a download job against the production API base URL when no WXT environment override exists', async () => {
     /** Popup model dependency. */
     const dependencies = createDependencies();
     /** Popup download model. */
@@ -243,12 +264,18 @@ describe('popup download model', () => {
     expect(dependencies.myTubeExtractClient.assertServerAvailable).toHaveBeenCalledWith(
       'https://mytube-extract-api.codeliners.cc',
     );
-    expect(dependencies.downloads.startDownload).toHaveBeenCalledWith(
-      'https://mytube-extract-api.codeliners.cc/audio?url=https%3A%2F%2Fwww.youtube.com%2Fwatch%3Fv%3Dabc123_DEF0&bitrate=192',
+    expect(dependencies.jobManager.submitJob).toHaveBeenCalledWith(
+      expect.objectContaining({
+        apiBaseUrl: 'https://mytube-extract-api.codeliners.cc',
+        localFilename: '',
+        quality: '192',
+        sourceUrl: 'https://www.youtube.com/watch?v=abc123_DEF0',
+        type: 'audio',
+      }),
     );
   });
 
-  it('checks server and starts a download once for duplicate submits', async () => {
+  it('checks server and submits a job once for duplicate submits', async () => {
     /** 서버 확인 해제 함수. */
     let releaseServerCheck: () => void = () => {};
     /** Popup model dependency. */
@@ -277,10 +304,7 @@ describe('popup download model', () => {
     await Promise.all([firstSubmit, secondSubmit]);
 
     expect(dependencies.myTubeExtractClient.assertServerAvailable).toHaveBeenCalledTimes(1);
-    expect(dependencies.downloads.startDownload).toHaveBeenCalledTimes(1);
-    expect(dependencies.downloads.startDownload).toHaveBeenCalledWith(
-      'https://mytube-extract-api.codeliners.cc/audio?url=https%3A%2F%2Fwww.youtube.com%2Fwatch%3Fv%3Dabc123_DEF0&bitrate=192',
-    );
+    expect(dependencies.jobManager.submitJob).toHaveBeenCalledTimes(1);
     expect(model.getSnapshot().status).toMatchObject({
       kind: 'download-started',
       message: '추출 요청을 시작했습니다.',
@@ -316,8 +340,12 @@ describe('popup download model', () => {
     releaseServerCheck();
     await submit;
 
-    expect(dependencies.downloads.startDownload).toHaveBeenCalledWith(
-      'https://mytube-extract-api.codeliners.cc/audio?url=https%3A%2F%2Fwww.youtube.com%2Fwatch%3Fv%3Dabc123_DEF0&bitrate=192',
+    expect(dependencies.jobManager.submitJob).toHaveBeenCalledWith(
+      expect.objectContaining({
+        quality: '192',
+        sourceUrl: 'https://www.youtube.com/watch?v=abc123_DEF0',
+        type: 'audio',
+      }),
     );
   });
 
@@ -335,11 +363,110 @@ describe('popup download model', () => {
     await model.updateOption('sourceUrl', 'https://www.youtube.com/watch?v=abc123_DEF0');
     await model.submitDownload();
 
+    expect(dependencies.jobManager.submitJob).not.toHaveBeenCalled();
     expect(model.getSnapshot()).toMatchObject({
       canDownload: true,
       status: {
         kind: 'download-failed',
         message: 'Server is unavailable.',
+      },
+    });
+  });
+
+  it('reflects queued and processing job status on the existing status screen', async () => {
+    /** job manager가 순서대로 호출할 onStatusChange callback. */
+    let capturedOnStatusChange: ((job: DownloadJob) => void) | undefined;
+    /** job 완료를 늦추는 resolve 함수. */
+    let resolveSubmitJob: (job: DownloadJob) => void = () => {};
+    /** Popup model dependency. */
+    const dependencies = createDependencies({
+      jobManager: {
+        submitJob: vi.fn().mockImplementation((input) => {
+          capturedOnStatusChange = input.onStatusChange;
+
+          return new Promise((resolve) => {
+            resolveSubmitJob = resolve;
+          });
+        }),
+      },
+    });
+    /** Popup download model. */
+    const model = createPopupDownloadModel(dependencies);
+
+    await model.initialize();
+    await model.updateOption('sourceUrl', 'https://www.youtube.com/watch?v=abc123_DEF0');
+
+    /** 제출 시점의 다운로드 요청. */
+    const submit = model.submitDownload();
+    await Promise.resolve();
+    await Promise.resolve();
+
+    capturedOnStatusChange?.({
+      createdAt: '2026-06-24T05:32:00.000Z',
+      displayStatus: 'queued',
+      downloadUrl: null,
+      errorCode: null,
+      jobId: 'job-1',
+      message: '요청이 대기 중입니다.',
+      progress: 0,
+      quality: '192',
+      retentionDays: 7,
+      status: 'queued',
+      type: 'audio',
+    });
+
+    expect(model.getSnapshot().status).toMatchObject({
+      kind: 'job-queued',
+      message: '요청이 대기 중입니다.',
+    });
+
+    capturedOnStatusChange?.({
+      createdAt: '2026-06-24T05:32:00.000Z',
+      displayStatus: 'processing',
+      downloadUrl: null,
+      errorCode: null,
+      jobId: 'job-1',
+      message: '영상을 다운로드하고 있습니다.',
+      progress: 40,
+      quality: '192',
+      retentionDays: 7,
+      status: 'processing',
+      type: 'audio',
+    });
+
+    expect(model.getSnapshot().status).toMatchObject({
+      kind: 'job-processing',
+      message: '영상을 다운로드하고 있습니다.',
+    });
+
+    resolveSubmitJob(createCompletedJob());
+    await submit;
+
+    expect(model.getSnapshot().status).toMatchObject({
+      kind: 'download-started',
+      message: '추출 요청을 시작했습니다.',
+    });
+  });
+
+  it('shows the job failure reason on the existing error screen', async () => {
+    /** Popup model dependency. */
+    const dependencies = createDependencies({
+      jobManager: {
+        submitJob: vi.fn().mockRejectedValue(new Error('로그인이 필요한 영상입니다.')),
+      },
+    });
+    /** Popup download model. */
+    const model = createPopupDownloadModel(dependencies);
+
+    await model.initialize();
+    await model.updateOption('sourceUrl', 'https://www.youtube.com/watch?v=abc123_DEF0');
+    await model.submitDownload();
+
+    expect(model.getSnapshot()).toMatchObject({
+      canDownload: true,
+      status: {
+        kind: 'download-failed',
+        message: '로그인이 필요한 영상입니다.',
       },
     });
   });
@@ -367,7 +494,7 @@ describe('popup download model', () => {
     });
   });
 
-  it('updates options and preserves video mode specific URL building', async () => {
+  it('updates options, submits the user-entered filename, and preserves video mode quality', async () => {
     /** Popup model dependency. */
     const dependencies = createDependencies();
     /** Popup download model. */
@@ -375,6 +502,7 @@ describe('popup download model', () => {
 
     await model.initialize();
     await model.updateOption('sourceUrl', 'https://www.youtube.com/watch?v=abc123_DEF0');
+    await model.updateOption('filename', 'my clip');
     await model.updateOption('mode', 'video');
     await model.updateOption('resolution', '720');
     await model.submitDownload();
@@ -385,8 +513,30 @@ describe('popup download model', () => {
         resolution: '720',
       }),
     );
-    expect(dependencies.downloads.startDownload).toHaveBeenCalledWith(
-      'https://mytube-extract-api.codeliners.cc/video?url=https%3A%2F%2Fwww.youtube.com%2Fwatch%3Fv%3Dabc123_DEF0&resolution=720',
+    expect(dependencies.jobManager.submitJob).toHaveBeenCalledWith(
+      expect.objectContaining({
+        localFilename: 'my clip',
+        quality: '720',
+        type: 'video',
+      }),
+    );
+  });
+
+  it('sanitizes the user-entered filename before submitting the job', async () => {
+    /** Popup model dependency. */
+    const dependencies = createDependencies();
+    /** Popup download model. */
+    const model = createPopupDownloadModel(dependencies);
+
+    await model.initialize();
+    await model.updateOption('sourceUrl', 'https://www.youtube.com/watch?v=abc123_DEF0');
+    await model.updateOption('filename', '../etc/passwd\r\n');
+    await model.submitDownload();
+
+    expect(dependencies.jobManager.submitJob).toHaveBeenCalledWith(
+      expect.objectContaining({
+        localFilename: '.. etc passwd',
+      }),
     );
   });
 });

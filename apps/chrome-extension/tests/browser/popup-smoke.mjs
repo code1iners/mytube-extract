@@ -306,7 +306,7 @@ async function verifyServerUnavailableFlow(origin) {
   }
 }
 
-/** Built popup에서 supported page 다운로드 시작 흐름을 확인한다. */
+/** Built popup에서 job 기반 supported page 다운로드 시작 흐름을 확인한다. */
 async function verifyDownloadFlow(origin) {
   /** Browser instance. */
   const browser = await chromium.launch();
@@ -340,12 +340,15 @@ async function verifyDownloadFlow(origin) {
 
     /** Fake Chrome downloads API가 요청한 URL. */
     const downloadUrl = await page.evaluate(() => globalThis.__myTubeExtractDownloadUrl);
+    /** Fake Chrome downloads API가 요청한 filename. */
+    const downloadFilename = await page.evaluate(() => globalThis.__myTubeExtractDownloadFilename);
 
-    if (
-      downloadUrl !==
-      `${expectedApiOrigin}/audio?url=https%3A%2F%2Fwww.youtube.com%2Fwatch%3Fv%3Dabc123_DEF0&filename=browser+smoke&bitrate=192`
-    ) {
+    if (downloadUrl !== `${expectedApiOrigin}/downloads/job-1/file`) {
       throw new Error(`Unexpected download URL: ${downloadUrl}`);
+    }
+
+    if (downloadFilename !== 'browser smoke') {
+      throw new Error(`Unexpected download filename: ${downloadFilename}`);
     }
 
     return requests;
@@ -357,10 +360,12 @@ async function verifyDownloadFlow(origin) {
 /** Production API 요청을 browser smoke 안에서 fake 응답으로 처리한다. */
 async function routeMyTubeExtractApi(page, { requests, healthOk }) {
   await page.route(`${expectedApiOrigin}/**`, async (route) => {
+    /** 가로챈 production API 요청. */
+    const request = route.request();
     /** 가로챈 production API 요청 URL. */
-    const requestUrl = new URL(route.request().url());
+    const requestUrl = new URL(request.url());
 
-    requests.push(`${requestUrl.pathname}${requestUrl.search}`);
+    requests.push(`${request.method()} ${requestUrl.pathname}${requestUrl.search}`);
 
     if (requestUrl.pathname === '/health') {
       await route.fulfill({
@@ -374,7 +379,35 @@ async function routeMyTubeExtractApi(page, { requests, healthOk }) {
       return;
     }
 
-    if (requestUrl.pathname === '/audio' && requestUrl.searchParams.has('url')) {
+    // 캐시된 asset이 있어 즉시 완료되는 시나리오를 흉내 내, smoke test가 실제 폴링 간격을 기다리지 않게 한다.
+    if (request.method() === 'POST' && requestUrl.pathname === '/downloads') {
+      /** job 생성 요청 본문. */
+      const body = request.postDataJSON();
+
+      await route.fulfill({
+        status: 201,
+        headers: {
+          'Access-Control-Allow-Origin': '*',
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          createdAt: new Date().toISOString(),
+          displayStatus: 'completed',
+          downloadUrl: '/downloads/job-1/file',
+          errorCode: null,
+          jobId: 'job-1',
+          message: '추출이 완료되었습니다.',
+          progress: 100,
+          quality: body.quality,
+          retentionDays: 7,
+          status: 'completed',
+          type: body.type,
+        }),
+      });
+      return;
+    }
+
+    if (requestUrl.pathname === '/downloads/job-1/file') {
       await route.fulfill({
         status: 200,
         headers: {
@@ -402,6 +435,7 @@ async function installFakeChromeApi(page, options) {
   await page.addInitScript((chromeOptions) => {
     globalThis.__myTubeExtractStoredOptions = chromeOptions.storedOptions;
     globalThis.__myTubeExtractDownloadUrl = null;
+    globalThis.__myTubeExtractDownloadFilename = null;
     globalThis.__myTubeExtractYoutubePermissionGranted =
       chromeOptions.youtubePermissionGranted ?? false;
     globalThis.__myTubeExtractCurrentTabUrl =
@@ -427,6 +461,7 @@ async function installFakeChromeApi(page, options) {
       downloads: {
         async download(downloadOptions, callback) {
           globalThis.__myTubeExtractDownloadUrl = downloadOptions.url;
+          globalThis.__myTubeExtractDownloadFilename = downloadOptions.filename ?? null;
           await fetch(downloadOptions.url);
           callback(1);
         },

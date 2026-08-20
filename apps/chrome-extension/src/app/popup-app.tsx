@@ -193,9 +193,14 @@ function StatusScreen(props: { /** 상태 라벨. */ label: string; /** 상태 �
   return <section className={`status-card status-card--${props.tone}`} aria-labelledby="status-title"><p id="status-title" className="status-label">{props.label}</p><p className="status-text" role={props.isAlert ? 'alert' : 'status'} aria-live="polite">{props.message}</p>{props.onAction ? <button className="primary-button" type="button" onClick={props.onAction}>{props.actionLabel}</button> : null}</section>;
 }
 
+/** 서버 확인 또는 job 대기/처리 중처럼 진행 중임을 나타내는 상태인지 확인한다. */
+function isJobInProgressStatus(statusKind: PopupStatusKind): boolean {
+  return statusKind === 'checking-server' || statusKind === 'job-queued' || statusKind === 'job-processing';
+}
+
 /** status kind를 요청·처리·결과·오류 단일 화면으로 바꾼다. */
 function getPopupViewPhase(statusKind: PopupStatusKind): PopupViewPhase {
-  if (statusKind === 'checking-server') return 'processing';
+  if (isJobInProgressStatus(statusKind)) return 'processing';
   if (statusKind === 'download-started') return 'result';
   if (statusKind === 'download-failed') return 'error';
   return 'request';
@@ -204,7 +209,7 @@ function getPopupViewPhase(statusKind: PopupStatusKind): PopupViewPhase {
 /** 상태별 visual tone을 반환한다. */
 function getStatusTone(statusKind: PopupStatusKind): StatusTone {
   if (statusKind === 'ready' || statusKind === 'download-started') return 'success';
-  if (statusKind === 'checking-server') return 'info';
+  if (isJobInProgressStatus(statusKind)) return 'info';
   if (statusKind === 'missing-source-url' || statusKind === 'invalid-source-url') return 'warning';
   return 'danger';
 }
@@ -212,7 +217,7 @@ function getStatusTone(statusKind: PopupStatusKind): StatusTone {
 /** 상태별 짧은 label을 반환한다. */
 function getStatusLabel(statusKind: PopupStatusKind) {
   /** 상태 label map. */
-  const labels: Record<PopupStatusKind, string> = { 'missing-source-url': '입력 필요', 'invalid-source-url': 'URL 확인', ready: '준비 완료', 'checking-server': '서버 확인 중', 'download-started': '요청 완료', 'download-failed': '오류' };
+  const labels: Record<PopupStatusKind, string> = { 'missing-source-url': '입력 필요', 'invalid-source-url': 'URL 확인', ready: '준비 완료', 'checking-server': '서버 확인 중', 'job-queued': '대기 중', 'job-processing': '처리 중', 'download-started': '요청 완료', 'download-failed': '오류' };
   return labels[statusKind];
 }
 
