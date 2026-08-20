@@ -36,26 +36,25 @@ export function buildDownloadUrl(options: BuildDownloadUrlOptions): string {
 
 /** API base URL에서 health check URL을 만든다. */
 export function buildHealthUrl(apiBaseUrl: string): string {
-  /** 정규화된 API base URL. */
-  const normalizedApiBaseUrl = normalizeApiBaseUrl(apiBaseUrl);
-
-  return `${normalizedApiBaseUrl}/health`;
+  return buildApiUrl(apiBaseUrl, '/health');
 }
 
 /** 다운로드 job 생성 요청 URL을 만든다. */
 export function buildDownloadJobsUrl(apiBaseUrl: string): string {
-  /** 정규화된 API base URL. */
-  const normalizedApiBaseUrl = normalizeApiBaseUrl(apiBaseUrl);
-
-  return `${normalizedApiBaseUrl}/downloads`;
+  return buildApiUrl(apiBaseUrl, '/downloads');
 }
 
 /** 다운로드 job 상태 조회 URL을 만든다. */
 export function buildDownloadJobUrl(apiBaseUrl: string, jobId: string): string {
+  return buildApiUrl(apiBaseUrl, `/downloads/${jobId}`);
+}
+
+/** 정규화된 API base URL에 endpoint path를 이어붙인다. */
+function buildApiUrl(apiBaseUrl: string, path: string): string {
   /** 정규화된 API base URL. */
   const normalizedApiBaseUrl = normalizeApiBaseUrl(apiBaseUrl);
 
-  return `${normalizedApiBaseUrl}/downloads/${jobId}`;
+  return `${normalizedApiBaseUrl}${path}`;
 }
 
 /** 비어 있지 않은 옵션만 query string에 추가한다. */

@@ -78,7 +78,7 @@ describe('mytube extract client download jobs', () => {
     /** job 상태 조회 결과. */
     const job = await client.getDownloadJob('http://127.0.0.1:3030', 'job-1');
 
-    expect(fetchMock).toHaveBeenCalledWith('http://127.0.0.1:3030/downloads/job-1');
+    expect(fetchMock).toHaveBeenCalledWith('http://127.0.0.1:3030/downloads/job-1', undefined);
     expect(job.downloadUrl).toBe('http://127.0.0.1:3030/downloads/job-1/file');
   });
 
@@ -92,17 +92,58 @@ describe('mytube extract client download jobs', () => {
     /** 테스트용 client. */
     const client = createMyTubeExtractClient({ fetch: fetchMock });
 
-    await expect(client.getDownloadJob('http://127.0.0.1:3030', 'missing')).rejects.toThrow(
-      DownloadJobRequestError,
-    );
+    /** 실제로 던져진 오류. */
+    const thrownError = await client
+      .getDownloadJob('http://127.0.0.1:3030', 'missing')
+      .catch((error: unknown) => error);
 
-    try {
-      await client.getDownloadJob('http://127.0.0.1:3030', 'missing');
-      expect.unreachable();
-    } catch (error) {
-      expect(error).toBeInstanceOf(DownloadJobRequestError);
-      expect((error as DownloadJobRequestError).responseStatus).toBe(404);
-    }
+    expect(thrownError).toBeInstanceOf(DownloadJobRequestError);
+    expect((thrownError as DownloadJobRequestError).responseStatus).toBe(404);
+  });
+
+  it('carries the server-provided validation message for job creation failures', async () => {
+    /** 가짜 fetch 함수. */
+    const fetchMock = vi.fn().mockResolvedValue({
+      json: () => Promise.resolve({ message: 'quality is not supported' }),
+      ok: false,
+      status: 400,
+    });
+    /** 테스트용 client. */
+    const client = createMyTubeExtractClient({ fetch: fetchMock });
+
+    /** 실제로 던져진 오류. */
+    const thrownError = await client
+      .createDownloadJob({
+        apiBaseUrl: 'http://127.0.0.1:3030',
+        quality: '320',
+        sourceUrl: 'https://www.youtube.com/watch?v=abc123_DEF0',
+        type: 'audio',
+      })
+      .catch((error: unknown) => error);
+
+    expect(thrownError).toBeInstanceOf(DownloadJobRequestError);
+    expect((thrownError as DownloadJobRequestError).responseStatus).toBe(400);
+    expect((thrownError as DownloadJobRequestError).responseMessage).toBe(
+      'quality is not supported',
+    );
+  });
+
+  it('leaves the response message undefined when the error body has no message', async () => {
+    /** message가 없는 오류 응답을 내려주는 가짜 fetch 함수. */
+    const fetchMock = vi.fn().mockResolvedValue({
+      json: () => Promise.resolve({}),
+      ok: false,
+      status: 500,
+    });
+    /** 테스트용 client. */
+    const client = createMyTubeExtractClient({ fetch: fetchMock });
+
+    /** 실제로 던져진 오류. */
+    const thrownError = await client
+      .getDownloadJob('http://127.0.0.1:3030', 'job-1')
+      .catch((error: unknown) => error);
+
+    expect((thrownError as DownloadJobRequestError).responseMessage).toBeUndefined();
   });
 
   it('throws a network error distinguishable from an HTTP error when fetch itself fails', async () => {
@@ -111,13 +152,20 @@ describe('mytube extract client download jobs', () => {
     /** 테스트용 client. */
     const client = createMyTubeExtractClient({ fetch: fetchMock });
 
-    await expect(
-      client.createDownloadJob({
+    /** 실제로 던져진 오류. */
+    const thrownError = await client
+      .createDownloadJob({
         apiBaseUrl: 'http://127.0.0.1:3030',
         quality: '320',
         sourceUrl: 'https://www.youtube.com/watch?v=abc123_DEF0',
         type: 'audio',
-      }),
-    ).rejects.not.toBeInstanceOf(DownloadJobRequestError);
+      })
+      .catch((error: unknown) => error);
+
+    expect(thrownError).not.toBeInstanceOf(DownloadJobRequestError);
+    expect(thrownError).toBeInstanceOf(Error);
+    expect((thrownError as Error).message).toBe(
+      'Could not reach the server to create the download job.',
+    );
   });
 });

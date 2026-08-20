@@ -5,36 +5,48 @@ import {
   createPopupDownloadModel,
 } from '../../src/features/popup-download/popup-download-model';
 
+/** 테스트에서 dependency 일부만 골라 override할 수 있게 각 dependency 내부까지 partial로 만든다. */
+type PopupDownloadModelDependencyOverrides = {
+  [Key in keyof PopupDownloadModelDependencies]?: Partial<PopupDownloadModelDependencies[Key]>;
+};
+
 /** 테스트용 model dependency를 만든다. */
 function createDependencies(
-  overrides: Partial<PopupDownloadModelDependencies> = {},
+  overrides: PopupDownloadModelDependencyOverrides = {},
 ): PopupDownloadModelDependencies {
   /** 저장된 다운로드 옵션. */
   const savedOptions = {
     ...DEFAULT_DOWNLOAD_OPTIONS,
   };
 
+  // 각 dependency를 개별적으로 병합한다 — override가 myTubeExtractClient 등 하나를
+  // 통째로 대체하면, 그 인터페이스에 메서드가 늘어날 때마다 모든 override 자리를
+  // 따라다니며 고쳐야 하기 때문이다 (Shotgun Surgery).
   return {
     storage: {
       loadOptions: vi.fn().mockResolvedValue(savedOptions),
       saveOptions: vi.fn().mockResolvedValue(undefined),
+      ...overrides.storage,
     },
     downloads: {
       startDownload: vi.fn().mockResolvedValue(1),
+      ...overrides.downloads,
     },
     tabs: {
       getCurrentTabUrl: vi.fn().mockResolvedValue('https://youtu.be/abc123_DEF0'),
+      ...overrides.tabs,
     },
     myTubeExtractClient: {
       assertServerAvailable: vi.fn().mockResolvedValue(undefined),
       createDownloadJob: vi.fn(),
       getDownloadJob: vi.fn(),
+      ...overrides.myTubeExtractClient,
     },
     youtubeOverlay: {
       isEnabled: vi.fn().mockResolvedValue(false),
       requestAndEnable: vi.fn().mockResolvedValue(true),
+      ...overrides.youtubeOverlay,
     },
-    ...overrides,
   };
 }
 
@@ -248,8 +260,6 @@ describe('popup download model', () => {
               releaseServerCheck = resolve;
             }),
         ),
-        createDownloadJob: vi.fn(),
-        getDownloadJob: vi.fn(),
       },
     });
     /** Popup download model. */
@@ -289,8 +299,6 @@ describe('popup download model', () => {
               releaseServerCheck = resolve;
             }),
         ),
-        createDownloadJob: vi.fn(),
-        getDownloadJob: vi.fn(),
       },
     });
     /** Popup download model. */
@@ -318,8 +326,6 @@ describe('popup download model', () => {
     const dependencies = createDependencies({
       myTubeExtractClient: {
         assertServerAvailable: vi.fn().mockRejectedValue(new Error('Server is unavailable.')),
-        createDownloadJob: vi.fn(),
-        getDownloadJob: vi.fn(),
       },
     });
     /** Popup download model. */
