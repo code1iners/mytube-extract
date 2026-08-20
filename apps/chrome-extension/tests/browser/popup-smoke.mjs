@@ -329,7 +329,7 @@ async function verifyDownloadFlow(origin) {
 
     await page.getByLabel('추출 URL').fill('https://www.youtube.com/watch?v=abc123_DEF0');
     await page.getByLabel('파일명').fill('browser smoke');
-    await page.getByLabel('최대 비트레이트').fill('192');
+    await page.getByLabel('최대 비트레이트').selectOption('192');
     await expectDownloadButtonDisabled(page, false);
     await expectDownloadButtonVisibleInViewport(page);
     await page.getByRole('button', { name: '추출 시작' }).click();

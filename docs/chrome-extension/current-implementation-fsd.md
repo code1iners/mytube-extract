@@ -42,11 +42,11 @@
   - 원본 URL `sourceUrl`
   - 다운로드 파일명 `filename`
 - 오디오 옵션:
-  - 최대 오디오 비트레이트 `bitrate`
+  - 최대 오디오 비트레이트 `bitrate`: `128 / 192 / 320 kbps` 고정 선택지 중 하나. 기본값은 `192`.
 - 비디오 옵션:
-  - 최대 영상 높이 `resolution`
+  - 최대 영상 높이 `resolution`: `360 / 720 / 1080p` 고정 선택지 중 하나. 기본값은 `720`.
 
-빈 `filename`, `bitrate`, `resolution`은 API 서버 기본 동작에 맡긴다. API 서버는 파일명이 없으면 15자 랜덤 파일명을 사용하고, `bitrate` 또는 `resolution`이 없으면 기본 포맷 selector를 사용한다.
+`bitrate`, `resolution`은 YouTube 썸네일 Overlay와 같은 고정 선택지를 공유하며(`src/domain/download-options/quality-options.ts`), 임의의 숫자를 직접 입력할 수 없다. 저장된 값이 고정 선택지를 벗어나면(과거 버전에서 저장된 값 포함) 해당 모드 기본값으로 대체한다. `filename`은 비워두면 API 서버가 15자 랜덤 파일명을 사용한다.
 
 API base URL은 `WXT_MYTUBE_EXTRACT_API_BASE_URL` 환경 변수로 정하며 popup에서 사용자 입력을 받지 않는다. 운영 값은 `https://mytube-extract-api.codeliners.cc`, 로컬 값은 `http://127.0.0.1:5011`만 사용한다. 기존 `WXT_MEDIA_NEST_API_BASE_URL`은 runtime fallback으로, `MYTUBE_EXTRACT_API_BASE_URL`과 `MEDIA_NEST_API_BASE_URL`은 `wxt.config.ts` host permission fallback으로만 지원한다.
 
@@ -145,7 +145,7 @@ Chrome 확장 프로그램은 현재 URL query endpoint를 사용한다.
 - WXT popup entrypoint는 React app mount와 style import를 담당한다.
 - Popup application model은 설정 로드/저장, URL 입력 검증, API URL 생성, 다운로드 실행, YouTube Overlay 권한 상태 전이를 담당한다.
 - React component는 상태 렌더링과 사용자 입력 전달만 담당한다.
-- UI는 원본 URL, 현재 탭 URL 가져오기 버튼, 다운로드 모드, 파일명, 오디오 비트레이트, 비디오 해상도 설정을 제공한다.
+- UI는 원본 URL, 현재 탭 URL 가져오기 버튼, 다운로드 모드, 파일명, 고정 선택지 오디오 비트레이트·비디오 해상도 설정을 제공한다.
 - API 서버 주소는 UI에 표시하거나 입력받지 않는다.
 - Popup 요청 form에는 YouTube Overlay 권한 상태와 최초 활성화 CTA를 표시한다.
 
@@ -176,6 +176,7 @@ Chrome 확장 프로그램은 현재 URL query endpoint를 사용한다.
 - 오디오 모드에서 API 오디오 URL endpoint 다운로드 URL이 생성된다.
 - 비디오 모드에서 API 비디오 URL endpoint 다운로드 URL이 생성된다.
 - `filename`, `bitrate`, `resolution` 설정값이 생성 URL에 반영된다.
+- `bitrate`는 `128/192/320`, `resolution`은 `360/720/1080` 중에서만 고를 수 있고, 저장된 값이 이 범위를 벗어나면 각 모드 기본값으로 대체된다.
 - API base URL은 `WXT_MYTUBE_EXTRACT_API_BASE_URL`을 사용하고 popup UI에서 바꿀 수 없다.
 - 서버가 꺼져 있거나 health check가 실패할 때 사용자에게 서버 미응답 상태를 보여준다.
 - `pnpm --filter chrome-extension run dev`는 API health와 WXT dev output manifest 준비 상태를 터미널에 표시하고, `http://localhost:3000/popup.html` 개발용 preview를 자동으로 열어 popup UI를 바로 볼 수 있게 해야 한다.

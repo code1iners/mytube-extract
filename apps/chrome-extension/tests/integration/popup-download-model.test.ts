@@ -244,7 +244,7 @@ describe('popup download model', () => {
       'https://mytube-extract-api.codeliners.cc',
     );
     expect(dependencies.downloads.startDownload).toHaveBeenCalledWith(
-      'https://mytube-extract-api.codeliners.cc/audio?url=https%3A%2F%2Fwww.youtube.com%2Fwatch%3Fv%3Dabc123_DEF0',
+      'https://mytube-extract-api.codeliners.cc/audio?url=https%3A%2F%2Fwww.youtube.com%2Fwatch%3Fv%3Dabc123_DEF0&bitrate=192',
     );
   });
 
@@ -279,7 +279,7 @@ describe('popup download model', () => {
     expect(dependencies.myTubeExtractClient.assertServerAvailable).toHaveBeenCalledTimes(1);
     expect(dependencies.downloads.startDownload).toHaveBeenCalledTimes(1);
     expect(dependencies.downloads.startDownload).toHaveBeenCalledWith(
-      'https://mytube-extract-api.codeliners.cc/audio?url=https%3A%2F%2Fwww.youtube.com%2Fwatch%3Fv%3Dabc123_DEF0',
+      'https://mytube-extract-api.codeliners.cc/audio?url=https%3A%2F%2Fwww.youtube.com%2Fwatch%3Fv%3Dabc123_DEF0&bitrate=192',
     );
     expect(model.getSnapshot().status).toMatchObject({
       kind: 'download-started',
@@ -317,7 +317,7 @@ describe('popup download model', () => {
     await submit;
 
     expect(dependencies.downloads.startDownload).toHaveBeenCalledWith(
-      'https://mytube-extract-api.codeliners.cc/audio?url=https%3A%2F%2Fwww.youtube.com%2Fwatch%3Fv%3Dabc123_DEF0',
+      'https://mytube-extract-api.codeliners.cc/audio?url=https%3A%2F%2Fwww.youtube.com%2Fwatch%3Fv%3Dabc123_DEF0&bitrate=192',
     );
   });
 

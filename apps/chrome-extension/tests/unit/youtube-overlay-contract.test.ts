@@ -1,9 +1,5 @@
 import { describe, expect, it } from 'vitest';
 import {
-  getYoutubeOverlayQualityOptions,
-  isYoutubeOverlayQuality,
-} from '../../src/features/youtube-overlay/quality-options';
-import {
   createYoutubeOverlayDownloadOptions,
   sanitizeYoutubeOverlayFilename,
 } from '../../src/features/youtube-overlay/youtube-overlay-download';
@@ -13,12 +9,7 @@ import {
 } from '../../src/features/youtube-overlay/youtube-overlay-message';
 
 describe('YouTube overlay contract', () => {
-  it('exposes the approved numeric audio and video quality options', () => {
-    expect(getYoutubeOverlayQualityOptions('audio')).toEqual([128, 192, 320]);
-    expect(getYoutubeOverlayQualityOptions('video')).toEqual([360, 720, 1080]);
-    expect(isYoutubeOverlayQuality('audio', 192)).toBe(true);
-    expect(isYoutubeOverlayQuality('video', 192)).toBe(false);
-  });
+  // 고정 품질 선택지 자체는 tests/unit/quality-options.test.ts에서 검증한다.
 
   it('accepts only validated overlay download messages', () => {
     expect(

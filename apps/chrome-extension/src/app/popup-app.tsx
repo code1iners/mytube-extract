@@ -1,4 +1,5 @@
 import { type ChangeEvent, type FormEvent, useEffect, useRef, useState } from 'react';
+import { type QualityOption, getQualityOptions } from '../domain/download-options/quality-options';
 import { type PopupStatusKind } from '../domain/popup-state/popup-state';
 import { type PopupDownloadModel, type PopupDownloadSnapshot, type YoutubeOverlaySnapshot, createChromePopupDownloadModel } from '../features/popup-download/popup-download-model';
 import { type ThemePreference, getThemePreference, setThemePreference } from '../shared/theme-preference';
@@ -13,13 +14,13 @@ type StatusTone = 'danger' | 'info' | 'success' | 'warning';
 type AdaptiveOptionCopy = {
   /** 옵션 입력 안내 문구. */
   description: string;
-  /** 옵션 input mode. */
-  inputMode: 'numeric';
   /** 옵션 label. */
   label: string;
-  /** 옵션 input name. */
+  /** 옵션 select name. */
   name: 'bitrate' | 'resolution';
-  /** 옵션 input 값. */
+  /** 서버가 지원하는 고정 선택지. */
+  options: readonly QualityOption[];
+  /** 옵션 select 값. */
   value: string;
 };
 
@@ -101,8 +102,15 @@ export function PopupApp() {
   }
 
   /** 텍스트 기반 다운로드 옵션을 모델에 반영한다. */
-  function handleTextOptionChange<Key extends 'sourceUrl' | 'filename' | 'bitrate' | 'resolution'>(key: Key) {
+  function handleTextOptionChange<Key extends 'sourceUrl' | 'filename'>(key: Key) {
     return function updateTextOption(event: ChangeEvent<HTMLInputElement>) {
+      void getPopupModel().updateOption(key, event.currentTarget.value);
+    };
+  }
+
+  /** 고정 선택지 품질 옵션을 모델에 반영한다. */
+  function handleQualityOptionChange<Key extends 'bitrate' | 'resolution'>(key: Key) {
+    return function updateQualityOption(event: ChangeEvent<HTMLSelectElement>) {
       void getPopupModel().updateOption(key, event.currentTarget.value);
     };
   }
@@ -142,7 +150,7 @@ export function PopupApp() {
       <label className="popup-theme-control"><span>테마</span><select value={themePreference} onChange={handleThemeChange}><option value="system">시스템</option><option value="light">라이트</option><option value="dark">다크</option></select></label>
     </header>
     <p className="policy-strip">저작권 및 플랫폼 정책을 준수해 사용하세요.</p>
-    {viewPhase === 'request' ? <RequestForm snapshot={snapshot} selectedMode={selectedMode} adaptiveOption={adaptiveOption} sourceUrlFeedback={sourceUrlFeedback} submitLabel={submitLabel} onActivateYoutubeOverlay={handleActivateYoutubeOverlay} onImportCurrentTabUrl={handleImportCurrentTabUrl} onModeChange={handleModeChange} onSubmit={handleSubmit} onTextOptionChange={handleTextOptionChange} /> : null}
+    {viewPhase === 'request' ? <RequestForm snapshot={snapshot} selectedMode={selectedMode} adaptiveOption={adaptiveOption} sourceUrlFeedback={sourceUrlFeedback} submitLabel={submitLabel} onActivateYoutubeOverlay={handleActivateYoutubeOverlay} onImportCurrentTabUrl={handleImportCurrentTabUrl} onModeChange={handleModeChange} onQualityOptionChange={handleQualityOptionChange} onSubmit={handleSubmit} onTextOptionChange={handleTextOptionChange} /> : null}
     {viewPhase === 'processing' ? <StatusScreen label={statusLabel} message={snapshot.status.message} tone={statusTone} /> : null}
     {viewPhase === 'result' ? <StatusScreen label={statusLabel} message={snapshot.status.message} tone={statusTone} actionLabel="새 요청" onAction={handleReturnToForm} /> : null}
     {viewPhase === 'error' ? <StatusScreen label={statusLabel} message={snapshot.status.message} tone={statusTone} actionLabel="요청 설정으로 돌아가기" isAlert onAction={handleReturnToForm} /> : null}
@@ -150,13 +158,13 @@ export function PopupApp() {
 }
 
 /** popup의 요청 설정 form을 렌더링한다. */
-function RequestForm(props: { /** 현재 popup snapshot. */ snapshot: PopupDownloadSnapshot; /** 선택 mode. */ selectedMode: 'audio' | 'video'; /** mode별 옵션. */ adaptiveOption: AdaptiveOptionCopy; /** URL 입력 피드백. */ sourceUrlFeedback: SourceUrlFeedback | null; /** CTA 문구. */ submitLabel: string; /** YouTube 썸네일 Overlay 활성화. */ onActivateYoutubeOverlay: () => void; /** 현재 탭 URL 가져오기. */ onImportCurrentTabUrl: () => void; /** mode 변경. */ onModeChange: (event: ChangeEvent<HTMLInputElement>) => void; /** form 제출. */ onSubmit: (event: FormEvent<HTMLFormElement>) => void; /** 텍스트 option 변경 handler 생성기. */ onTextOptionChange: <Key extends 'sourceUrl' | 'filename' | 'bitrate' | 'resolution'>(key: Key) => (event: ChangeEvent<HTMLInputElement>) => void }) {
+function RequestForm(props: { /** 현재 popup snapshot. */ snapshot: PopupDownloadSnapshot; /** 선택 mode. */ selectedMode: 'audio' | 'video'; /** mode별 옵션. */ adaptiveOption: AdaptiveOptionCopy; /** URL 입력 피드백. */ sourceUrlFeedback: SourceUrlFeedback | null; /** CTA 문구. */ submitLabel: string; /** YouTube 썸네일 Overlay 활성화. */ onActivateYoutubeOverlay: () => void; /** 현재 탭 URL 가져오기. */ onImportCurrentTabUrl: () => void; /** mode 변경. */ onModeChange: (event: ChangeEvent<HTMLInputElement>) => void; /** 고정 선택지 품질 option 변경 handler 생성기. */ onQualityOptionChange: <Key extends 'bitrate' | 'resolution'>(key: Key) => (event: ChangeEvent<HTMLSelectElement>) => void; /** form 제출. */ onSubmit: (event: FormEvent<HTMLFormElement>) => void; /** 텍스트 option 변경 handler 생성기. */ onTextOptionChange: <Key extends 'sourceUrl' | 'filename'>(key: Key) => (event: ChangeEvent<HTMLInputElement>) => void }) {
   return <form className="download-form" onSubmit={props.onSubmit}>
     <YoutubeOverlayActivation overlay={props.snapshot.youtubeOverlay} onActivate={props.onActivateYoutubeOverlay} />
     <label className={props.sourceUrlFeedback?.hasInputError ? 'field source-field has-warning' : 'field source-field'}><span className="field-label">추출 URL</span><span className="field-description">YouTube watch, Shorts, youtu.be URL을 붙여넣으세요.</span><input aria-describedby={props.sourceUrlFeedback ? 'source-url-feedback' : undefined} aria-invalid={props.sourceUrlFeedback?.hasInputError || undefined} autoComplete="off" name="sourceUrl" placeholder="https://www.youtube.com/watch?v=..." type="url" value={props.snapshot.options.sourceUrl} onChange={props.onTextOptionChange('sourceUrl')} /><button className="secondary-button" disabled={props.snapshot.downloading} type="button" onClick={props.onImportCurrentTabUrl}>현재 탭 사용</button>{props.sourceUrlFeedback ? <p className={props.sourceUrlFeedback.hasInputError ? 'field-feedback field-feedback--error' : 'field-feedback'} id="source-url-feedback" role={props.sourceUrlFeedback.hasInputError ? 'alert' : undefined}>{props.sourceUrlFeedback.message}</p> : null}</label>
     <fieldset className="mode-group"><legend>추출 형식</legend><label className={props.selectedMode === 'audio' ? 'mode-option is-selected' : 'mode-option'}><input checked={props.selectedMode === 'audio'} name="mode" type="radio" value="audio" onChange={props.onModeChange} />오디오</label><label className={props.selectedMode === 'video' ? 'mode-option is-selected' : 'mode-option'}><input checked={props.selectedMode === 'video'} name="mode" type="radio" value="video" onChange={props.onModeChange} />비디오</label></fieldset>
     <label className="field"><span className="field-label">파일명</span><span className="field-description">비워두면 서버 기본값을 사용합니다.</span><input autoComplete="off" name="filename" type="text" value={props.snapshot.options.filename} onChange={props.onTextOptionChange('filename')} /></label>
-    <label className="field"><span className="field-label">{props.adaptiveOption.label}</span><span className="field-description">{props.adaptiveOption.description}</span><input inputMode={props.adaptiveOption.inputMode} min="1" name={props.adaptiveOption.name} type="number" value={props.adaptiveOption.value} onChange={props.onTextOptionChange(props.adaptiveOption.name)} /></label>
+    <label className="field"><span className="field-label">{props.adaptiveOption.label}</span><span className="field-description">{props.adaptiveOption.description}</span><select name={props.adaptiveOption.name} value={props.adaptiveOption.value} onChange={props.onQualityOptionChange(props.adaptiveOption.name)}>{props.adaptiveOption.options.map((option) => <option key={option} value={option}>{props.adaptiveOption.name === 'bitrate' ? `${option} kbps` : `${option}p`}</option>)}</select></label>
     <button className="primary-button" disabled={!props.snapshot.canDownload} type="submit">{props.submitLabel}</button>
   </form>;
 }
@@ -228,6 +236,6 @@ function getSourceUrlFeedback(snapshot: PopupDownloadSnapshot): SourceUrlFeedbac
 
 /** 현재 추출 형식에 맞는 단일 옵션 필드 copy를 만든다. */
 function getAdaptiveOptionCopy(snapshot: PopupDownloadSnapshot): AdaptiveOptionCopy {
-  if (snapshot.options.mode === 'video') return { description: '예: 720. 비워두면 서버가 기본 화질을 고릅니다.', inputMode: 'numeric', label: '최대 해상도', name: 'resolution', value: snapshot.options.resolution };
-  return { description: '예: 192. 비워두면 서버가 기본 음질을 고릅니다.', inputMode: 'numeric', label: '최대 비트레이트', name: 'bitrate', value: snapshot.options.bitrate };
+  if (snapshot.options.mode === 'video') return { description: '서버가 지원하는 해상도 중에서 고를 수 있습니다.', label: '최대 해상도', name: 'resolution', options: getQualityOptions('video'), value: snapshot.options.resolution };
+  return { description: '서버가 지원하는 비트레이트 중에서 고를 수 있습니다.', label: '최대 비트레이트', name: 'bitrate', options: getQualityOptions('audio'), value: snapshot.options.bitrate };
 }

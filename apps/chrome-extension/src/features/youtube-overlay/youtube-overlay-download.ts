@@ -3,9 +3,7 @@ import {
   DEFAULT_DOWNLOAD_OPTIONS,
   isYoutubeVideoId,
 } from '../../domain/download-options/download-options';
-import {
-  isYoutubeOverlayQuality,
-} from './quality-options';
+import { isQualityOption } from '../../domain/download-options/quality-options';
 import { type YoutubeOverlayDownloadRequest } from './youtube-overlay-message';
 
 /** YouTube 썸네일에서 Background로 전달받는 다운로드 입력. */
@@ -43,7 +41,7 @@ export function createYoutubeOverlayDownloadOptions(
     throw new Error('A valid YouTube video ID is required.');
   }
 
-  if (!isYoutubeOverlayQuality(input.mode, input.quality)) {
+  if (!isQualityOption(input.mode, input.quality)) {
     throw new Error('Unsupported YouTube overlay quality.');
   }
 

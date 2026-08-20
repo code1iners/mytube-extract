@@ -8,6 +8,7 @@ import {
 import {
   type DownloadOptions,
   DEFAULT_DOWNLOAD_OPTIONS,
+  mergeStoredDownloadOptions,
   normalizeApiBaseUrl,
   normalizeSourceUrl,
 } from '../../domain/download-options/download-options';
@@ -172,7 +173,8 @@ export function createPopupDownloadModel(
       try {
         options = await dependencies.storage.loadOptions();
       } catch {
-        options = DEFAULT_DOWNLOAD_OPTIONS;
+        // storage 자체가 실패해도 고정 품질 선택지가 유효한 기본값으로 채워지게 병합 경로를 그대로 탄다.
+        options = mergeStoredDownloadOptions({});
       }
 
       try {

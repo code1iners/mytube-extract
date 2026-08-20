@@ -4,9 +4,9 @@ import {
   type DownloadMode,
 } from '../../domain/download-options/download-options';
 import {
-  isYoutubeOverlayQuality,
-  type YoutubeOverlayQuality,
-} from './quality-options';
+  isQualityOption,
+  type QualityOption,
+} from '../../domain/download-options/quality-options';
 
 /** Background에 다운로드를 요청하는 메시지 종류. */
 export const YOUTUBE_OVERLAY_DOWNLOAD_MESSAGE_TYPE = 'youtube-overlay-download' as const;
@@ -24,7 +24,7 @@ export type YoutubeOverlayDownloadRequest = {
   /** 오디오 또는 비디오 모드. */
   mode: DownloadMode;
   /** 선택한 비트레이트 또는 해상도. */
-  quality: YoutubeOverlayQuality;
+  quality: QualityOption;
   /** 썸네일에서 읽은 영상 제목. */
   title: string;
   /** YouTube 영상 ID. */
@@ -76,7 +76,7 @@ export function isYoutubeOverlayDownloadRequest(
   return (
     message.type === YOUTUBE_OVERLAY_DOWNLOAD_MESSAGE_TYPE &&
     isDownloadMode(message.mode) &&
-    isYoutubeOverlayQuality(message.mode, message.quality) &&
+    isQualityOption(message.mode, message.quality) &&
     isYoutubeVideoId(message.videoId) &&
     typeof message.title === 'string' &&
     message.title.length <= 500

@@ -2,9 +2,9 @@ import {
   type DownloadMode,
 } from '../../domain/download-options/download-options';
 import {
-  getYoutubeOverlayQualityOptions,
-  type YoutubeOverlayQuality,
-} from './quality-options';
+  getQualityOptions,
+  type QualityOption,
+} from '../../domain/download-options/quality-options';
 import { parseStandardYoutubeWatchUrl } from './youtube-card-url';
 import {
   type YoutubeOverlayDownloadRequest,
@@ -213,7 +213,7 @@ function mountCardOverlay(
       button.setAttribute('aria-expanded', String(button === trigger));
     });
 
-    getYoutubeOverlayQualityOptions(mode).forEach((quality) => {
+    getQualityOptions(mode).forEach((quality) => {
       qualityPanel.append(createQualityButton(mode, quality));
     });
 
@@ -224,7 +224,7 @@ function mountCardOverlay(
   }
 
   /** 선택한 품질로 Background 다운로드를 시작한다. */
-  function startDownload(mode: DownloadMode, quality: YoutubeOverlayQuality) {
+  function startDownload(mode: DownloadMode, quality: QualityOption) {
     /** Background에 전달할 다운로드 요청. */
     const request: YoutubeOverlayDownloadRequest = {
       mode,
@@ -315,7 +315,7 @@ function mountCardOverlay(
   /** 품질 숫자 버튼을 만든다. */
   function createQualityButton(
     mode: DownloadMode,
-    quality: YoutubeOverlayQuality,
+    quality: QualityOption,
   ): HTMLButtonElement {
     /** 품질 선택 버튼. */
     const button = document.createElement('button');

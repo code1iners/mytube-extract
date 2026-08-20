@@ -1,4 +1,5 @@
 import { DEFAULT_API_BASE_URL } from '../../shared/constants';
+import { DEFAULT_QUALITY_OPTION, isQualityOption } from './quality-options';
 
 /** 지원하는 다운로드 모드. */
 export type DownloadMode = 'audio' | 'video';
@@ -27,10 +28,10 @@ export type StoredDownloadOptions = Partial<
 /** 기본 popup 다운로드 옵션. */
 export const DEFAULT_DOWNLOAD_OPTIONS: DownloadOptions = {
   apiBaseUrl: DEFAULT_API_BASE_URL,
-  bitrate: '',
+  bitrate: String(DEFAULT_QUALITY_OPTION.audio),
   filename: '',
   mode: 'audio',
-  resolution: '',
+  resolution: String(DEFAULT_QUALITY_OPTION.video),
   sourceUrl: '',
 };
 
@@ -46,11 +47,24 @@ export function mergeStoredDownloadOptions(
 
   return {
     ...DEFAULT_DOWNLOAD_OPTIONS,
-    bitrate: typeof storedOptions.bitrate === 'string' ? storedOptions.bitrate : '',
+    bitrate: resolveStoredQualityOption('audio', storedOptions.bitrate),
     filename: typeof storedOptions.filename === 'string' ? storedOptions.filename : '',
-    resolution: typeof storedOptions.resolution === 'string' ? storedOptions.resolution : '',
+    resolution: resolveStoredQualityOption('video', storedOptions.resolution),
     mode: isDownloadMode(storedMode) ? storedMode : DEFAULT_DOWNLOAD_OPTIONS.mode,
   };
+}
+
+/** 저장된 비트레이트·해상도 값이 고정 선택지를 벗어나면 해당 모드 기본값으로 대체한다. */
+function resolveStoredQualityOption(
+  mode: DownloadMode,
+  storedValue: string | undefined,
+): string {
+  /** 저장된 값을 숫자로 바꾼 값. */
+  const numericValue = typeof storedValue === 'string' ? Number(storedValue) : NaN;
+
+  return isQualityOption(mode, numericValue)
+    ? String(numericValue)
+    : String(DEFAULT_QUALITY_OPTION[mode]);
 }
 
 /** API base URL을 fetch/download에 사용할 수 있는 형태로 정규화한다. */
