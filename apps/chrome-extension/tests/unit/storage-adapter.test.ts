@@ -22,6 +22,21 @@ describe('Chrome storage adapter', () => {
     );
   });
 
+  it('falls back to the fixed quality default when a stored value is out of range', async () => {
+    /** 테스트용 Chrome API. */
+    const chromeApi = createChromeApi({
+      lastError: null,
+      storedItems: { bitrate: '256', mode: 'audio' },
+    });
+    /** storage adapter. */
+    const adapter = createStorageAdapter(chromeApi);
+
+    await expect(adapter.loadOptions()).resolves.toMatchObject({
+      bitrate: '192',
+      mode: 'audio',
+    });
+  });
+
   it('rejects loadOptions when chrome.runtime.lastError is set', async () => {
     /** 테스트용 Chrome API. */
     const chromeApi = createChromeApi({

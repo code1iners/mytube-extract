@@ -20,6 +20,8 @@ type AdaptiveOptionCopy = {
   name: 'bitrate' | 'resolution';
   /** 서버가 지원하는 고정 선택지. */
   options: readonly QualityOption[];
+  /** 선택지 옆에 붙일 단위. */
+  unit: string;
   /** 옵션 select 값. */
   value: string;
 };
@@ -164,7 +166,7 @@ function RequestForm(props: { /** 현재 popup snapshot. */ snapshot: PopupDownl
     <label className={props.sourceUrlFeedback?.hasInputError ? 'field source-field has-warning' : 'field source-field'}><span className="field-label">추출 URL</span><span className="field-description">YouTube watch, Shorts, youtu.be URL을 붙여넣으세요.</span><input aria-describedby={props.sourceUrlFeedback ? 'source-url-feedback' : undefined} aria-invalid={props.sourceUrlFeedback?.hasInputError || undefined} autoComplete="off" name="sourceUrl" placeholder="https://www.youtube.com/watch?v=..." type="url" value={props.snapshot.options.sourceUrl} onChange={props.onTextOptionChange('sourceUrl')} /><button className="secondary-button" disabled={props.snapshot.downloading} type="button" onClick={props.onImportCurrentTabUrl}>현재 탭 사용</button>{props.sourceUrlFeedback ? <p className={props.sourceUrlFeedback.hasInputError ? 'field-feedback field-feedback--error' : 'field-feedback'} id="source-url-feedback" role={props.sourceUrlFeedback.hasInputError ? 'alert' : undefined}>{props.sourceUrlFeedback.message}</p> : null}</label>
     <fieldset className="mode-group"><legend>추출 형식</legend><label className={props.selectedMode === 'audio' ? 'mode-option is-selected' : 'mode-option'}><input checked={props.selectedMode === 'audio'} name="mode" type="radio" value="audio" onChange={props.onModeChange} />오디오</label><label className={props.selectedMode === 'video' ? 'mode-option is-selected' : 'mode-option'}><input checked={props.selectedMode === 'video'} name="mode" type="radio" value="video" onChange={props.onModeChange} />비디오</label></fieldset>
     <label className="field"><span className="field-label">파일명</span><span className="field-description">비워두면 서버 기본값을 사용합니다.</span><input autoComplete="off" name="filename" type="text" value={props.snapshot.options.filename} onChange={props.onTextOptionChange('filename')} /></label>
-    <label className="field"><span className="field-label">{props.adaptiveOption.label}</span><span className="field-description">{props.adaptiveOption.description}</span><select name={props.adaptiveOption.name} value={props.adaptiveOption.value} onChange={props.onQualityOptionChange(props.adaptiveOption.name)}>{props.adaptiveOption.options.map((option) => <option key={option} value={option}>{props.adaptiveOption.name === 'bitrate' ? `${option} kbps` : `${option}p`}</option>)}</select></label>
+    <label className="field"><span className="field-label">{props.adaptiveOption.label}</span><span className="field-description">{props.adaptiveOption.description}</span><select name={props.adaptiveOption.name} value={props.adaptiveOption.value} onChange={props.onQualityOptionChange(props.adaptiveOption.name)}>{props.adaptiveOption.options.map((option) => <option key={option} value={option}>{option}{props.adaptiveOption.unit}</option>)}</select></label>
     <button className="primary-button" disabled={!props.snapshot.canDownload} type="submit">{props.submitLabel}</button>
   </form>;
 }
@@ -236,6 +238,6 @@ function getSourceUrlFeedback(snapshot: PopupDownloadSnapshot): SourceUrlFeedbac
 
 /** 현재 추출 형식에 맞는 단일 옵션 필드 copy를 만든다. */
 function getAdaptiveOptionCopy(snapshot: PopupDownloadSnapshot): AdaptiveOptionCopy {
-  if (snapshot.options.mode === 'video') return { description: '서버가 지원하는 해상도 중에서 고를 수 있습니다.', label: '최대 해상도', name: 'resolution', options: getQualityOptions('video'), value: snapshot.options.resolution };
-  return { description: '서버가 지원하는 비트레이트 중에서 고를 수 있습니다.', label: '최대 비트레이트', name: 'bitrate', options: getQualityOptions('audio'), value: snapshot.options.bitrate };
+  if (snapshot.options.mode === 'video') return { description: '서버가 지원하는 해상도 중에서 고를 수 있습니다.', label: '최대 해상도', name: 'resolution', options: getQualityOptions('video'), unit: 'p', value: snapshot.options.resolution };
+  return { description: '서버가 지원하는 비트레이트 중에서 고를 수 있습니다.', label: '최대 비트레이트', name: 'bitrate', options: getQualityOptions('audio'), unit: ' kbps', value: snapshot.options.bitrate };
 }
