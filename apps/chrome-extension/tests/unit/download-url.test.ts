@@ -4,7 +4,12 @@ import {
   normalizeApiBaseUrl,
   normalizeSourceUrl,
 } from '../../src/domain/download-options/download-options';
-import { buildDownloadUrl, buildHealthUrl } from '../../src/services/mytube-extract/download-url';
+import {
+  buildDownloadJobUrl,
+  buildDownloadJobsUrl,
+  buildDownloadUrl,
+  buildHealthUrl,
+} from '../../src/services/mytube-extract/download-url';
 import {
   LOCAL_API_BASE_URL,
   resolveDefaultApiBaseUrl,
@@ -64,6 +69,15 @@ describe('download URL behavior', () => {
 
   it('builds the API health URL from the same base URL normalization', () => {
     expect(buildHealthUrl('http://127.0.0.1:3030/')).toBe('http://127.0.0.1:3030/health');
+  });
+
+  it('builds download job collection and item URLs from the same base URL normalization', () => {
+    expect(buildDownloadJobsUrl('http://127.0.0.1:3030/')).toBe(
+      'http://127.0.0.1:3030/downloads',
+    );
+    expect(buildDownloadJobUrl('http://127.0.0.1:3030/', 'job-1')).toBe(
+      'http://127.0.0.1:3030/downloads/job-1',
+    );
   });
 
   it('keeps storage compatibility while ignoring saved API and source URLs', () => {

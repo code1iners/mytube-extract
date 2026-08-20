@@ -27,6 +27,8 @@ function createDependencies(
     },
     myTubeExtractClient: {
       assertServerAvailable: vi.fn().mockResolvedValue(undefined),
+      createDownloadJob: vi.fn(),
+      getDownloadJob: vi.fn(),
     },
     youtubeOverlay: {
       isEnabled: vi.fn().mockResolvedValue(false),
@@ -246,6 +248,8 @@ describe('popup download model', () => {
               releaseServerCheck = resolve;
             }),
         ),
+        createDownloadJob: vi.fn(),
+        getDownloadJob: vi.fn(),
       },
     });
     /** Popup download model. */
@@ -285,6 +289,8 @@ describe('popup download model', () => {
               releaseServerCheck = resolve;
             }),
         ),
+        createDownloadJob: vi.fn(),
+        getDownloadJob: vi.fn(),
       },
     });
     /** Popup download model. */
@@ -312,6 +318,8 @@ describe('popup download model', () => {
     const dependencies = createDependencies({
       myTubeExtractClient: {
         assertServerAvailable: vi.fn().mockRejectedValue(new Error('Server is unavailable.')),
+        createDownloadJob: vi.fn(),
+        getDownloadJob: vi.fn(),
       },
     });
     /** Popup download model. */
