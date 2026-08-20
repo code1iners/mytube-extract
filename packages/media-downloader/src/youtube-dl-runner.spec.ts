@@ -120,6 +120,139 @@ test('close code 0 without a final output rejects instead of creating a false su
   }
 });
 
+test('non-zero close with a TransportError stderr classifies as network-unreachable', async () => {
+  /** fake child process controls. */
+  const fake = createFakeProcess();
+  /** runner completion promise. */
+  const result = runYoutubeDl({
+    execute: () => fake.process,
+    outputPath: '/tmp/output.mp4',
+    sourceUrl: 'https://www.youtube.com/watch?v=abc123_DEF0',
+    youtubeOptions: { output: '/tmp/output.mp4' },
+  });
+
+  // yt-dlp 2026.07.04로 실제 프록시를 끊어 재현한 stderr 원문.
+  fake.process.stderr.write(
+    "ERROR: [youtube] abc123_DEF0: Unable to download API page: [Errno 61] Connection refused (caused by TransportError('[Errno 61] Connection refused'))\n",
+  );
+  fake.process.emit('close', 1, null);
+
+  await assert.rejects(result, (error: unknown) => {
+    /** runner diagnostic candidate. */
+    const diagnostic = (error as { diagnostic?: Record<string, unknown> })
+      .diagnostic;
+
+    assert.equal(diagnostic?.reason, 'network-unreachable');
+    return true;
+  });
+});
+
+test('non-zero close with a URLError stderr classifies as network-unreachable', async () => {
+  /** fake child process controls. */
+  const fake = createFakeProcess();
+  /** runner completion promise. */
+  const result = runYoutubeDl({
+    execute: () => fake.process,
+    outputPath: '/tmp/output.mp4',
+    sourceUrl: 'https://www.youtube.com/watch?v=abc123_DEF0',
+    youtubeOptions: { output: '/tmp/output.mp4' },
+  });
+
+  fake.process.stderr.write(
+    "ERROR: Unable to download webpage: <urlopen error [Errno 101] Network is unreachable> (caused by URLError(OSError(101, 'Network is unreachable')))\n",
+  );
+  fake.process.emit('close', 1, null);
+
+  await assert.rejects(result, (error: unknown) => {
+    /** runner diagnostic candidate. */
+    const diagnostic = (error as { diagnostic?: Record<string, unknown> })
+      .diagnostic;
+
+    assert.equal(diagnostic?.reason, 'network-unreachable');
+    return true;
+  });
+});
+
+test('non-zero close with a DNS failure stderr classifies as network-unreachable', async () => {
+  /** fake child process controls. */
+  const fake = createFakeProcess();
+  /** runner completion promise. */
+  const result = runYoutubeDl({
+    execute: () => fake.process,
+    outputPath: '/tmp/output.mp4',
+    sourceUrl: 'https://www.youtube.com/watch?v=abc123_DEF0',
+    youtubeOptions: { output: '/tmp/output.mp4' },
+  });
+
+  fake.process.stderr.write(
+    'ERROR: Unable to download webpage: Temporary failure in name resolution\n',
+  );
+  fake.process.emit('close', 1, null);
+
+  await assert.rejects(result, (error: unknown) => {
+    /** runner diagnostic candidate. */
+    const diagnostic = (error as { diagnostic?: Record<string, unknown> })
+      .diagnostic;
+
+    assert.equal(diagnostic?.reason, 'network-unreachable');
+    return true;
+  });
+});
+
+test('non-zero close with a macOS DNS failure stderr classifies as network-unreachable', async () => {
+  /** fake child process controls. */
+  const fake = createFakeProcess();
+  /** runner completion promise. */
+  const result = runYoutubeDl({
+    execute: () => fake.process,
+    outputPath: '/tmp/output.mp4',
+    sourceUrl: 'https://www.youtube.com/watch?v=abc123_DEF0',
+    youtubeOptions: { output: '/tmp/output.mp4' },
+  });
+
+  // macOS에서 DNS를 해석 못 하는 프록시로 실제 재현한 stderr 원문.
+  fake.process.stderr.write(
+    "ERROR: Unable to download webpage: [Errno 8] nodename nor servname provided, or not known (caused by TransportError('[Errno 8] nodename nor servname provided, or not known'))\n",
+  );
+  fake.process.emit('close', 1, null);
+
+  await assert.rejects(result, (error: unknown) => {
+    /** runner diagnostic candidate. */
+    const diagnostic = (error as { diagnostic?: Record<string, unknown> })
+      .diagnostic;
+
+    assert.equal(diagnostic?.reason, 'network-unreachable');
+    return true;
+  });
+});
+
+test('non-zero close with a getaddrinfo failure stderr classifies as network-unreachable', async () => {
+  /** fake child process controls. */
+  const fake = createFakeProcess();
+  /** runner completion promise. */
+  const result = runYoutubeDl({
+    execute: () => fake.process,
+    outputPath: '/tmp/output.mp4',
+    sourceUrl: 'https://www.youtube.com/watch?v=abc123_DEF0',
+    youtubeOptions: { output: '/tmp/output.mp4' },
+  });
+
+  // Linux glibc 계열에서 흔한 getaddrinfo 실패 stderr 형태.
+  fake.process.stderr.write(
+    'ERROR: Unable to download webpage: [Errno -3] Temporary failure in name resolution (caused by socket.gaierror via getaddrinfo)\n',
+  );
+  fake.process.emit('close', 1, null);
+
+  await assert.rejects(result, (error: unknown) => {
+    /** runner diagnostic candidate. */
+    const diagnostic = (error as { diagnostic?: Record<string, unknown> })
+      .diagnostic;
+
+    assert.equal(diagnostic?.reason, 'network-unreachable');
+    return true;
+  });
+});
+
 test('promise rejection is handled until close supplies the final process outcome', async () => {
   /** fake child process controls. */
   const fake = createFakeProcess();

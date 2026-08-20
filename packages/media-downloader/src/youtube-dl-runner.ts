@@ -215,13 +215,37 @@ function createStreamTail(stream: Readable | undefined) {
   return () => lines.join('\n');
 }
 
-/** stderr에서 알려진 YouTube 인증 실패를 분류한다. */
+/**
+ * stderr에서 재시도로 해결되지 않는 네트워크 단절 신호를 찾는 패턴.
+ * 'TransportError'는 실제 yt-dlp 2026.07.04에서 DNS 실패·connection refused를
+ * 모두 감싸는 공통 wrapper라 실측으로 확인해 추가했다. 나머지는 구버전 yt-dlp나
+ * 다른 OS의 Python urllib 메시지 형태를 대비한 보조 패턴이다.
+ */
+const NETWORK_UNREACHABLE_STDERR_PATTERNS = [
+  'TransportError',
+  'Connection refused',
+  'URLError',
+  'Network is unreachable',
+  'Temporary failure in name resolution',
+  'nodename nor servname',
+  'getaddrinfo',
+];
+
+/** stderr에서 알려진 YouTube 인증 실패 또는 네트워크 단절을 분류한다. */
 function detectDiagnosticReason(stderrTail: string) {
   if (
     stderrTail.includes('Sign in to confirm you') ||
     stderrTail.includes('LOGIN_REQUIRED')
   ) {
     return 'youtube-auth-required';
+  }
+
+  if (
+    NETWORK_UNREACHABLE_STDERR_PATTERNS.some((pattern) =>
+      stderrTail.includes(pattern),
+    )
+  ) {
+    return 'network-unreachable';
   }
 
   return undefined;

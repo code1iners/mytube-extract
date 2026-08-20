@@ -2,4 +2,7 @@ set -e
 
 pnpm test
 pnpm test:e2e
+# 실제 yt-dlp/YouTube를 쓰는 통합 테스트. 네트워크 단절·YouTube 봇 차단은 테스트 내부에서
+# 스킵 처리되고, yt-dlp/코드가 원인인 실패만 여기서 push를 막는다.
+pnpm --filter api run test:e2e:real
 WXT_MYTUBE_EXTRACT_API_BASE_URL=https://mytube-extract-api.codeliners.cc pnpm --filter chrome-extension run test:browser

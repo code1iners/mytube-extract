@@ -103,5 +103,6 @@
 - `pnpm --filter api run test`
 - `pnpm --filter @mytube-extract/db run build`
 - `pnpm --filter api run test:e2e`
+- `pnpm --filter api run test:e2e:real` (mock 없이 실제 yt-dlp로 고정 테스트 영상을 다운로드하는 real 통합 테스트, `.husky/pre-push`에 연결됨)
 - `pnpm --filter api run verify:runtime`
 - `pnpm --filter worker run test`

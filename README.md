@@ -191,6 +191,14 @@ GET /subtitles/jobs/{JOB_ID}/file
 
 ⚠️ **중요**: whisper.cpp 저장소를 clone만 해서는 실제 모델 파일이 없다. 저장소에는 `for-tests-*.bin` 더미 파일(~575KB)만 포함되어 있다. 실제 모델을 받으려면 `models/download-ggml-model.sh base.en` 및 `models/download-ggml-model.sh small.en`을 실행하거나 [Hugging Face ggerganov/whisper.cpp](https://huggingface.co/ggerganov/whisper.cpp)에서 수동으로 다운로드한 뒤, 압축 해제한 `ggml-*.bin` 파일을 `WHISPER_CPP_HOST_DIR/models/`에 배치해야 한다. worker는 기동 시점에 두 모델 파일 존재 여부를 검증하고, 둘 중 하나라도 없으면 즉시 종료된다.
 
+**whisper 파이프라인 실통합 검증 (opt-in, 수동 실행 전용)**: `apps/worker/scripts/real-whisper-check.ts`는 mock 없이 실제 whisper.cpp CLI로 커밋된 합성 음성 fixture(`apps/worker/scripts/fixtures/sample-speech.wav`)를 트랜스크립션해 ffmpeg→whisper-cli→SRT 파싱 배관이 실제로 도는지 확인한다. pre-push나 CI 어디에도 자동 연결돼 있지 않다 — 자막 코드를 건드릴 때 아래처럼 직접 실행한다. `base_en`/`small_en`이 아니라 더 가벼운 `tiny.en`(약 74MB, `models/download-ggml-model.sh tiny.en`으로 받는다) 모델을 쓴다 — 목적이 정확도 검증이 아니라 배관 검증이기 때문이다.
+
+```sh
+WHISPER_CLI_PATH=/path/to/whisper.cpp/build/bin/whisper-cli \
+WHISPER_MODEL_TINY_EN_PATH=/path/to/whisper.cpp/models/ggml-tiny.en.bin \
+pnpm --filter worker run test:whisper:real
+```
+
 호환용 직접 비디오 다운로드:
 
 ```text
@@ -283,11 +291,14 @@ pnpm --filter chrome-extension run test:browser
 ```bash
 pnpm turbo run test
 pnpm --filter api run test:e2e
+pnpm --filter api run test:e2e:real
 pnpm turbo run build
 pnpm turbo run lint
 pnpm --filter api run verify:runtime
 ```
 
-`git push` 시 husky pre-push 훅이 `pnpm test`, `pnpm test:e2e`, `chrome-extension`의 `test:browser`를 순서대로 실행하며, 하나라도 실패하면 push가 차단된다. 훅은 `pnpm install`(root) 시 `prepare` 스크립트로 자동 활성화되므로 별도 설치 절차가 없다. 예외적으로 우회해야 하면 `HUSKY=0 git push`를 쓴다.
+`git push` 시 husky pre-push 훅이 `pnpm test`, `pnpm test:e2e`, `pnpm --filter api run test:e2e:real`, `chrome-extension`의 `test:browser`를 순서대로 실행하며, 하나라도 실패하면 push가 차단된다. 훅은 `pnpm install`(root) 시 `prepare` 스크립트로 자동 활성화되므로 별도 설치 절차가 없다. 예외적으로 우회해야 하면 `HUSKY=0 git push`를 쓴다.
+
+`test:e2e:real`은 mock 없이 실제 yt-dlp로 고정 테스트 영상(`jNQXAC9IVRw`)을 비디오·오디오 두 경로로 실제 다운로드해 확인하는 real 통합 테스트다. 네트워크 단절이나 YouTube 봇 차단처럼 코드로 고칠 수 없는 환경 요인 실패는 경고만 남기고 통과 처리하며, yt-dlp/코드가 원인인 실패만 push를 막는다.
 
 `pnpm test:cov`(루트)는 api(Jest), web·chrome-extension(Vitest), worker·media-downloader(Node 내장 테스트 러너)의 커버리지를 한 번에 출력한다. pre-push 게이트에는 포함되지 않으며, 임계치 강제 없이 리포팅 용도로만 쓴다.
