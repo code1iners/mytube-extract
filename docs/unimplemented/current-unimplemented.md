@@ -40,20 +40,6 @@
   - `docs/api/current-implementation-fsd.md`
   - `apps/chrome-extension/wxt.config.ts`
 
-## Chrome 확장 프로그램 job 기반 다운로드 전환
-
-- 상태: 미구현
-- 대상 표면: `apps/chrome-extension`, `POST /downloads`, `GET /downloads/:jobId`, `GET /downloads/:jobId/file`
-- 현재 상태: 웹 앱과 API는 `/downloads` job 생성, 상태 조회, completed file 다운로드를 지원한다. Chrome 확장 프로그램은 호환용 `/audio`, `/video` 직접 다운로드 API를 계속 사용한다.
-- 필요성: 확장 프로그램에서도 장시간 다운로드 준비 상태를 명확히 보여줄 수 있어야 한다.
-- 구현 조건: Chrome 확장 프로그램은 `POST /downloads`, polling, completed file URL을 `chrome.downloads.download`로 넘기는 흐름으로 전환한다. 기존 `/audio`, `/video` 직접 다운로드 API는 외부 호환성을 위해 유지한다.
-- 관련 근거:
-  - `apps/api/src/downloads/downloads.controller.ts`
-  - `apps/web/src/domain/download-request/download-request.ts`
-  - `docs/server/endpoints/post-downloads.md`
-  - `docs/server/endpoints/get-downloads-job-id.md`
-  - `docs/server/endpoints/get-downloads-job-id-file.md`
-
 ## 다중 worker 큐와 세부 진행률 표시
 
 - 상태: 미구현

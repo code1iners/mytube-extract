@@ -4,7 +4,7 @@
 
 MyTube Extract는 사용자가 YouTube 영상 URL 또는 영상 ID를 기반으로 비디오나 오디오 파일을 다운로드하거나, 로컬 영상에서 영어 SRT를 생성할 수 있게 하는 단순 미디어 변환 API 서버다.
 
-현재 제품 범위는 HTTP API 제공과 웹 앱의 URL 기반 다운로드 흐름에 집중한다. 사용자는 웹 앱, 브라우저, Chrome 확장 프로그램, curl 같은 HTTP 클라이언트에서 엔드포인트를 호출해 미디어 파일 다운로드 응답을 받는다. 웹 앱은 `/downloads` job API를 사용하고, Chrome 확장 프로그램 MVP는 기존 `/audio`, `/video` 직접 다운로드 API 계약을 소비한다. Web 앱 화면 계약은 `docs/web/current-implementation-prd.md`를 기준으로 한다.
+현재 제품 범위는 HTTP API 제공과 웹 앱·Chrome 확장 프로그램의 URL 기반 다운로드 흐름에 집중한다. 웹 앱과 Chrome 확장 프로그램은 `/downloads` job API를 사용해 job 생성, 상태 조회, 완료 파일 다운로드를 수행한다. 기존 `/audio`, `/video` 직접 다운로드 API 계약은 curl 같은 외부 클라이언트의 호환용으로 유지한다. Web 앱 화면 계약은 `docs/web/current-implementation-prd.md`를 기준으로 한다.
 
 Endpoint별 요청/응답 상세 계약은 `docs/server/endpoints/*`를 기준으로 한다.
 
@@ -19,7 +19,7 @@ Endpoint별 요청/응답 상세 계약은 `docs/server/endpoints/*`를 기준�
 ## 핵심 가치
 
 - 별도 화면 없이 URL 기반 API 호출만으로 비디오 또는 오디오 다운로드를 시작할 수 있다.
-- 웹 앱에서는 다운로드 job 생성, 상태 조회, 완료 파일 다운로드를 분리해 긴 작업 상태를 확인할 수 있다.
+- 웹 앱과 Chrome 확장 프로그램에서는 다운로드 job 생성, 상태 조회, 완료 파일 다운로드를 분리해 긴 작업 상태를 확인할 수 있다.
 - 영상 ID만 알고 있어도 YouTube watch URL을 직접 구성하지 않고 다운로드할 수 있다.
 - 비디오 해상도와 오디오 비트레이트를 쿼리 파라미터로 지정할 수 있다.
 - `/health` 엔드포인트로 서버 응답 가능 여부와 worker 처리 가능 여부를 확인할 수 있다.

@@ -55,7 +55,7 @@ API base URL은 `WXT_MYTUBE_EXTRACT_API_BASE_URL` 환경 변수로 정하며 pop
 - Popup과 YouTube Overlay는 Background에 `POST /downloads` job 생성을 요청하고, 생성 직후 접수 상태를 받는다.
 - Background의 job manager가 `GET /downloads/{jobId}`를 2.5초 간격으로 조회하고, 진행 중 job은 `chrome.storage.local` active record로 저장한다.
 - Service worker가 재시작되면 active record를 즉시 다시 조회하고, 완료된 job만 `GET /downloads/{jobId}/file`을 `chrome.downloads.download()`로 시작한다.
-- 완료 job은 최근 요청 목록에 최대 5건 보관하고, 대기·처리 중 job은 목록 상한을 넘겨도 유지한다. 실패 job은 데스크톱 알림에서 같은 입력으로 재시도할 수 있다.
+- 완료·실패 job은 최근 요청 목록에 최대 5건 보관하고, 6번째 job이 추가되면 가장 오래된 완료·실패 job부터 제거한다. 대기·처리 중 job은 목록 상한을 넘겨도 유지한다. 실패 job은 데스크톱 알림에서 같은 입력으로 재시도할 수 있다.
 - 서버가 `displayStatus: expired`를 반환하거나 완료 URL이 없으면 성공 다운로드로 처리하지 않고 실패 상태·재시도 경로로 표시한다.
 
 ### YouTube 썸네일 Overlay

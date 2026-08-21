@@ -225,7 +225,7 @@ Chrome 확장 프로그램 소스는 `apps/chrome-extension` workspace package�
 
 Chrome 확장 프로그램의 제품 범위와 기능 계약은 `docs/chrome-extension/current-implementation-prd.md`, `docs/chrome-extension/current-implementation-fsd.md`를 기준으로 한다.
 
-현재 MVP는 WXT + React + TypeScript popup에서 사용자가 입력하거나 현재 탭에서 가져온 YouTube URL, 다운로드 형식, 선택 옵션을 조합해 MyTube Extract API의 `/audio?url=...` 또는 `/video?url=...` 다운로드를 시작한다. Web 앱은 같은 API의 `/downloads` job 생성, 상태 polling, 완료 파일 다운로드 흐름을 사용한다.
+현재 MVP는 WXT + React + TypeScript popup과 YouTube 썸네일 Overlay에서 다운로드 job을 만들고, Background가 `POST /downloads` → 상태 polling → 완료 파일 다운로드를 담당한다. Popup은 최근 5건의 job 상태를 보여 주며, 기존 `/audio`·`/video` 직접 다운로드 endpoint는 외부 호환용으로 유지한다. Web 앱도 같은 `/downloads` job 흐름을 사용한다.
 
 로컬 개발 서버:
 

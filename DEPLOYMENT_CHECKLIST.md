@@ -44,7 +44,7 @@ vercel deploy --scope=staging
 4. **페이지 새로고침** (Ctrl+R)
 5. 네트워크 요청 확인:
    - `mytube-extract-api.codeliners.cc/health` → 200 OK ✓
-   - `mytube-extract-api.codeliners.cc/audio?url=...` 또는 `/video?url=...` 호출 ✓
+   - 다운로드 테스트 후 `POST /downloads` → `GET /downloads/{jobId}` → `GET /downloads/{jobId}/file` 흐름 확인 ✓
 
 **콘솔 에러 확인**:
 
@@ -91,7 +91,7 @@ pnpm --filter chrome-extension run build
 # 5. 팝업 클릭
 # 6. DevTools → Network 탭에서 API 호출 확인
 #    - mytube-extract-api.codeliners.cc/health ✓
-#    - mytube-extract-api.codeliners.cc/audio 또는 /video ✓
+#    - mytube-extract-api.codeliners.cc/downloads job 생성·상태·파일 endpoint ✓
 ```
 
 ### 5단계: 스테이징 모니터링 (2-4시간)
@@ -170,8 +170,8 @@ curl -s https://mytube-extract-api.codeliners.cc/health | jq .
 # - 네트워크 요청 성공률 > 99.9%
 # - API 엔드포인트별 에러 추적:
 #   - /health: 100% 성공
-#   - /audio?url=...: 오류 없음
-#   - /video?url=...: 오류 없음
+#   - POST /downloads 및 GET /downloads/{jobId}: 오류 없음
+#   - GET /downloads/{jobId}/file: 오류 없음
 # - 다운로드 시작/완료 로그 정상
 
 # Sentry 확인:
