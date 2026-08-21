@@ -3,7 +3,14 @@ import {
   type TrackedDownloadJobRecord,
 } from '../../adapters/chrome/active-download-jobs-storage';
 import { type DownloadsAdapter } from '../../adapters/chrome/downloads';
-import { type CreateDownloadJobInput, type DownloadJob } from '../../domain/download-job/download-job';
+import {
+  type DownloadJobRetryInput,
+  type DownloadNotificationsAdapter,
+} from '../../adapters/chrome/notifications';
+import {
+  type CreateDownloadJobInput,
+  type DownloadJob,
+} from '../../domain/download-job/download-job';
 import {
   type MyTubeExtractClient,
 } from '../../services/mytube-extract/mytube-extract-client';
@@ -23,6 +30,8 @@ export type DownloadJobManagerDependencies = {
   myTubeExtractClient: Pick<MyTubeExtractClient, 'createDownloadJob' | 'getDownloadJob'>;
   /** Chrome downloads adapter. */
   downloads: DownloadsAdapter;
+  /** 완료·실패 데스크톱 알림 adapter. */
+  notifications: DownloadNotificationsAdapter;
   /** 폴링 예약 scheduler. */
   scheduler: JobPollingScheduler;
   /** service worker 재시작 후 추적을 재개할 수 있도록 진행 중 job을 영속 저장하는 store. */
@@ -61,6 +70,12 @@ function isUnsettled(job: DownloadJob): boolean {
 type JobTrackingOptions = {
   /** API base URL. */
   apiBaseUrl: string;
+  /** 실패 알림 재시도에 사용할 원본 YouTube URL. */
+  sourceUrl: string;
+  /** 실패 알림 재시도에 사용할 다운로드 형식. */
+  type: CreateDownloadJobInput['type'];
+  /** 실패 알림 재시도에 사용할 화질. */
+  quality: CreateDownloadJobInput['quality'];
   /** 완료 시 로컬 저장에 사용할 파일명. */
   localFilename: string | undefined;
   /** 대기/처리 중 상태가 바뀔 때마다 호출된다. */
@@ -117,6 +132,7 @@ export function createDownloadJobManager(
         apiBaseUrl: tracking.apiBaseUrl,
         job,
         localFilename: tracking.localFilename,
+        sourceUrl: tracking.sourceUrl,
       });
       return;
     }
@@ -152,9 +168,19 @@ export function createDownloadJobManager(
     }
 
     if (currentJob.status === 'failed') {
+      await notifySafely(() =>
+        dependencies.notifications.showFailed(currentJob, {
+          apiBaseUrl: tracking.apiBaseUrl,
+          localFilename: tracking.localFilename,
+          quality: tracking.quality,
+          sourceUrl: tracking.sourceUrl,
+          type: tracking.type,
+        }),
+      );
       throw new DownloadJobFailedError(currentJob);
     }
 
+    await notifySafely(() => dependencies.notifications.showCompleted(currentJob));
     await dependencies.downloads.startDownload(currentJob.downloadUrl ?? '', tracking.localFilename);
 
     return currentJob;
@@ -171,6 +197,9 @@ export function createDownloadJobManager(
       apiBaseUrl: record.apiBaseUrl,
       localFilename: record.localFilename,
       onStatusChange: undefined,
+      quality: record.job.quality,
+      sourceUrl: record.sourceUrl,
+      type: record.job.type,
     };
 
     if (!isUnsettled(record.job)) {
@@ -194,6 +223,32 @@ export function createDownloadJobManager(
     });
   }
 
+  /** 새 job을 생성하고 상태 추적을 시작한다. 실패 알림의 재시도도 이 경계를 재사용한다. */
+  async function submitJob(input: SubmitDownloadJobInput): Promise<DownloadJob> {
+    const { localFilename, onStatusChange, ...createInput } = input;
+    /** 새로 생성된 job. */
+    const job = await dependencies.myTubeExtractClient.createDownloadJob(createInput);
+    /** 이번 job 추적에 사용할 옵션. */
+    const tracking: JobTrackingOptions = {
+      apiBaseUrl: createInput.apiBaseUrl,
+      localFilename,
+      onStatusChange,
+      quality: createInput.quality,
+      sourceUrl: createInput.sourceUrl,
+      type: createInput.type,
+    };
+
+    setJob(job);
+    await persistTracking(job, tracking);
+    onStatusChange?.(job);
+
+    return trackJobUntilSettled(job, tracking);
+  }
+
+  dependencies.notifications.subscribeRetry((retryInput: DownloadJobRetryInput) =>
+    submitJob(retryInput),
+  );
+
   return {
     getJobs() {
       return [...jobs.values()].sort((left, right) => right.createdAt.localeCompare(left.createdAt));
@@ -205,23 +260,7 @@ export function createDownloadJobManager(
         listeners.delete(listener);
       };
     },
-    async submitJob(input) {
-      const { localFilename, onStatusChange, ...createInput } = input;
-      /** 새로 생성된 job. */
-      const job = await dependencies.myTubeExtractClient.createDownloadJob(createInput);
-      /** 이번 job 추적에 사용할 옵션. */
-      const tracking: JobTrackingOptions = {
-        apiBaseUrl: createInput.apiBaseUrl,
-        localFilename,
-        onStatusChange,
-      };
-
-      setJob(job);
-      await persistTracking(job, tracking);
-      onStatusChange?.(job);
-
-      return trackJobUntilSettled(job, tracking);
-    },
+    submitJob,
     async resumeTracking() {
       /** 영속 저장소에 남아 있던 진행 중 job 기록들. */
       const records = await dependencies.activeJobsStore.loadActiveJobs();
@@ -229,6 +268,15 @@ export function createDownloadJobManager(
       await Promise.all(records.map((record) => resumeRecord(record)));
     },
   };
+}
+
+/** 알림이 실패해도 job 상태 처리와 자동 다운로드 결과를 가리지 않게 한다. */
+async function notifySafely(action: () => Promise<void>): Promise<void> {
+  try {
+    await action();
+  } catch {
+    // OS 알림은 부수효과이므로 권한 거부나 Chrome API 오류가 job 결과를 바꾸지 않게 한다.
+  }
 }
 
 /** job 상태가 바뀔 때마다 가장 최근 job을 save로 넘긴다. Background와 dev preview가 동일하게 사용한다. */

@@ -2,6 +2,7 @@ import { defineBackground } from 'wxt/utils/define-background';
 import { createActiveDownloadJobsStorageAdapter } from '../src/adapters/chrome/active-download-jobs-storage';
 import { createDownloadJobStorageAdapter } from '../src/adapters/chrome/download-job-storage';
 import { createDownloadsAdapter } from '../src/adapters/chrome/downloads';
+import { createDownloadNotificationsAdapter } from '../src/adapters/chrome/notifications';
 import { createYoutubeOverlayAdapter } from '../src/adapters/chrome/youtube-overlay';
 import {
   createDownloadJobManager,
@@ -35,6 +36,9 @@ const myTubeExtractClient = createMyTubeExtractClient();
 /** Background에서 사용하는 Chrome downloads adapter. */
 const downloads = createDownloadsAdapter();
 
+/** Background에서 사용하는 Chrome notifications adapter. */
+const notifications = createDownloadNotificationsAdapter();
+
 /** Background에서 사용하는 YouTube permission adapter. */
 const youtubeOverlay = createYoutubeOverlayAdapter();
 
@@ -49,6 +53,7 @@ const downloadJobManager = createDownloadJobManager({
   activeJobsStore: activeDownloadJobsStorage,
   downloads,
   myTubeExtractClient,
+  notifications,
   scheduler: createTimeoutPollingScheduler(),
 });
 

@@ -30,6 +30,7 @@ function createRecord(overrides: Partial<TrackedDownloadJobRecord> = {}): Tracke
     apiBaseUrl: 'http://127.0.0.1:3030',
     job: createJob(),
     localFilename: 'my clip.mp3',
+    sourceUrl: 'https://www.youtube.com/watch?v=abc123_DEF0',
     ...overrides,
   };
 }

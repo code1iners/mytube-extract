@@ -67,6 +67,7 @@ function verifyManifestReferences(manifest) {
 
   assertIncludes(manifest.permissions, 'storage', 'manifest.json permissions');
   assertIncludes(manifest.permissions, 'downloads', 'manifest.json permissions');
+  assertIncludes(manifest.permissions, 'notifications', 'manifest.json permissions');
   assertIncludes(manifest.permissions, 'activeTab', 'manifest.json permissions');
   assertIncludes(manifest.permissions, 'scripting', 'manifest.json permissions');
   assertIncludes(

@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { type DownloadJob } from '../../src/domain/download-job/download-job';
+import { type DownloadJobRetryInput } from '../../src/adapters/chrome/notifications';
 import {
   type ActiveDownloadJobsStorageAdapter,
   type TrackedDownloadJobRecord,
@@ -108,6 +109,11 @@ function createDependencies(
       createDownloadJob: vi.fn().mockResolvedValue(createJob()),
       getDownloadJob: vi.fn().mockResolvedValue(createJob()),
     },
+    notifications: {
+      showCompleted: vi.fn().mockResolvedValue(undefined),
+      showFailed: vi.fn().mockResolvedValue(undefined),
+      subscribeRetry: vi.fn().mockReturnValue(() => {}),
+    },
     scheduler: createManualScheduler().scheduler,
     ...overrides,
   };
@@ -147,6 +153,7 @@ describe('download job manager', () => {
       '/downloads/job-1/file',
       'my clip.mp3',
     );
+    expect(dependencies.notifications.showCompleted).toHaveBeenCalledWith(completedJob);
   });
 
   it('starts the local download without a filename when none is given', async () => {
@@ -296,6 +303,95 @@ describe('download job manager', () => {
     expect((thrownError as DownloadJobFailedError).message).toBe('로그인이 필요한 영상입니다.');
     expect((thrownError as DownloadJobFailedError).job).toBe(failedJob);
     expect(dependencies.downloads.startDownload).not.toHaveBeenCalled();
+    expect(dependencies.notifications.showFailed).toHaveBeenCalledWith(
+      failedJob,
+      expect.objectContaining({
+        apiBaseUrl: 'http://127.0.0.1:3030',
+        quality: '192',
+        sourceUrl: 'https://www.youtube.com/watch?v=abc123_DEF0',
+        type: 'audio',
+      }),
+    );
+  });
+
+  it('retries a failed job with the original URL, type, and quality from the notification action', async () => {
+    /** 실패로 응답하는 비디오 job. */
+    const failedJob = createJob({
+      displayStatus: 'failed',
+      errorCode: 'YOUTUBE_FORMAT_UNAVAILABLE',
+      message: '선택한 화질을 사용할 수 없습니다.',
+      quality: '1080',
+      status: 'failed',
+      type: 'video',
+    });
+    /** 재시도 후 생성되는 즉시 완료 job. */
+    const retriedJob = createJob({
+      downloadUrl: '/downloads/job-2/file',
+      jobId: 'job-2',
+      quality: '1080',
+      status: 'completed',
+      type: 'video',
+    });
+    /** job 생성 호출 순서. */
+    const createDownloadJob = vi
+      .fn()
+      .mockResolvedValueOnce(failedJob)
+      .mockResolvedValueOnce(retriedJob);
+    /** 알림 버튼에서 manager로 재시도 입력을 전달하는 listener. */
+    let retryListener:
+      | ((retryInput: DownloadJobRetryInput) => void | Promise<unknown>)
+      | undefined;
+    /** job manager dependency. */
+    const dependencies = createDependencies({
+      myTubeExtractClient: {
+        createDownloadJob,
+        getDownloadJob: vi.fn(),
+      },
+      notifications: {
+        showCompleted: vi.fn().mockResolvedValue(undefined),
+        showFailed: vi.fn().mockResolvedValue(undefined),
+        subscribeRetry: vi.fn((listener) => {
+          retryListener = listener;
+
+          return () => {};
+        }),
+      },
+    });
+    /** job manager. */
+    const manager = createDownloadJobManager(dependencies);
+
+    await expect(
+      manager.submitJob({
+        apiBaseUrl: 'http://127.0.0.1:3030',
+        quality: '1080',
+        sourceUrl: 'https://www.youtube.com/watch?v=original123',
+        type: 'video',
+      }),
+    ).rejects.toBeInstanceOf(DownloadJobFailedError);
+
+    /** 실패 알림에 저장된 재시도 입력. */
+    const retryInput = vi.mocked(dependencies.notifications.showFailed).mock.calls[0]?.[1];
+
+    expect(retryInput).toEqual({
+      apiBaseUrl: 'http://127.0.0.1:3030',
+      quality: '1080',
+      sourceUrl: 'https://www.youtube.com/watch?v=original123',
+      type: 'video',
+    });
+    expect(retryListener).toBeDefined();
+
+    await retryListener!(retryInput!);
+
+    expect(createDownloadJob).toHaveBeenNthCalledWith(2, {
+      apiBaseUrl: 'http://127.0.0.1:3030',
+      quality: '1080',
+      sourceUrl: 'https://www.youtube.com/watch?v=original123',
+      type: 'video',
+    });
+    expect(dependencies.downloads.startDownload).toHaveBeenCalledWith(
+      '/downloads/job-2/file',
+      undefined,
+    );
   });
 
   it('tracks multiple concurrently submitted jobs independently', async () => {
@@ -470,6 +566,7 @@ describe('download job manager', () => {
         apiBaseUrl: 'http://127.0.0.1:3030',
         job: expect.objectContaining({ jobId: 'job-1', status: 'queued' }),
         localFilename: 'my clip.mp3',
+        sourceUrl: 'https://www.youtube.com/watch?v=abc123_DEF0',
       }),
     );
 
@@ -518,6 +615,7 @@ describe('download job manager restart recovery', () => {
         apiBaseUrl: 'http://127.0.0.1:3030',
         job: createJob({ jobId: 'job-1', status: 'processing' }),
         localFilename: 'my clip.mp3',
+        sourceUrl: 'https://www.youtube.com/watch?v=abc123_DEF0',
       },
     ]);
     /** job manager dependency. */
@@ -561,6 +659,7 @@ describe('download job manager restart recovery', () => {
       {
         apiBaseUrl: 'http://127.0.0.1:3030',
         job: createJob({ jobId: 'job-1', status: 'processing' }),
+        sourceUrl: 'https://www.youtube.com/watch?v=abc123_DEF0',
       },
     ]);
     /** job manager dependency. */
@@ -603,6 +702,7 @@ describe('download job manager restart recovery', () => {
           jobId: 'job-1',
           status: 'completed',
         }),
+        sourceUrl: 'https://www.youtube.com/watch?v=abc123_DEF0',
       },
     ]);
     /** job manager dependency. */
@@ -632,6 +732,7 @@ describe('download job manager restart recovery', () => {
       {
         apiBaseUrl: 'http://127.0.0.1:3030',
         job: createJob({ jobId: 'job-1', status: 'processing' }),
+        sourceUrl: 'https://www.youtube.com/watch?v=abc123_DEF0',
       },
     ]);
     /** job manager dependency. */
@@ -661,10 +762,12 @@ describe('download job manager restart recovery', () => {
       {
         apiBaseUrl: 'http://127.0.0.1:3030',
         job: createJob({ jobId: 'job-a', status: 'queued' }),
+        sourceUrl: 'https://www.youtube.com/watch?v=job-a',
       },
       {
         apiBaseUrl: 'http://127.0.0.1:3030',
         job: createJob({ jobId: 'job-b', status: 'processing' }),
+        sourceUrl: 'https://www.youtube.com/watch?v=job-b',
       },
     ]);
     /** job별 응답. */

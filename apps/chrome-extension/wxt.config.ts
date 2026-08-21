@@ -29,7 +29,7 @@ export default defineConfig({
   manifest: {
     name: 'MyTube Extract',
     description: 'YouTube 영상을 오디오 또는 비디오로 추출하는 보조 도구입니다.',
-    permissions: ['storage', 'downloads', 'activeTab', 'scripting', 'alarms'],
+    permissions: ['storage', 'downloads', 'notifications', 'activeTab', 'scripting', 'alarms'],
     host_permissions: [createApiHostPermission()],
     optional_host_permissions: [YOUTUBE_HOST_PERMISSION],
     web_accessible_resources: [

@@ -1,4 +1,5 @@
 import { type TrackedDownloadJobRecord } from '../../src/adapters/chrome/active-download-jobs-storage';
+import { createNoopDownloadNotificationsAdapter } from '../../src/adapters/chrome/notifications';
 import { LATEST_DOWNLOAD_JOB_STORAGE_KEY } from '../../src/adapters/chrome/download-job-storage';
 import {
   createDownloadJobManager,
@@ -138,6 +139,7 @@ function createDevPreviewChromeApi({
       },
     },
     myTubeExtractClient,
+    notifications: createNoopDownloadNotificationsAdapter(),
     scheduler: createTimeoutPollingScheduler(),
   });
   /** Preview용 job 제출 요청 handler. Background의 message handler와 동일하게 동작한다. */

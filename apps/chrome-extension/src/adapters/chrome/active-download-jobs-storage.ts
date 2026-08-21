@@ -9,6 +9,8 @@ export type TrackedDownloadJobRecord = {
   apiBaseUrl: string;
   /** 마지막으로 확인한 job 상태. */
   job: DownloadJob;
+  /** 실패 알림에서 동일한 입력으로 재시도할 원본 YouTube URL. */
+  sourceUrl: string;
   /** 완료 시 로컬 저장에 사용할 파일명. */
   localFilename?: string;
 };
