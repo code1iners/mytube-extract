@@ -430,9 +430,16 @@ async function routeMyTubeExtractApi(page, { requests, healthOk }) {
   });
 }
 
-/** Page에 extension popup용 fake Chrome API를 주입한다. */
+/** Page에 extension popup용 fake Chrome API를 주입한다. Background 없이 실행되는 bare page이므로
+ * download job 제출 메시지도 여기서 Background의 assertServerAvailable → job 생성 → 저장을
+ * 직접 흉내 낸다. */
 async function installFakeChromeApi(page, options) {
   await page.addInitScript((chromeOptions) => {
+    /** 최근 job을 저장하는 storage key. entrypoints/popup/dev-preview-chrome-api.ts, src/adapters/chrome/download-job-storage.ts와 동일한 key를 사용한다. */
+    const LATEST_DOWNLOAD_JOB_STORAGE_KEY = 'latestDownloadJob';
+    /** 등록된 storage.onChanged listener 목록. */
+    const storageChangeListeners = [];
+
     globalThis.__myTubeExtractStoredOptions = chromeOptions.storedOptions;
     globalThis.__myTubeExtractDownloadUrl = null;
     globalThis.__myTubeExtractDownloadFilename = null;
@@ -440,10 +447,96 @@ async function installFakeChromeApi(page, options) {
       chromeOptions.youtubePermissionGranted ?? false;
     globalThis.__myTubeExtractCurrentTabUrl =
       chromeOptions.currentTabUrl ?? 'https://www.youtube.com/watch?v=abc123_DEF0';
+
+    /** storage 값을 쓰고 onChanged listener에게 알린다. */
+    function setStorageItems(items) {
+      globalThis.__myTubeExtractStoredOptions = {
+        ...globalThis.__myTubeExtractStoredOptions,
+        ...items,
+      };
+
+      /** 이번 변경으로 생긴 storage.onChanged 변경 내역. */
+      const changes = {};
+
+      Object.keys(items).forEach((key) => {
+        changes[key] = { newValue: items[key] };
+      });
+
+      storageChangeListeners.forEach((listener) => listener(changes, 'local'));
+    }
+
+    /** Background의 job 제출 handler를 흉내 낸다: 서버 확인 → job 생성 → 저장 → 완료 시 자동 다운로드. */
+    async function handleDownloadJobSubmit(request) {
+      try {
+        /** health check 응답. */
+        const healthResponse = await fetch(`${request.apiBaseUrl}/health`);
+
+        if (!healthResponse.ok) {
+          return { message: 'Server is unavailable.', ok: false };
+        }
+
+        /** health check payload. */
+        const healthPayload = await healthResponse.json();
+
+        if (healthPayload?.ok !== true) {
+          return { message: 'Server health check failed.', ok: false };
+        }
+      } catch {
+        return { message: 'Server is unavailable.', ok: false };
+      }
+
+      try {
+        /** job 생성 응답. */
+        const createResponse = await fetch(`${request.apiBaseUrl}/downloads`, {
+          body: JSON.stringify({
+            quality: request.quality,
+            type: request.mode,
+            url: request.sourceUrl,
+          }),
+          headers: { 'Content-Type': 'application/json' },
+          method: 'POST',
+        });
+
+        if (!createResponse.ok) {
+          return { message: 'Could not create the download job.', ok: false };
+        }
+
+        /** 생성된 job. */
+        const rawJob = await createResponse.json();
+        /** 절대 다운로드 URL로 resolve한 job. */
+        const job = {
+          ...rawJob,
+          downloadUrl: rawJob.downloadUrl ? `${request.apiBaseUrl}${rawJob.downloadUrl}` : null,
+        };
+
+        setStorageItems({ [LATEST_DOWNLOAD_JOB_STORAGE_KEY]: job });
+
+        if (job.status === 'completed' && job.downloadUrl) {
+          await new Promise((resolve) => {
+            globalThis.chrome.downloads.download(
+              request.localFilename
+                ? { filename: request.localFilename, url: job.downloadUrl }
+                : { url: job.downloadUrl },
+              resolve,
+            );
+          });
+        }
+
+        return { job, ok: true };
+      } catch {
+        return { message: 'Could not reach the server to create the download job.', ok: false };
+      }
+    }
+
     globalThis.chrome = {
       runtime: {
         lastError: null,
-        sendMessage(_message, callback) {
+        sendMessage(message, callback) {
+          if (message?.type === 'download-job-submit') {
+            handleDownloadJobSubmit(message).then(callback);
+            return;
+          }
+
           callback({ ok: true });
         },
       },
@@ -453,8 +546,21 @@ async function installFakeChromeApi(page, options) {
             callback(globalThis.__myTubeExtractStoredOptions);
           },
           set(items, callback) {
-            globalThis.__myTubeExtractStoredOptions = items;
+            setStorageItems(items);
             callback();
+          },
+        },
+        onChanged: {
+          addListener(listener) {
+            storageChangeListeners.push(listener);
+          },
+          removeListener(listener) {
+            /** 제거할 listener의 index. */
+            const index = storageChangeListeners.indexOf(listener);
+
+            if (index !== -1) {
+              storageChangeListeners.splice(index, 1);
+            }
           },
         },
       },

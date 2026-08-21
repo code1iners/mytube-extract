@@ -1,6 +1,14 @@
 import { defineBackground } from 'wxt/utils/define-background';
+import { createDownloadJobStorageAdapter } from '../src/adapters/chrome/download-job-storage';
 import { createDownloadsAdapter } from '../src/adapters/chrome/downloads';
 import { createYoutubeOverlayAdapter } from '../src/adapters/chrome/youtube-overlay';
+import {
+  createDownloadJobManager,
+  createTimeoutPollingScheduler,
+  persistLatestJob,
+} from '../src/features/download-jobs/download-job-manager';
+import { isDownloadJobSubmitRequest } from '../src/features/download-jobs/download-job-message';
+import { createDownloadJobSubmitHandler } from '../src/features/download-jobs/download-job-submit-handler';
 import { createMyTubeExtractClient } from '../src/services/mytube-extract/mytube-extract-client';
 import { buildDownloadUrl } from '../src/services/mytube-extract/download-url';
 import {
@@ -24,6 +32,28 @@ const downloads = createDownloadsAdapter();
 /** Background에서 사용하는 YouTube permission adapter. */
 const youtubeOverlay = createYoutubeOverlayAdapter();
 
+/** 최근 다운로드 job을 Popup 재오픈 후에도 읽을 수 있도록 영속 저장하는 adapter. */
+const downloadJobStorage = createDownloadJobStorageAdapter();
+
+/** Background가 소유하는 download job manager. Popup이 닫혀도 폴링과 자동 다운로드가 계속된다. */
+const downloadJobManager = createDownloadJobManager({
+  downloads,
+  myTubeExtractClient,
+  scheduler: createTimeoutPollingScheduler(),
+});
+
+/** Popup의 job 제출 요청을 처리하는 handler. */
+const handleDownloadJobSubmit = createDownloadJobSubmitHandler({
+  jobManager: downloadJobManager,
+  myTubeExtractClient,
+});
+
+// job 상태가 바뀔 때마다 최신 job을 저장해 Popup이 서버를 직접 조회하지 않고도
+// storage 구독만으로 최신 상태를 읽을 수 있게 한다.
+persistLatestJob(downloadJobManager, (job) => {
+  void downloadJobStorage.saveLatestJob(job);
+});
+
 /** YouTube 일반 영상 Overlay Background service worker. */
 export default defineBackground(() => {
   chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
@@ -38,6 +68,12 @@ export default defineBackground(() => {
           ok: false,
         }))
         .then(sendResponse);
+
+      return true;
+    }
+
+    if (isDownloadJobSubmitRequest(message)) {
+      void handleDownloadJobSubmit(message).then(sendResponse);
 
       return true;
     }

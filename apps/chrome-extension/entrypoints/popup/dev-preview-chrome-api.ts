@@ -1,4 +1,12 @@
-import { STORAGE_KEYS } from '../../src/shared/constants';
+import { LATEST_DOWNLOAD_JOB_STORAGE_KEY } from '../../src/adapters/chrome/download-job-storage';
+import {
+  createDownloadJobManager,
+  createTimeoutPollingScheduler,
+  persistLatestJob,
+} from '../../src/features/download-jobs/download-job-manager';
+import { isDownloadJobSubmitRequest } from '../../src/features/download-jobs/download-job-message';
+import { createDownloadJobSubmitHandler } from '../../src/features/download-jobs/download-job-submit-handler';
+import { createMyTubeExtractClient } from '../../src/services/mytube-extract/mytube-extract-client';
 
 /** Dev preview option storage key. */
 const DEV_PREVIEW_STORAGE_KEY = 'mytube-extract-dev-preview-options';
@@ -17,6 +25,12 @@ type InstallDevPreviewChromeApiOptions = {
 
 /** Dev preview에서 저장하는 option map. */
 type DevPreviewStoredOptions = Record<string, unknown>;
+
+/** chrome.storage.onChanged listener. */
+type StorageChangeListener = (
+  changes: Record<string, { newValue?: unknown; oldValue?: unknown }>,
+  areaName: string,
+) => void;
 
 /** Chrome extension runtime API가 이미 있는지 확인한다. */
 export function hasChromeExtensionRuntime(target: typeof globalThis = globalThis): boolean {
@@ -79,12 +93,59 @@ function createDevPreviewChromeApi({
   };
   /** Preview에서 시뮬레이션할 YouTube permission 상태. */
   let youtubePermissionGranted = false;
+  /** 등록된 storage.onChanged listener 목록. */
+  const storageChangeListeners = new Set<StorageChangeListener>();
+
+  /** preview storage에 값을 쓰고, localStorage에 반영한 뒤 onChanged listener에게 알린다. */
+  function setStorageItems(items: DevPreviewStoredOptions): void {
+    currentOptions = {
+      ...currentOptions,
+      ...items,
+    };
+    storage.setItem(DEV_PREVIEW_STORAGE_KEY, JSON.stringify(currentOptions));
+
+    /** 이번 변경으로 생긴 storage.onChanged 변경 내역. */
+    const changes = Object.fromEntries(
+      Object.entries(items).map(([key, value]) => [key, { newValue: value }]),
+    );
+
+    storageChangeListeners.forEach((listener) => listener(changes, 'local'));
+  }
+
+  /** Preview용 MyTube Extract API client. 실제 fetch로 real API를 호출한다. */
+  const myTubeExtractClient = createMyTubeExtractClient();
+  /** Preview용 download job manager. Popup의 job 제출·폴링·자동 다운로드를 Background 없이 흉내 낸다. */
+  const downloadJobManager = createDownloadJobManager({
+    downloads: {
+      startDownload(downloadUrl, filename) {
+        openUrl(downloadUrl);
+
+        return Promise.resolve(1);
+      },
+    },
+    myTubeExtractClient,
+    scheduler: createTimeoutPollingScheduler(),
+  });
+  /** Preview용 job 제출 요청 handler. Background의 message handler와 동일하게 동작한다. */
+  const handleDownloadJobSubmit = createDownloadJobSubmitHandler({
+    jobManager: downloadJobManager,
+    myTubeExtractClient,
+  });
+
+  persistLatestJob(downloadJobManager, (job) => {
+    setStorageItems({ [LATEST_DOWNLOAD_JOB_STORAGE_KEY]: job });
+  });
 
   /** Popup이 사용하는 Chrome API subset. */
   const chromeApi = {
     runtime: {
       lastError: null,
-      sendMessage(_message: unknown, callback: (response: { ok: boolean }) => void) {
+      sendMessage(message: unknown, callback: (response: unknown) => void) {
+        if (isDownloadJobSubmitRequest(message)) {
+          void handleDownloadJobSubmit(message).then(callback);
+          return;
+        }
+
         callback({ ok: true });
       },
     },
@@ -96,11 +157,7 @@ function createDevPreviewChromeApi({
 
           if (Array.isArray(keys)) {
             keys.forEach((key) => {
-              if (
-                typeof key === 'string' &&
-                STORAGE_KEYS.includes(key as (typeof STORAGE_KEYS)[number]) &&
-                currentOptions[key] !== undefined
-              ) {
+              if (typeof key === 'string' && currentOptions[key] !== undefined) {
                 result[key] = currentOptions[key];
               }
             });
@@ -111,12 +168,16 @@ function createDevPreviewChromeApi({
           callback(result);
         },
         set(items: DevPreviewStoredOptions, callback?: () => void) {
-          currentOptions = {
-            ...currentOptions,
-            ...items,
-          };
-          storage.setItem(DEV_PREVIEW_STORAGE_KEY, JSON.stringify(currentOptions));
+          setStorageItems(items);
           callback?.();
+        },
+      },
+      onChanged: {
+        addListener(listener: StorageChangeListener) {
+          storageChangeListeners.add(listener);
+        },
+        removeListener(listener: StorageChangeListener) {
+          storageChangeListeners.delete(listener);
         },
       },
     },

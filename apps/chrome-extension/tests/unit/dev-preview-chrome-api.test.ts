@@ -1,8 +1,10 @@
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   hasChromeExtensionRuntime,
   installDevPreviewChromeApi,
 } from '../../entrypoints/popup/dev-preview-chrome-api';
+import { LATEST_DOWNLOAD_JOB_STORAGE_KEY } from '../../src/adapters/chrome/download-job-storage';
+import { DOWNLOAD_JOB_SUBMIT_MESSAGE_TYPE } from '../../src/features/download-jobs/download-job-message';
 
 /** 테스트용 memory localStorage를 만든다. */
 function createMemoryStorage() {
@@ -20,6 +22,84 @@ function createMemoryStorage() {
 }
 
 describe('dev preview chrome API', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it('simulates the background job submit flow end-to-end, including storage.onChanged', async () => {
+    /** 테스트용 global target. */
+    const target = {
+      location: { search: '' },
+      open: vi.fn(),
+    } as unknown as typeof globalThis;
+    /** 테스트용 localStorage. */
+    const storage = createMemoryStorage();
+    /** 다운로드 URL opener. */
+    const openUrl = vi.fn();
+    /** MyTube Extract API fetch 응답을 흉내 내는 fake fetch. */
+    const fetchMock = vi.fn(async (url: unknown) => {
+      /** 요청 URL 문자열. */
+      const requestUrl = String(url);
+
+      if (requestUrl.endsWith('/health')) {
+        return new Response(JSON.stringify({ ok: true }), { status: 200 });
+      }
+
+      if (requestUrl.endsWith('/downloads')) {
+        return new Response(
+          JSON.stringify({
+            createdAt: '2026-06-24T05:32:00.000Z',
+            displayStatus: 'completed',
+            downloadUrl: '/downloads/job-1/file',
+            errorCode: null,
+            jobId: 'job-1',
+            message: '추출이 완료되었습니다.',
+            progress: 100,
+            quality: '192',
+            retentionDays: 7,
+            status: 'completed',
+            type: 'audio',
+          }),
+          { status: 201 },
+        );
+      }
+
+      throw new Error(`Unexpected fetch call: ${requestUrl}`);
+    });
+
+    vi.stubGlobal('fetch', fetchMock);
+
+    installDevPreviewChromeApi({ target, storage, openUrl });
+
+    /** storage.onChanged listener가 받은 최근 job 변경 내역. */
+    const storageChanges: unknown[] = [];
+
+    target.chrome.storage.onChanged.addListener((changes: Record<string, { newValue?: unknown }>) => {
+      if (changes[LATEST_DOWNLOAD_JOB_STORAGE_KEY]) {
+        storageChanges.push(changes[LATEST_DOWNLOAD_JOB_STORAGE_KEY]?.newValue);
+      }
+    });
+
+    /** job 제출 응답. */
+    const response = await new Promise((resolve) => {
+      target.chrome.runtime.sendMessage(
+        {
+          apiBaseUrl: 'http://127.0.0.1:3030',
+          localFilename: 'preview clip',
+          mode: 'audio',
+          quality: '192',
+          sourceUrl: 'https://www.youtube.com/watch?v=abc123_DEF0',
+          type: DOWNLOAD_JOB_SUBMIT_MESSAGE_TYPE,
+        },
+        resolve,
+      );
+    });
+
+    expect(response).toMatchObject({ job: { status: 'completed' }, ok: true });
+    expect(openUrl).toHaveBeenCalledWith('http://127.0.0.1:3030/downloads/job-1/file');
+    expect(storageChanges).toEqual([expect.objectContaining({ status: 'completed' })]);
+  });
+
   it('installs fake Chrome APIs when the popup runs as a localhost preview', async () => {
     /** 테스트용 global target. */
     const target = {

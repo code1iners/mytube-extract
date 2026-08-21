@@ -1,11 +1,18 @@
-import { createDownloadsAdapter } from '../../adapters/chrome/downloads';
+import {
+  type DownloadJobsBridge,
+  createDownloadJobsBridge,
+} from '../../adapters/chrome/download-jobs-bridge';
 import { type StorageAdapter, createStorageAdapter } from '../../adapters/chrome/storage';
 import { type TabsAdapter, createTabsAdapter } from '../../adapters/chrome/tabs';
 import {
   type YoutubeOverlayAdapter,
   createYoutubeOverlayAdapter,
 } from '../../adapters/chrome/youtube-overlay';
-import { type DownloadQuality } from '../../domain/download-job/download-job';
+import {
+  type DownloadJob,
+  type DownloadJobStatus,
+  type DownloadQuality,
+} from '../../domain/download-job/download-job';
 import {
   type DownloadOptions,
   DEFAULT_DOWNLOAD_OPTIONS,
@@ -25,27 +32,16 @@ import {
   createJobQueuedStatus,
   createReadyStatus,
 } from '../../domain/popup-state/popup-state';
-import {
-  type DownloadJobManager,
-  createDownloadJobManager,
-  createTimeoutPollingScheduler,
-} from '../download-jobs/download-job-manager';
-import {
-  type MyTubeExtractClient,
-  createMyTubeExtractClient,
-} from '../../services/mytube-extract/mytube-extract-client';
 import { sanitizeFilenameSegment } from '../../shared/sanitize-filename';
 
 /** Popup model dependency. */
 export type PopupDownloadModelDependencies = {
   /** Storage adapter. */
   storage: StorageAdapter;
-  /** Download job manager. */
-  jobManager: DownloadJobManager;
+  /** Background의 download job 추적을 이용하는 창구. */
+  downloadJobs: DownloadJobsBridge;
   /** Tabs adapter. */
   tabs: TabsAdapter;
-  /** MyTube Extract API client. */
-  myTubeExtractClient: MyTubeExtractClient;
   /** YouTube 썸네일 Overlay 권한 adapter. */
   youtubeOverlay: YoutubeOverlayAdapter;
 };
@@ -110,20 +106,20 @@ const INITIAL_SNAPSHOT: PopupDownloadSnapshot = {
   },
 };
 
+/** job 진행 단계 순서. 낮은 값이 이전 단계다. completed/failed는 동일하게 최종 단계로 취급한다. */
+const JOB_STATUS_RANK: Record<DownloadJobStatus, number> = {
+  completed: 2,
+  failed: 2,
+  processing: 1,
+  queued: 0,
+};
+
 /** Chrome runtime용 popup model을 만든다. */
 export function createChromePopupDownloadModel(): PopupDownloadModel {
-  /** Popup과 job manager가 함께 쓰는 API client. */
-  const myTubeExtractClient = createMyTubeExtractClient();
-
   return createPopupDownloadModel({
     storage: createStorageAdapter(),
-    jobManager: createDownloadJobManager({
-      downloads: createDownloadsAdapter(),
-      myTubeExtractClient,
-      scheduler: createTimeoutPollingScheduler(),
-    }),
+    downloadJobs: createDownloadJobsBridge(),
     tabs: createTabsAdapter(),
-    myTubeExtractClient,
     youtubeOverlay: createYoutubeOverlayAdapter(),
   });
 }
@@ -170,6 +166,58 @@ export function createPopupDownloadModel(
       };
     }
   }
+
+  /** Background가 추적 중인 job 상태를 snapshot에 반영한다. */
+  function applyDownloadJobStatus(
+    baseSnapshot: PopupDownloadSnapshot,
+    job: DownloadJob,
+  ): PopupDownloadSnapshot {
+    if (job.status === 'queued' || job.status === 'processing') {
+      return {
+        ...baseSnapshot,
+        canDownload: false,
+        downloading: true,
+        status:
+          job.status === 'queued'
+            ? createJobQueuedStatus(job.message)
+            : createJobProcessingStatus(job.message),
+      };
+    }
+
+    /** job이 끝난 뒤 재요청 가능 여부까지 반영한 snapshot. */
+    const settledSnapshot = renderReadyState({ ...baseSnapshot, downloading: false });
+
+    return {
+      ...settledSnapshot,
+      status:
+        job.status === 'completed' ? DOWNLOAD_STARTED_STATUS : createDownloadFailedStatus(job.message),
+    };
+  }
+
+  /** 마지막으로 반영한 job. job 제출 응답과 storage 구독이 서로 다른 시점에 도착할 수 있어,
+   * 뒤늦게 도착한 응답이 이미 반영된 더 진행된 상태를 덮어쓰지 않도록 순서를 비교하는 데 쓴다. */
+  let lastAppliedJob: DownloadJob | null = null;
+
+  /** job 갱신을 snapshot에 반영해도 되는지 확인한다. 같은 job의 더 이전 단계로 되돌아가는
+   * 갱신이면 무시한다. */
+  function acceptJobUpdate(job: DownloadJob): boolean {
+    if (lastAppliedJob && lastAppliedJob.jobId === job.jobId) {
+      if (JOB_STATUS_RANK[job.status] < JOB_STATUS_RANK[lastAppliedJob.status]) {
+        return false;
+      }
+    }
+
+    lastAppliedJob = job;
+
+    return true;
+  }
+
+  // Popup이 열려 있는 동안 Background가 기록한 job 상태 변경을 새로고침 없이 반영한다.
+  dependencies.downloadJobs.subscribeLatestJob((job) => {
+    if (acceptJobUpdate(job)) {
+      setSnapshot(applyDownloadJobStatus(snapshot, job));
+    }
+  });
 
   return {
     getSnapshot() {
@@ -220,12 +268,26 @@ export function createPopupDownloadModel(
         sourceUrl: '',
       };
 
+      /** Background가 저장해 둔 최근 job. 있으면 요청 form보다 그 상태를 먼저 보여준다. */
+      let latestJob: DownloadJob | null = null;
+
+      try {
+        latestJob = await dependencies.downloadJobs.getLatestJob();
+      } catch {
+        latestJob = null;
+      }
+
+      /** 옵션·권한 상태까지 반영한 기본 snapshot. */
+      const baseSnapshot = renderReadyState({
+        ...snapshot,
+        options,
+        youtubeOverlay,
+      });
+
       setSnapshot(
-        renderReadyState({
-          ...snapshot,
-          options,
-          youtubeOverlay,
-        }),
+        latestJob && acceptJobUpdate(latestJob)
+          ? applyDownloadJobStatus(baseSnapshot, latestJob)
+          : baseSnapshot,
       );
     },
     async activateYoutubeOverlay() {
@@ -334,41 +396,20 @@ export function createPopupDownloadModel(
       });
 
       try {
-        await dependencies.myTubeExtractClient.assertServerAvailable(
-          submittedSnapshot.options.apiBaseUrl,
-        );
-
-        await dependencies.jobManager.submitJob({
+        // job 생성과 상태 추적은 Background가 전담한다 — 여기서는 생성 직후 상태만 받고,
+        // 이후 진행 상황은 subscribeLatestJob 구독으로 반영된다.
+        const job = await dependencies.downloadJobs.submitJob({
           apiBaseUrl: submittedSnapshot.options.apiBaseUrl,
           localFilename: resolveLocalFilename(submittedSnapshot.options.filename),
-          onStatusChange(job) {
-            if (job.status !== 'queued' && job.status !== 'processing') {
-              return;
-            }
-
-            setSnapshot({
-              ...snapshot,
-              status:
-                job.status === 'queued'
-                  ? createJobQueuedStatus(job.message)
-                  : createJobProcessingStatus(job.message),
-            });
-          },
+          mode: submittedSnapshot.options.mode,
           quality: resolveJobQuality(submittedSnapshot.options),
           sourceUrl: submittedSnapshot.options.sourceUrl,
-          type: submittedSnapshot.options.mode,
         });
 
-        /** job 완료 후 다시 실행 가능한 snapshot. */
-        const completedSnapshot = renderReadyState({
-          ...snapshot,
-          downloading: false,
-        });
-
-        setSnapshot({
-          ...completedSnapshot,
-          status: DOWNLOAD_STARTED_STATUS,
-        });
+        // 응답이 늦게 도착해 storage 구독이 이미 더 진행된 상태를 반영했다면 되돌리지 않는다.
+        if (acceptJobUpdate(job)) {
+          setSnapshot(applyDownloadJobStatus(snapshot, job));
+        }
       } catch (error) {
         /** 사용자에게 표시할 실패 메시지. */
         const errorMessage =

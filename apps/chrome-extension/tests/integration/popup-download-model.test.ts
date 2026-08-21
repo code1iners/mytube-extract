@@ -29,6 +29,24 @@ function createCompletedJob(overrides: Partial<DownloadJob> = {}): DownloadJob {
   };
 }
 
+/** 테스트용 job 상태를 만든다. */
+function createJob(overrides: Partial<DownloadJob> = {}): DownloadJob {
+  return {
+    createdAt: '2026-06-24T05:32:00.000Z',
+    displayStatus: 'queued',
+    downloadUrl: null,
+    errorCode: null,
+    jobId: 'job-1',
+    message: '요청이 접수되어 대기 중입니다.',
+    progress: 0,
+    quality: '192',
+    retentionDays: 7,
+    status: 'queued',
+    type: 'audio',
+    ...overrides,
+  };
+}
+
 /** 테스트용 model dependency를 만든다. */
 function createDependencies(
   overrides: PopupDownloadModelDependencyOverrides = {},
@@ -38,7 +56,7 @@ function createDependencies(
     ...DEFAULT_DOWNLOAD_OPTIONS,
   };
 
-  // 각 dependency를 개별적으로 병합한다 — override가 myTubeExtractClient 등 하나를
+  // 각 dependency를 개별적으로 병합한다 — override가 downloadJobs 등 하나를
   // 통째로 대체하면, 그 인터페이스에 메서드가 늘어날 때마다 모든 override 자리를
   // 따라다니며 고쳐야 하기 때문이다 (Shotgun Surgery).
   return {
@@ -47,21 +65,15 @@ function createDependencies(
       saveOptions: vi.fn().mockResolvedValue(undefined),
       ...overrides.storage,
     },
-    jobManager: {
-      getJobs: vi.fn().mockReturnValue([]),
-      submitJob: vi.fn().mockImplementation((input) => Promise.resolve(createCompletedJob())),
-      subscribe: vi.fn().mockReturnValue(() => {}),
-      ...overrides.jobManager,
+    downloadJobs: {
+      getLatestJob: vi.fn().mockResolvedValue(null),
+      submitJob: vi.fn().mockResolvedValue(createCompletedJob()),
+      subscribeLatestJob: vi.fn().mockReturnValue(() => {}),
+      ...overrides.downloadJobs,
     },
     tabs: {
       getCurrentTabUrl: vi.fn().mockResolvedValue('https://youtu.be/abc123_DEF0'),
       ...overrides.tabs,
-    },
-    myTubeExtractClient: {
-      assertServerAvailable: vi.fn().mockResolvedValue(undefined),
-      createDownloadJob: vi.fn(),
-      getDownloadJob: vi.fn(),
-      ...overrides.myTubeExtractClient,
     },
     youtubeOverlay: {
       isEnabled: vi.fn().mockResolvedValue(false),
@@ -251,6 +263,131 @@ describe('popup download model', () => {
     });
   });
 
+  it('shows the persisted latest job status immediately when the popup reopens', async () => {
+    /** Popup model dependency. */
+    const dependencies = createDependencies({
+      downloadJobs: {
+        getLatestJob: vi
+          .fn()
+          .mockResolvedValue(createJob({ message: '영상을 다운로드하고 있습니다.', status: 'processing' })),
+      },
+    });
+    /** Popup download model. */
+    const model = createPopupDownloadModel(dependencies);
+
+    await model.initialize();
+
+    expect(model.getSnapshot()).toMatchObject({
+      canDownload: false,
+      downloading: true,
+      status: {
+        kind: 'job-processing',
+        message: '영상을 다운로드하고 있습니다.',
+      },
+    });
+  });
+
+  it('shows a persisted failed job on reopen and allows retrying once a URL is entered', async () => {
+    /** Popup model dependency. */
+    const dependencies = createDependencies({
+      downloadJobs: {
+        getLatestJob: vi
+          .fn()
+          .mockResolvedValue(createJob({ message: '로그인이 필요한 영상입니다.', status: 'failed' })),
+      },
+    });
+    /** Popup download model. */
+    const model = createPopupDownloadModel(dependencies);
+
+    await model.initialize();
+
+    expect(model.getSnapshot()).toMatchObject({
+      downloading: false,
+      status: {
+        kind: 'download-failed',
+        message: '로그인이 필요한 영상입니다.',
+      },
+    });
+
+    await model.updateOption('sourceUrl', 'https://www.youtube.com/watch?v=abc123_DEF0');
+
+    expect(model.getSnapshot()).toMatchObject({
+      canDownload: true,
+      status: { kind: 'ready' },
+    });
+  });
+
+  it('updates the snapshot when background pushes a job change without a new submit', async () => {
+    /** background가 저장한 최근 job 구독 listener. */
+    let latestJobListener: ((job: DownloadJob) => void) | undefined;
+    /** Popup model dependency. */
+    const dependencies = createDependencies({
+      downloadJobs: {
+        subscribeLatestJob: vi.fn().mockImplementation((listener) => {
+          latestJobListener = listener;
+
+          return () => {};
+        }),
+      },
+    });
+    /** Popup download model. */
+    const model = createPopupDownloadModel(dependencies);
+
+    await model.initialize();
+
+    latestJobListener?.(createJob({ message: '영상을 다운로드하고 있습니다.', status: 'processing' }));
+
+    expect(model.getSnapshot()).toMatchObject({
+      downloading: true,
+      status: {
+        kind: 'job-processing',
+        message: '영상을 다운로드하고 있습니다.',
+      },
+    });
+  });
+
+  it('does not let a late submit response overwrite a status the background subscription already pushed', async () => {
+    /** background가 저장한 최근 job 구독 listener. */
+    let latestJobListener: ((job: DownloadJob) => void) | undefined;
+    /** job 제출 응답을 늦추는 resolve 함수. */
+    let resolveSubmit: (job: DownloadJob) => void = () => {};
+    /** Popup model dependency. */
+    const dependencies = createDependencies({
+      downloadJobs: {
+        submitJob: vi.fn(
+          () =>
+            new Promise<DownloadJob>((resolve) => {
+              resolveSubmit = resolve;
+            }),
+        ),
+        subscribeLatestJob: vi.fn().mockImplementation((listener) => {
+          latestJobListener = listener;
+
+          return () => {};
+        }),
+      },
+    });
+    /** Popup download model. */
+    const model = createPopupDownloadModel(dependencies);
+
+    await model.initialize();
+    await model.updateOption('sourceUrl', 'https://www.youtube.com/watch?v=abc123_DEF0');
+
+    const submit = model.submitDownload();
+
+    // storage 구독이 먼저 completed 상태를 반영한다 — 예를 들어 service worker가 느리게
+    // 응답을 돌려주는 동안 폴링이 이미 완료 상태까지 진행된 경우다.
+    latestJobListener?.(createCompletedJob());
+
+    expect(model.getSnapshot().status).toMatchObject({ kind: 'download-started' });
+
+    // 뒤늦게 도착한 제출 응답은 같은 job의 초기(queued) 상태이므로 무시되어야 한다.
+    resolveSubmit(createJob({ message: '요청이 대기 중입니다.', status: 'queued' }));
+    await submit;
+
+    expect(model.getSnapshot().status).toMatchObject({ kind: 'download-started' });
+  });
+
   it('creates a download job against the production API base URL when no WXT environment override exists', async () => {
     /** Popup model dependency. */
     const dependencies = createDependencies();
@@ -261,30 +398,27 @@ describe('popup download model', () => {
     await model.updateOption('sourceUrl', 'https://www.youtube.com/watch?v=abc123_DEF0');
     await model.submitDownload();
 
-    expect(dependencies.myTubeExtractClient.assertServerAvailable).toHaveBeenCalledWith(
-      'https://mytube-extract-api.codeliners.cc',
-    );
-    expect(dependencies.jobManager.submitJob).toHaveBeenCalledWith(
+    expect(dependencies.downloadJobs.submitJob).toHaveBeenCalledWith(
       expect.objectContaining({
         apiBaseUrl: 'https://mytube-extract-api.codeliners.cc',
         localFilename: '',
         quality: '192',
         sourceUrl: 'https://www.youtube.com/watch?v=abc123_DEF0',
-        type: 'audio',
+        mode: 'audio',
       }),
     );
   });
 
-  it('checks server and submits a job once for duplicate submits', async () => {
-    /** 서버 확인 해제 함수. */
-    let releaseServerCheck: () => void = () => {};
+  it('submits a job once for duplicate submits while the first is still pending', async () => {
+    /** job 제출 완료를 늦추는 resolve 함수. */
+    let resolveSubmit: (job: DownloadJob) => void = () => {};
     /** Popup model dependency. */
     const dependencies = createDependencies({
-      myTubeExtractClient: {
-        assertServerAvailable: vi.fn(
+      downloadJobs: {
+        submitJob: vi.fn(
           () =>
-            new Promise<void>((resolve) => {
-              releaseServerCheck = resolve;
+            new Promise<DownloadJob>((resolve) => {
+              resolveSubmit = resolve;
             }),
         ),
       },
@@ -300,27 +434,26 @@ describe('popup download model', () => {
     /** 중복 다운로드 submit. */
     const secondSubmit = model.submitDownload();
 
-    releaseServerCheck();
+    resolveSubmit(createCompletedJob());
     await Promise.all([firstSubmit, secondSubmit]);
 
-    expect(dependencies.myTubeExtractClient.assertServerAvailable).toHaveBeenCalledTimes(1);
-    expect(dependencies.jobManager.submitJob).toHaveBeenCalledTimes(1);
+    expect(dependencies.downloadJobs.submitJob).toHaveBeenCalledTimes(1);
     expect(model.getSnapshot().status).toMatchObject({
       kind: 'download-started',
       message: '추출 요청을 시작했습니다.',
     });
   });
 
-  it('uses the submitted options while the server check is pending', async () => {
-    /** 서버 확인 해제 함수. */
-    let releaseServerCheck: () => void = () => {};
+  it('uses the submitted options while the job submission is pending', async () => {
+    /** job 제출 완료를 늦추는 resolve 함수. */
+    let resolveSubmit: (job: DownloadJob) => void = () => {};
     /** Popup model dependency. */
     const dependencies = createDependencies({
-      myTubeExtractClient: {
-        assertServerAvailable: vi.fn(
+      downloadJobs: {
+        submitJob: vi.fn(
           () =>
-            new Promise<void>((resolve) => {
-              releaseServerCheck = resolve;
+            new Promise<DownloadJob>((resolve) => {
+              resolveSubmit = resolve;
             }),
         ),
       },
@@ -337,23 +470,23 @@ describe('popup download model', () => {
     await model.updateOption('sourceUrl', 'https://www.youtube.com/watch?v=changed_ID1');
     await model.updateOption('mode', 'video');
     await model.updateOption('resolution', '720');
-    releaseServerCheck();
+    resolveSubmit(createCompletedJob());
     await submit;
 
-    expect(dependencies.jobManager.submitJob).toHaveBeenCalledWith(
+    expect(dependencies.downloadJobs.submitJob).toHaveBeenCalledWith(
       expect.objectContaining({
         quality: '192',
         sourceUrl: 'https://www.youtube.com/watch?v=abc123_DEF0',
-        type: 'audio',
+        mode: 'audio',
       }),
     );
   });
 
-  it('shows server unavailable state when health check fails', async () => {
+  it('shows the background failure message when job submission fails', async () => {
     /** Popup model dependency. */
     const dependencies = createDependencies({
-      myTubeExtractClient: {
-        assertServerAvailable: vi.fn().mockRejectedValue(new Error('Server is unavailable.')),
+      downloadJobs: {
+        submitJob: vi.fn().mockRejectedValue(new Error('Server is unavailable.')),
       },
     });
     /** Popup download model. */
@@ -363,7 +496,6 @@ describe('popup download model', () => {
     await model.updateOption('sourceUrl', 'https://www.youtube.com/watch?v=abc123_DEF0');
     await model.submitDownload();
 
-    expect(dependencies.jobManager.submitJob).not.toHaveBeenCalled();
     expect(model.getSnapshot()).toMatchObject({
       canDownload: true,
       status: {
@@ -373,20 +505,19 @@ describe('popup download model', () => {
     });
   });
 
-  it('reflects queued and processing job status on the existing status screen', async () => {
-    /** job manager가 순서대로 호출할 onStatusChange callback. */
-    let capturedOnStatusChange: ((job: DownloadJob) => void) | undefined;
-    /** job 완료를 늦추는 resolve 함수. */
-    let resolveSubmitJob: (job: DownloadJob) => void = () => {};
+  it('reflects queued and processing job status live via the background job subscription', async () => {
+    /** background가 저장한 최근 job 구독 listener. */
+    let latestJobListener: ((job: DownloadJob) => void) | undefined;
     /** Popup model dependency. */
     const dependencies = createDependencies({
-      jobManager: {
-        submitJob: vi.fn().mockImplementation((input) => {
-          capturedOnStatusChange = input.onStatusChange;
+      downloadJobs: {
+        submitJob: vi
+          .fn()
+          .mockResolvedValue(createJob({ message: '요청이 대기 중입니다.', status: 'queued' })),
+        subscribeLatestJob: vi.fn().mockImplementation((listener) => {
+          latestJobListener = listener;
 
-          return new Promise((resolve) => {
-            resolveSubmitJob = resolve;
-          });
+          return () => {};
         }),
       },
     });
@@ -395,52 +526,21 @@ describe('popup download model', () => {
 
     await model.initialize();
     await model.updateOption('sourceUrl', 'https://www.youtube.com/watch?v=abc123_DEF0');
-
-    /** 제출 시점의 다운로드 요청. */
-    const submit = model.submitDownload();
-    await Promise.resolve();
-    await Promise.resolve();
-
-    capturedOnStatusChange?.({
-      createdAt: '2026-06-24T05:32:00.000Z',
-      displayStatus: 'queued',
-      downloadUrl: null,
-      errorCode: null,
-      jobId: 'job-1',
-      message: '요청이 대기 중입니다.',
-      progress: 0,
-      quality: '192',
-      retentionDays: 7,
-      status: 'queued',
-      type: 'audio',
-    });
+    await model.submitDownload();
 
     expect(model.getSnapshot().status).toMatchObject({
       kind: 'job-queued',
       message: '요청이 대기 중입니다.',
     });
 
-    capturedOnStatusChange?.({
-      createdAt: '2026-06-24T05:32:00.000Z',
-      displayStatus: 'processing',
-      downloadUrl: null,
-      errorCode: null,
-      jobId: 'job-1',
-      message: '영상을 다운로드하고 있습니다.',
-      progress: 40,
-      quality: '192',
-      retentionDays: 7,
-      status: 'processing',
-      type: 'audio',
-    });
+    latestJobListener?.(createJob({ message: '영상을 다운로드하고 있습니다.', status: 'processing' }));
 
     expect(model.getSnapshot().status).toMatchObject({
       kind: 'job-processing',
       message: '영상을 다운로드하고 있습니다.',
     });
 
-    resolveSubmitJob(createCompletedJob());
-    await submit;
+    latestJobListener?.(createCompletedJob());
 
     expect(model.getSnapshot().status).toMatchObject({
       kind: 'download-started',
@@ -451,7 +551,7 @@ describe('popup download model', () => {
   it('shows the job failure reason on the existing error screen', async () => {
     /** Popup model dependency. */
     const dependencies = createDependencies({
-      jobManager: {
+      downloadJobs: {
         submitJob: vi.fn().mockRejectedValue(new Error('로그인이 필요한 영상입니다.')),
       },
     });
@@ -513,11 +613,11 @@ describe('popup download model', () => {
         resolution: '720',
       }),
     );
-    expect(dependencies.jobManager.submitJob).toHaveBeenCalledWith(
+    expect(dependencies.downloadJobs.submitJob).toHaveBeenCalledWith(
       expect.objectContaining({
         localFilename: 'my clip',
         quality: '720',
-        type: 'video',
+        mode: 'video',
       }),
     );
   });
@@ -533,7 +633,7 @@ describe('popup download model', () => {
     await model.updateOption('filename', '../etc/passwd\r\n');
     await model.submitDownload();
 
-    expect(dependencies.jobManager.submitJob).toHaveBeenCalledWith(
+    expect(dependencies.downloadJobs.submitJob).toHaveBeenCalledWith(
       expect.objectContaining({
         localFilename: '.. etc passwd',
       }),

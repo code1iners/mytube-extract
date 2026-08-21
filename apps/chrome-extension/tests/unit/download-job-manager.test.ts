@@ -6,6 +6,7 @@ import {
   type DownloadJobManagerDependencies,
   type JobPollingScheduler,
   createDownloadJobManager,
+  persistLatestJob,
 } from '../../src/features/download-jobs/download-job-manager';
 
 /** 테스트용 job 상태를 만든다. */
@@ -410,5 +411,66 @@ describe('download job manager', () => {
       }),
     ).rejects.toThrow('Could not reach the server.');
     expect(dependencies.downloads.startDownload).not.toHaveBeenCalled();
+  });
+});
+
+describe('persistLatestJob', () => {
+  it('saves the most recently updated job whenever the manager changes', async () => {
+    /** 폴링을 수동으로 진행시키는 가짜 scheduler. */
+    const manualScheduler = createManualScheduler();
+    /** job manager dependency. */
+    const dependencies = createDependencies({
+      myTubeExtractClient: {
+        createDownloadJob: vi.fn().mockResolvedValue(createJob({ status: 'queued' })),
+        getDownloadJob: vi.fn().mockResolvedValue(createJob({ status: 'completed' })),
+      },
+      scheduler: manualScheduler.scheduler,
+    });
+    /** job manager. */
+    const manager = createDownloadJobManager(dependencies);
+    /** save로 전달된 job 목록. */
+    const savedJobs: DownloadJob[] = [];
+
+    persistLatestJob(manager, (job) => savedJobs.push(job));
+
+    /** 완료까지 이어지는 job 요청. */
+    const submitPromise = manager.submitJob({
+      apiBaseUrl: 'http://127.0.0.1:3030',
+      quality: '192',
+      sourceUrl: 'https://www.youtube.com/watch?v=abc123_DEF0',
+      type: 'audio',
+    });
+
+    await tick();
+    manualScheduler.flushNext();
+    await submitPromise;
+
+    expect(savedJobs.map((job) => job.status)).toEqual(['queued', 'completed']);
+  });
+
+  it('stops saving after the returned unsubscribe is called', async () => {
+    /** job manager dependency. */
+    const dependencies = createDependencies({
+      myTubeExtractClient: {
+        createDownloadJob: vi.fn().mockResolvedValue(createJob({ status: 'completed' })),
+        getDownloadJob: vi.fn(),
+      },
+    });
+    /** job manager. */
+    const manager = createDownloadJobManager(dependencies);
+    /** save spy. */
+    const save = vi.fn();
+    /** 구독 해제 함수. */
+    const unsubscribe = persistLatestJob(manager, save);
+
+    unsubscribe();
+    await manager.submitJob({
+      apiBaseUrl: 'http://127.0.0.1:3030',
+      quality: '192',
+      sourceUrl: 'https://www.youtube.com/watch?v=abc123_DEF0',
+      type: 'audio',
+    });
+
+    expect(save).not.toHaveBeenCalled();
   });
 });

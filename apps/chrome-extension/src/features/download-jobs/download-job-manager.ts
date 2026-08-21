@@ -154,3 +154,18 @@ export function createDownloadJobManager(
     },
   };
 }
+
+/** job 상태가 바뀔 때마다 가장 최근 job을 save로 넘긴다. Background와 dev preview가 동일하게 사용한다. */
+export function persistLatestJob(
+  jobManager: Pick<DownloadJobManager, 'getJobs' | 'subscribe'>,
+  save: (job: DownloadJob) => void,
+): () => void {
+  return jobManager.subscribe(() => {
+    /** 가장 최근에 갱신된 job. */
+    const [latestJob] = jobManager.getJobs();
+
+    if (latestJob) {
+      save(latestJob);
+    }
+  });
+}
