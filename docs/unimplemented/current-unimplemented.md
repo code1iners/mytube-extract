@@ -2,12 +2,14 @@
 
 ## 계정 기반 서버 요청 이력과 기기 간 동기화
 
-- 상태: 미구현
+- 상태: 미구현 — 현재 개인 사용 단계 유지, 공개 서비스 전환 시 재검토
 - 대상 표면: `route /history`, API, 인증, DB
-- 현재 상태: Web `/history`는 같은 브라우저의 localStorage 접수증 최대 20건으로 영상·자막 status endpoint를 개별 조회한다. 계정, 서버 목록 API, 기기 간 동기화는 없다.
-- 필요성: localStorage 삭제·차단, 다른 브라우저 또는 다른 기기에서도 요청을 찾아야 하는 요구가 확인되면 필요하다.
-- 구현 조건: 인증·보존·소유권 정책과 사용자별 목록 API를 별도 설계한다.
+- 현재 상태: Web `/history`는 같은 브라우저의 localStorage 접수증 최대 20건으로 영상·자막 status endpoint를 개별 조회한다. 로그인·사용자 계정·사용자별 서버 목록 API·기기 간 동기화는 없다. 설정 영역은 계정 기능이 아닌 앱 환경설정 영역으로 시작한다.
+- 기술 부채: 서비스를 여러 사용자에게 공개할 경우 현재의 요청 식별·보존 범위만으로는 사용자별 소유권, 다른 기기 접근, 삭제·보존 정책을 표현할 수 없다.
+- 필요성: 실제 공개 서비스 운영, 다른 환경에서 요청 내역 이어보기, 사용자별 quota·보존·삭제 정책이 필요해질 때 해결해야 한다.
+- 구현 조건: 인증 방식, 사용자와 요청의 소유권, 사용자별 목록 API, 보존·삭제 정책, 기기 간 동기화, abuse/rate limit 정책을 별도 설계하고 문서화한다.
 - 관련 근거:
+  - `docs/adr/0001-keep-single-user-mode-until-public-service-transition.md`
   - `apps/web/src/app/pages/request-history/page.tsx`
   - `docs/web/routes/history.md`
 
