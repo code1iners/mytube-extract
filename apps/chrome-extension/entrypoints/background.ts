@@ -1,4 +1,5 @@
 import { defineBackground } from 'wxt/utils/define-background';
+import { createActiveDownloadJobsStorageAdapter } from '../src/adapters/chrome/active-download-jobs-storage';
 import { createDownloadJobStorageAdapter } from '../src/adapters/chrome/download-job-storage';
 import { createDownloadsAdapter } from '../src/adapters/chrome/downloads';
 import { createYoutubeOverlayAdapter } from '../src/adapters/chrome/youtube-overlay';
@@ -23,6 +24,11 @@ import {
 } from '../src/features/youtube-overlay/youtube-overlay-message';
 import { isSupportedYoutubePageUrl } from '../src/features/youtube-overlay/youtube-page';
 
+/** service worker가 유휴 종료 후 다시 깨어났을 때 진행 중 job 상태 확인을 재개시키는 반복 알람 이름. */
+const JOB_RECOVERY_ALARM_NAME = 'download-job-recovery';
+/** 복구 알람 주기(분). Chrome은 배포판 확장에서 1분 미만 주기를 허용하지 않는다. */
+const JOB_RECOVERY_ALARM_PERIOD_MINUTES = 1;
+
 /** Background에서 사용하는 MyTube Extract API client. */
 const myTubeExtractClient = createMyTubeExtractClient();
 
@@ -35,12 +41,20 @@ const youtubeOverlay = createYoutubeOverlayAdapter();
 /** 최근 다운로드 job을 Popup 재오픈 후에도 읽을 수 있도록 영속 저장하는 adapter. */
 const downloadJobStorage = createDownloadJobStorageAdapter();
 
+/** 진행 중 job을 영속 저장해, service worker 재시작 후에도 추적을 재개할 수 있게 하는 adapter. */
+const activeDownloadJobsStorage = createActiveDownloadJobsStorageAdapter();
+
 /** Background가 소유하는 download job manager. Popup이 닫혀도 폴링과 자동 다운로드가 계속된다. */
 const downloadJobManager = createDownloadJobManager({
+  activeJobsStore: activeDownloadJobsStorage,
   downloads,
   myTubeExtractClient,
   scheduler: createTimeoutPollingScheduler(),
 });
+
+// service worker는 유휴 종료 뒤 다시 깨어나거나 브라우저가 재시작될 때마다 이 모듈이 처음부터 다시
+// 평가된다 — 그때마다 저장돼 있던 진행 중 job의 추적을 다시 이어붙인다.
+void downloadJobManager.resumeTracking();
 
 /** Popup의 job 제출 요청을 처리하는 handler. */
 const handleDownloadJobSubmit = createDownloadJobSubmitHandler({
@@ -94,6 +108,20 @@ export default defineBackground(() => {
     }
 
     return undefined;
+  });
+
+  chrome.alarms.onAlarm.addListener((alarm) => {
+    if (alarm.name !== JOB_RECOVERY_ALARM_NAME) {
+      return;
+    }
+
+    void downloadJobManager.resumeTracking();
+  });
+
+  // setTimeout 기반 빠른 폴링은 service worker가 종료되면 함께 사라지므로, 유휴 종료로 폴링이
+  // 끊긴 job도 놓치지 않도록 최소 주기의 반복 알람으로 복구 경로를 보장한다.
+  chrome.alarms.create(JOB_RECOVERY_ALARM_NAME, {
+    periodInMinutes: JOB_RECOVERY_ALARM_PERIOD_MINUTES,
   });
 
   chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {

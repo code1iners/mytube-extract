@@ -1,3 +1,4 @@
+import { type TrackedDownloadJobRecord } from '../../src/adapters/chrome/active-download-jobs-storage';
 import { LATEST_DOWNLOAD_JOB_STORAGE_KEY } from '../../src/adapters/chrome/download-job-storage';
 import {
   createDownloadJobManager,
@@ -114,8 +115,21 @@ function createDevPreviewChromeApi({
 
   /** Preview용 MyTube Extract API client. 실제 fetch로 real API를 호출한다. */
   const myTubeExtractClient = createMyTubeExtractClient();
+  /** Preview는 페이지를 새로고침하면 상태가 사라지므로, 진행 중 job도 메모리에만 임시로 담아둔다. */
+  const activeJobRecordsById = new Map<string, TrackedDownloadJobRecord>();
   /** Preview용 download job manager. Popup의 job 제출·폴링·자동 다운로드를 Background 없이 흉내 낸다. */
   const downloadJobManager = createDownloadJobManager({
+    activeJobsStore: {
+      loadActiveJobs: () => Promise.resolve([...activeJobRecordsById.values()]),
+      removeActiveJob: (jobId) => {
+        activeJobRecordsById.delete(jobId);
+        return Promise.resolve();
+      },
+      saveActiveJob: (record) => {
+        activeJobRecordsById.set(record.job.jobId, record);
+        return Promise.resolve();
+      },
+    },
     downloads: {
       startDownload(downloadUrl, filename) {
         openUrl(downloadUrl);

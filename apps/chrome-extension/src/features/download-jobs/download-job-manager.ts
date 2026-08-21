@@ -1,3 +1,7 @@
+import {
+  type ActiveDownloadJobsStorageAdapter,
+  type TrackedDownloadJobRecord,
+} from '../../adapters/chrome/active-download-jobs-storage';
 import { type DownloadsAdapter } from '../../adapters/chrome/downloads';
 import { type CreateDownloadJobInput, type DownloadJob } from '../../domain/download-job/download-job';
 import {
@@ -21,6 +25,11 @@ export type DownloadJobManagerDependencies = {
   downloads: DownloadsAdapter;
   /** 폴링 예약 scheduler. */
   scheduler: JobPollingScheduler;
+  /** service worker 재시작 후 추적을 재개할 수 있도록 진행 중 job을 영속 저장하는 store. */
+  activeJobsStore: Pick<
+    ActiveDownloadJobsStorageAdapter,
+    'loadActiveJobs' | 'removeActiveJob' | 'saveActiveJob'
+  >;
 };
 
 /** 다운로드 job 제출 입력. */
@@ -39,7 +48,14 @@ export type DownloadJobManager = {
   submitJob(input: SubmitDownloadJobInput): Promise<DownloadJob>;
   /** 추적 중인 job 목록 변경을 구독한다. */
   subscribe(listener: () => void): () => void;
+  /** 영속 저장소에 남아 있는 진행 중 job의 추적을 재개한다. 이미 추적 중인 job은 건너뛴다. */
+  resumeTracking(): Promise<void>;
 };
+
+/** job이 아직 끝나지 않았는지(대기 또는 처리 중인지) 판별한다. */
+function isUnsettled(job: DownloadJob): boolean {
+  return job.status === 'queued' || job.status === 'processing';
+}
 
 /** 폴링 루프 동안 함께 다니는 값들. */
 type JobTrackingOptions = {
@@ -92,6 +108,22 @@ export function createDownloadJobManager(
     listeners.forEach((listener) => listener());
   }
 
+  // 완료 처리(자동 다운로드)나 다음 폴링으로 넘어가기 전에 항상 이 저장을 기다린다 — 그래야
+  // service worker가 중간에 죽어도 마지막으로 확인한 상태가 반드시 먼저 영속화된다.
+  /** job 추적 상태를 영속 저장소에 반영한다. 끝난 job은 다음 재개 대상에서 제외되도록 지운다. */
+  async function persistTracking(job: DownloadJob, tracking: JobTrackingOptions): Promise<void> {
+    if (isUnsettled(job)) {
+      await dependencies.activeJobsStore.saveActiveJob({
+        apiBaseUrl: tracking.apiBaseUrl,
+        job,
+        localFilename: tracking.localFilename,
+      });
+      return;
+    }
+
+    await dependencies.activeJobsStore.removeActiveJob(job.jobId);
+  }
+
   /** 다음 폴링 예약까지 대기한다. */
   function waitForNextPoll(): Promise<void> {
     return new Promise((resolve) => {
@@ -107,7 +139,7 @@ export function createDownloadJobManager(
     /** 폴링 루프에서 참조하는 최신 job 상태. */
     let currentJob = initialJob;
 
-    while (currentJob.status === 'queued' || currentJob.status === 'processing') {
+    while (isUnsettled(currentJob)) {
       await waitForNextPoll();
 
       currentJob = await dependencies.myTubeExtractClient.getDownloadJob(
@@ -115,6 +147,7 @@ export function createDownloadJobManager(
         currentJob.jobId,
       );
       setJob(currentJob);
+      await persistTracking(currentJob, tracking);
       tracking.onStatusChange?.(currentJob);
     }
 
@@ -125,6 +158,40 @@ export function createDownloadJobManager(
     await dependencies.downloads.startDownload(currentJob.downloadUrl ?? '', tracking.localFilename);
 
     return currentJob;
+  }
+
+  /** 저장돼 있던 진행 중 job 기록 하나의 추적을 재개한다. 대기 없이 즉시 한 번 확인부터 다시 시작한다. */
+  async function resumeRecord(record: TrackedDownloadJobRecord): Promise<void> {
+    if (jobs.has(record.job.jobId)) {
+      return;
+    }
+
+    /** 재개 시점에 참조할 추적 옵션. */
+    const tracking: JobTrackingOptions = {
+      apiBaseUrl: record.apiBaseUrl,
+      localFilename: record.localFilename,
+      onStatusChange: undefined,
+    };
+
+    if (!isUnsettled(record.job)) {
+      await persistTracking(record.job, tracking);
+      return;
+    }
+
+    setJob(record.job);
+
+    /** 재시작 전 상태는 오래됐을 수 있으므로, 대기 없이 즉시 한 번 다시 확인한다. */
+    const refreshedJob = await dependencies.myTubeExtractClient.getDownloadJob(
+      tracking.apiBaseUrl,
+      record.job.jobId,
+    );
+
+    setJob(refreshedJob);
+    await persistTracking(refreshedJob, tracking);
+
+    await trackJobUntilSettled(refreshedJob, tracking).catch(() => {
+      // 실패는 이미 job 상태에 기록되어 있고, 재개 흐름에는 결과를 기다리는 호출자가 없다.
+    });
   }
 
   return {
@@ -142,15 +209,24 @@ export function createDownloadJobManager(
       const { localFilename, onStatusChange, ...createInput } = input;
       /** 새로 생성된 job. */
       const job = await dependencies.myTubeExtractClient.createDownloadJob(createInput);
-
-      setJob(job);
-      onStatusChange?.(job);
-
-      return trackJobUntilSettled(job, {
+      /** 이번 job 추적에 사용할 옵션. */
+      const tracking: JobTrackingOptions = {
         apiBaseUrl: createInput.apiBaseUrl,
         localFilename,
         onStatusChange,
-      });
+      };
+
+      setJob(job);
+      await persistTracking(job, tracking);
+      onStatusChange?.(job);
+
+      return trackJobUntilSettled(job, tracking);
+    },
+    async resumeTracking() {
+      /** 영속 저장소에 남아 있던 진행 중 job 기록들. */
+      const records = await dependencies.activeJobsStore.loadActiveJobs();
+
+      await Promise.all(records.map((record) => resumeRecord(record)));
     },
   };
 }

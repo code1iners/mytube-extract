@@ -47,7 +47,7 @@ describe('WXT config', () => {
 
     expect(testableConfig.modules).toContain('@wxt-dev/module-react');
     expect(testableConfig.manifest?.permissions).toEqual(
-      expect.arrayContaining(['storage', 'downloads', 'activeTab', 'scripting']),
+      expect.arrayContaining(['storage', 'downloads', 'activeTab', 'scripting', 'alarms']),
     );
     expect(testableConfig.manifest?.host_permissions).toEqual([
       'https://mytube-extract-api.codeliners.cc/*',
