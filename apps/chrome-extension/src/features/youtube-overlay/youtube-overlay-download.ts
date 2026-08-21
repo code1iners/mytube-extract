@@ -1,9 +1,10 @@
 import {
-  type DownloadOptions,
-  DEFAULT_DOWNLOAD_OPTIONS,
-  isYoutubeVideoId,
-} from '../../domain/download-options/download-options';
+  type CreateDownloadJobInput,
+  type DownloadQuality,
+} from '../../domain/download-job/download-job';
+import { isYoutubeVideoId } from '../../domain/download-options/download-options';
 import { isQualityOption } from '../../domain/download-options/quality-options';
+import { DEFAULT_API_BASE_URL } from '../../shared/constants';
 import { sanitizeFilenameSegment } from '../../shared/sanitize-filename';
 import { type YoutubeOverlayDownloadRequest } from './youtube-overlay-message';
 
@@ -13,7 +14,13 @@ export type YoutubeOverlayDownloadInput = Pick<
   'mode' | 'quality' | 'title' | 'videoId'
 >;
 
-/** YouTube 제목에서 API 파일명으로 사용할 안전한 문자열을 만든다. */
+/** 오버레이 job 제출에 필요한 입력. localFilename은 서버가 아닌 로컬 저장 시점에만 사용한다. */
+export type YoutubeOverlayDownloadJobInput = CreateDownloadJobInput & {
+  /** 완료된 파일을 저장할 때 사용할 제목 기반 파일명. */
+  localFilename: string;
+};
+
+/** YouTube 제목에서 로컬 저장에 사용할 안전한 파일명 segment를 만든다. */
 export function sanitizeYoutubeOverlayFilename(title: string, videoId: string): string {
   /** 경로·제어 문자를 공백으로 바꾼 영상 제목. */
   const normalizedTitle = sanitizeFilenameSegment(title);
@@ -30,10 +37,10 @@ export function sanitizeYoutubeOverlayFilename(title: string, videoId: string): 
   return normalizedTitle;
 }
 
-/** YouTube 썸네일 다운로드 요청을 기존 Popup API option으로 변환한다. */
-export function createYoutubeOverlayDownloadOptions(
+/** YouTube 썸네일 다운로드 요청을 공용 job manager 입력으로 변환한다. */
+export function createYoutubeOverlayDownloadJobInput(
   input: YoutubeOverlayDownloadInput,
-): DownloadOptions {
+): YoutubeOverlayDownloadJobInput {
   if (!isYoutubeVideoId(input.videoId)) {
     throw new Error('A valid YouTube video ID is required.');
   }
@@ -42,17 +49,16 @@ export function createYoutubeOverlayDownloadOptions(
     throw new Error('Unsupported YouTube overlay quality.');
   }
 
-  /** 제목 기반으로 안전하게 만든 API filename. */
-  const filename = sanitizeYoutubeOverlayFilename(input.title, input.videoId);
-  /** YouTube API에 전달할 canonical watch URL. */
+  /** 완료된 파일을 로컬에 저장할 때 사용할 안전한 제목과 확장자. */
+  const localFilename = `${sanitizeYoutubeOverlayFilename(input.title, input.videoId)}.${input.mode === 'audio' ? 'mp3' : 'mp4'}`;
+  /** job 생성 API에 전달할 canonical watch URL. */
   const sourceUrl = `https://www.youtube.com/watch?v=${input.videoId}`;
 
   return {
-    ...DEFAULT_DOWNLOAD_OPTIONS,
-    bitrate: input.mode === 'audio' ? String(input.quality) : '',
-    filename,
-    mode: input.mode,
-    resolution: input.mode === 'video' ? String(input.quality) : '',
+    apiBaseUrl: DEFAULT_API_BASE_URL,
+    localFilename,
+    quality: String(input.quality) as DownloadQuality,
     sourceUrl,
+    type: input.mode,
   };
 }

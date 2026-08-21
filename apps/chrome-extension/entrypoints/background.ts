@@ -8,12 +8,14 @@ import {
   createDownloadJobManager,
   createTimeoutPollingScheduler,
 } from '../src/features/download-jobs/download-job-manager';
-import { isDownloadJobSubmitRequest } from '../src/features/download-jobs/download-job-message';
+import {
+  DOWNLOAD_JOB_SUBMIT_MESSAGE_TYPE,
+  isDownloadJobSubmitRequest,
+} from '../src/features/download-jobs/download-job-message';
 import { createDownloadJobSubmitHandler } from '../src/features/download-jobs/download-job-submit-handler';
 import { createMyTubeExtractClient } from '../src/services/mytube-extract/mytube-extract-client';
-import { buildDownloadUrl } from '../src/services/mytube-extract/download-url';
 import {
-  createYoutubeOverlayDownloadOptions,
+  createYoutubeOverlayDownloadJobInput,
 } from '../src/features/youtube-overlay/youtube-overlay-download';
 import {
   isYoutubeOverlayDownloadRequest,
@@ -94,7 +96,7 @@ export default defineBackground(() => {
     if (isYoutubeOverlayDownloadRequest(message)) {
       void handleOverlayDownload(message, sender.tab?.id, sender.tab?.url)
         .then<YoutubeOverlayDownloadResponse>(() => ({
-          kind: 'download-started',
+          kind: 'job-accepted',
           ok: true,
         }))
         .catch((error: unknown) => ({
@@ -218,9 +220,9 @@ function queryActiveTabs(): Promise<chrome.tabs.Tab[]> {
   });
 }
 
-/** Content Script에서 전달받은 다운로드 요청을 검증하고 실행한다. */
+/** Content Script에서 전달받은 다운로드 요청을 검증하고 공용 job manager에 위임한다. */
 async function handleOverlayDownload(
-  request: Parameters<typeof createYoutubeOverlayDownloadOptions>[0],
+  request: Parameters<typeof createYoutubeOverlayDownloadJobInput>[0],
   senderTabId: number | undefined,
   senderTabUrl: string | undefined,
 ): Promise<void> {
@@ -231,11 +233,21 @@ async function handleOverlayDownload(
     throw new Error('A YouTube tab is required for overlay downloads.');
   }
 
-  /** 기존 API client에 전달할 다운로드 option. */
-  const options = createYoutubeOverlayDownloadOptions(request);
+  /** 오버레이 요청을 공용 job manager 입력으로 변환한다. */
+  const jobInput = createYoutubeOverlayDownloadJobInput(request);
+  /** 팝업과 같은 server health check·초기 job 응답 경계를 재사용한다. */
+  const response = await handleDownloadJobSubmit({
+    apiBaseUrl: jobInput.apiBaseUrl,
+    localFilename: jobInput.localFilename,
+    mode: jobInput.type,
+    quality: jobInput.quality,
+    sourceUrl: jobInput.sourceUrl,
+    type: DOWNLOAD_JOB_SUBMIT_MESSAGE_TYPE,
+  });
 
-  await myTubeExtractClient.assertServerAvailable(options.apiBaseUrl);
-  await downloads.startDownload(buildDownloadUrl(options));
+  if (!response.ok) {
+    throw new Error(response.message);
+  }
 }
 
 /** 다양한 오류 값을 사용자 메시지로 변환한다. */

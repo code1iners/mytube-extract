@@ -35,8 +35,9 @@ page.on('pageerror', (error) => {
 try {
   await page.addInitScript(() => {
     globalThis.__myTubeExtractOverlayRequests = [];
+    globalThis.__myTubeExtractOverlayResponseDelayMs = 50;
     globalThis.__myTubeExtractOverlayResponse = {
-      kind: 'download-started',
+      kind: 'job-accepted',
       ok: true,
     };
     globalThis.chrome = {
@@ -47,7 +48,10 @@ try {
         },
         sendMessage(message, callback) {
           globalThis.__myTubeExtractOverlayRequests.push(message);
-          callback(globalThis.__myTubeExtractOverlayResponse);
+          setTimeout(
+            () => callback(globalThis.__myTubeExtractOverlayResponse),
+            globalThis.__myTubeExtractOverlayResponseDelayMs,
+          );
         },
       },
     };
@@ -88,6 +92,13 @@ try {
     host?.shadowRoot
       ?.querySelector('button.quality-button:nth-child(2)')
       ?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    if (
+      !document
+        .querySelector('[data-mytube-extract-toast]')
+        ?.shadowRoot?.textContent?.includes('요청을 시작했습니다.')
+    ) {
+      throw new Error('Expected the acceptance toast immediately after clicking a quality.');
+    }
   });
   await page.waitForFunction(
     () => globalThis.__myTubeExtractOverlayRequests.length === 1,
@@ -98,7 +109,7 @@ try {
     () =>
       document
         .querySelector('[data-mytube-extract-toast]')
-        ?.shadowRoot?.textContent?.includes('다운로드 시작') === true,
+        ?.shadowRoot?.textContent?.includes('요청을 시작했습니다.') === true,
     null,
     { timeout: 10000 },
   );
@@ -186,7 +197,7 @@ try {
 
   await page.evaluate(() => {
     globalThis.__myTubeExtractOverlayResponse = {
-      kind: 'download-started',
+      kind: 'job-accepted',
       ok: true,
     };
     document

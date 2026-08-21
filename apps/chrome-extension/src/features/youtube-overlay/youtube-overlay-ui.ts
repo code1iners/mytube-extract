@@ -43,10 +43,8 @@ type YoutubeCardInfo = {
 type ToastController = {
   /** 실패 상태와 재시도 행동을 표시한다. */
   showFailure(message: string, retry: () => void): void;
-  /** 요청 중 상태를 표시한다. */
-  showRequesting(): void;
-  /** 다운로드 시작 상태를 표시한다. */
-  showStarted(): void;
+  /** Background가 job을 접수했음을 표시한다. */
+  showAccepted(): void;
 };
 
 /** Overlay mount 여부를 보관하는 Window 확장 타입. */
@@ -237,7 +235,7 @@ function mountCardOverlay(
     pending = true;
     qualityPanel.hidden = true;
     setModeButtonsDisabled(true);
-    toast.showRequesting();
+    toast.showAccepted();
 
     try {
       chrome.runtime.sendMessage(
@@ -258,7 +256,6 @@ function mountCardOverlay(
 
           pending = false;
           setModeButtonsDisabled(false);
-          toast.showStarted();
         },
       );
     } catch (error) {
@@ -409,7 +406,7 @@ function createToastController(): ToastController {
       retryButton.textContent = '다시 시도';
       retryButton.addEventListener('click', retry);
       content.append(retryButton);
-    } else if (label === '다운로드 시작') {
+    } else if (label === '요청 접수') {
       dismissTimer = window.setTimeout(() => content.replaceChildren(), 4000);
     }
   }
@@ -418,11 +415,8 @@ function createToastController(): ToastController {
     showFailure(message, retry) {
       render('실패', message, retry);
     },
-    showRequesting() {
-      render('요청 중', '선택한 품질로 추출을 요청하고 있습니다.');
-    },
-    showStarted() {
-      render('다운로드 시작', 'Chrome 다운로드를 시작했습니다.');
+    showAccepted() {
+      render('요청 접수', '요청을 시작했습니다.');
     },
   };
 }

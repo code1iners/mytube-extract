@@ -42,8 +42,8 @@ export type YoutubeOverlayDownloadResponse =
   | {
       /** 성공 여부. */
       ok: true;
-      /** 결과 종류. */
-      kind: 'download-started';
+      /** job이 접수되었음을 나타내는 결과 종류. */
+      kind: 'job-accepted';
     }
   | {
       /** 성공 여부. */

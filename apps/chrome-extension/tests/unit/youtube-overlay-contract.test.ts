@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
+import { DEFAULT_API_BASE_URL } from '../../src/shared/constants';
 import {
-  createYoutubeOverlayDownloadOptions,
+  createYoutubeOverlayDownloadJobInput,
   sanitizeYoutubeOverlayFilename,
 } from '../../src/features/youtube-overlay/youtube-overlay-download';
 import {
@@ -43,20 +44,35 @@ describe('YouTube overlay contract', () => {
     ).toBe(false);
   });
 
-  it('creates an API-compatible download option from a YouTube card', () => {
-    const options = createYoutubeOverlayDownloadOptions({
+  it('creates a job-compatible input from a YouTube card', () => {
+    const input = createYoutubeOverlayDownloadJobInput({
       mode: 'audio',
       quality: 192,
       title: 'A / B: live\nrecording',
       videoId: 'abc123_DEF0',
     });
 
-    expect(options).toMatchObject({
-      bitrate: '192',
-      filename: 'A B: live recording',
-      mode: 'audio',
-      resolution: '',
+    expect(input).toMatchObject({
+      apiBaseUrl: DEFAULT_API_BASE_URL,
+      localFilename: 'A B: live recording.mp3',
+      quality: '192',
       sourceUrl: 'https://www.youtube.com/watch?v=abc123_DEF0',
+      type: 'audio',
+    });
+  });
+
+  it('uses the selected video quality as the job quality', () => {
+    expect(
+      createYoutubeOverlayDownloadJobInput({
+        mode: 'video',
+        quality: 1080,
+        title: 'Video title',
+        videoId: 'abc123_DEF0',
+      }),
+    ).toMatchObject({
+      localFilename: 'Video title.mp4',
+      quality: '1080',
+      type: 'video',
     });
   });
 
