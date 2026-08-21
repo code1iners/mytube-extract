@@ -205,6 +205,40 @@ describe('download job manager', () => {
     );
   });
 
+  it('treats an expired completed job as a failure instead of downloading an empty URL', async () => {
+    /** 이미 서버 보관 기간이 지난 job. */
+    const expiredJob = createJob({
+      displayStatus: 'expired',
+      message: '보관 기간이 지났습니다. 다시 생성해 주세요.',
+      status: 'completed',
+    });
+    /** job manager dependency. */
+    const dependencies = createDependencies({
+      myTubeExtractClient: {
+        createDownloadJob: vi.fn().mockResolvedValue(expiredJob),
+        getDownloadJob: vi.fn(),
+      },
+    });
+    /** job manager. */
+    const manager = createDownloadJobManager(dependencies);
+
+    await expect(
+      manager.submitJob({
+        apiBaseUrl: 'http://127.0.0.1:3030',
+        quality: '192',
+        sourceUrl: 'https://www.youtube.com/watch?v=abc123_DEF0',
+        type: 'audio',
+      }),
+    ).rejects.toMatchObject({ message: '보관 기간이 지났습니다. 다시 생성해 주세요.' });
+
+    expect(dependencies.notifications.showFailed).toHaveBeenCalledWith(
+      expiredJob,
+      expect.objectContaining({ quality: '192', type: 'audio' }),
+    );
+    expect(dependencies.notifications.showCompleted).not.toHaveBeenCalled();
+    expect(dependencies.downloads.startDownload).not.toHaveBeenCalled();
+  });
+
   it('polls at the fast interval and reports every status change until completion', async () => {
     /** 폴링을 수동으로 진행시키는 가짜 scheduler. */
     const manualScheduler = createManualScheduler();
@@ -269,7 +303,9 @@ describe('download job manager', () => {
     const dependencies = createDependencies({
       myTubeExtractClient: {
         createDownloadJob: vi.fn().mockResolvedValue(createJob({ status: 'queued' })),
-        getDownloadJob: vi.fn().mockResolvedValue(createJob({ status: 'completed' })),
+        getDownloadJob: vi.fn().mockResolvedValue(
+          createJob({ downloadUrl: '/downloads/job-1/file', status: 'completed' }),
+        ),
       },
       scheduler: { scheduleDelay: scheduleDelaySpy },
     });
@@ -626,6 +662,49 @@ describe('download job manager', () => {
 });
 
 describe('download job manager restart recovery', () => {
+  it('resumes an active job even when the same job was loaded into recent history first', async () => {
+    /** service worker 재시작 전 저장돼 있던 진행 중 job 기록. */
+    const record: TrackedDownloadJobRecord = {
+      apiBaseUrl: 'http://127.0.0.1:3030',
+      job: createJob({ jobId: 'job-1', status: 'processing' }),
+      localFilename: 'my clip.mp3',
+      sourceUrl: 'https://www.youtube.com/watch?v=abc123_DEF0',
+    };
+    /** active job과 최근 이력에 같은 snapshot이 함께 저장된 상태. */
+    const activeJobsStore = createFakeActiveJobsStore([record]);
+    const recentJobsStore = createFakeRecentJobsStore([record.job]);
+    /** job manager dependency. */
+    const dependencies = createDependencies({
+      activeJobsStore,
+      myTubeExtractClient: {
+        createDownloadJob: vi.fn(),
+        getDownloadJob: vi.fn().mockResolvedValue(
+          createJob({
+            displayStatus: 'completed',
+            downloadUrl: '/downloads/job-1/file',
+            jobId: 'job-1',
+            status: 'completed',
+          }),
+        ),
+      },
+      recentJobsStore,
+    });
+    /** job manager. */
+    const manager = createDownloadJobManager(dependencies);
+
+    await manager.resumeTracking();
+
+    expect(dependencies.myTubeExtractClient.getDownloadJob).toHaveBeenCalledWith(
+      'http://127.0.0.1:3030',
+      'job-1',
+    );
+    expect(dependencies.downloads.startDownload).toHaveBeenCalledWith(
+      '/downloads/job-1/file',
+      'my clip.mp3',
+    );
+    expect(activeJobsStore.removeActiveJob).toHaveBeenCalledWith('job-1');
+  });
+
   it('immediately re-checks a resumed job before waiting for the next scheduled poll', async () => {
     /** 폴링을 수동으로 진행시키는 가짜 scheduler. */
     const manualScheduler = createManualScheduler();
@@ -935,7 +1014,9 @@ describe('persistLatestJob', () => {
     const dependencies = createDependencies({
       myTubeExtractClient: {
         createDownloadJob: vi.fn().mockResolvedValue(createJob({ status: 'queued' })),
-        getDownloadJob: vi.fn().mockResolvedValue(createJob({ status: 'completed' })),
+        getDownloadJob: vi.fn().mockResolvedValue(
+          createJob({ downloadUrl: '/downloads/job-1/file', status: 'completed' }),
+        ),
       },
       scheduler: manualScheduler.scheduler,
     });
@@ -965,7 +1046,9 @@ describe('persistLatestJob', () => {
     /** job manager dependency. */
     const dependencies = createDependencies({
       myTubeExtractClient: {
-        createDownloadJob: vi.fn().mockResolvedValue(createJob({ status: 'completed' })),
+        createDownloadJob: vi.fn().mockResolvedValue(
+          createJob({ downloadUrl: '/downloads/job-1/file', status: 'completed' }),
+        ),
         getDownloadJob: vi.fn(),
       },
     });

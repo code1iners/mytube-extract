@@ -323,6 +323,33 @@ describe('popup download model', () => {
     });
   });
 
+  it('shows an expired completed job as unavailable instead of a successful download', async () => {
+    /** Popup model dependency. */
+    const dependencies = createDependencies({
+      downloadJobs: {
+        getJobs: vi.fn().mockResolvedValue([
+          createCompletedJob({
+            displayStatus: 'expired',
+            downloadUrl: null,
+            message: '보관 기간이 지났습니다. 다시 생성해 주세요.',
+          }),
+        ]),
+      },
+    });
+    /** Popup download model. */
+    const model = createPopupDownloadModel(dependencies);
+
+    await model.initialize();
+
+    expect(model.getSnapshot()).toMatchObject({
+      downloading: false,
+      status: {
+        kind: 'download-failed',
+        message: '보관 기간이 지났습니다. 다시 생성해 주세요.',
+      },
+    });
+  });
+
   it('updates the snapshot when background pushes a job change without a new submit', async () => {
     /** background가 저장한 최근 job 구독 listener. */
     let latestJobListener: ((jobs: DownloadJob[]) => void) | undefined;

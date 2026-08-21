@@ -8,7 +8,7 @@ MyTube Extract API 서버는 URL 또는 YouTube 영상 ID를 기반으로 오디
 
 ## Solution
 
-Chrome 확장 프로그램은 WXT + React + TypeScript Popup과 MV3 Background, YouTube unlisted Overlay script로 구현되어 있다. Popup은 사용자가 입력하거나 현재 탭에서 가져온 YouTube URL, 추출 형식, 선택 옵션을 조합해 환경 변수로 정한 MyTube Extract API로 다운로드를 시작한다. 권한을 허용한 사용자는 일반 YouTube 영상 카드의 썸네일에서 품질을 고른 뒤 같은 API를 호출할 수 있다.
+Chrome 확장 프로그램은 WXT + React + TypeScript Popup과 MV3 Background, YouTube unlisted Overlay script로 구현되어 있다. Popup과 Overlay는 Background에 job 생성을 요청하고, Background가 상태 조회·재시작 복구·완료 파일 다운로드를 소유한다. Popup은 항상 새 요청 form과 최대 5건의 최근 job 목록을 함께 보여 주며, 권한을 허용한 사용자는 일반 YouTube 영상 카드의 썸네일에서 품질을 고른 뒤 같은 job 흐름을 사용할 수 있다.
 
 API 서버 제품 개요는 `docs/api/current-implementation-prd.md`, endpoint별 상세 계약은 `docs/server/endpoints/*`를 기준으로 소비하며, 이번 범위에서는 서버 엔드포인트나 응답 계약을 변경하지 않는다.
 
@@ -34,7 +34,7 @@ API 서버 제품 개요는 `docs/api/current-implementation-prd.md`, endpoint�
 - 확장 프로그램은 URL 직접 입력을 기본 흐름으로 유지하고, 현재 탭 URL 가져오기 버튼을 보조 흐름으로 제공한다.
 - WXT는 extension entrypoint와 generated manifest를 소유하고, React는 popup UI rendering만 담당한다.
 - Chrome storage/downloads API, MyTube Extract API URL 생성, popup 상태 전이는 React component 밖의 TypeScript module로 분리한다.
-- 현재 MyTube Extract API 계약을 그대로 사용한다. 오디오는 `/audio?url={MEDIA_URL}`, 비디오는 `/video?url={MEDIA_URL}`을 호출한다.
+- 현재 MyTube Extract API의 job 계약을 그대로 사용한다. 확장 프로그램은 `POST /downloads`, `GET /downloads/{jobId}`, `GET /downloads/{jobId}/file`을 호출하며 기존 직접 `/audio`·`/video` 서버 계약은 변경하지 않는다.
 - API base URL은 `WXT_MYTUBE_EXTRACT_API_BASE_URL` 환경 변수로 정하고 사용자 입력 UI를 제공하지 않는다. 운영 값은 `https://mytube-extract-api.codeliners.cc`, 로컬 값은 `http://127.0.0.1:5011`만 사용한다. 기존 `WXT_MEDIA_NEST_API_BASE_URL`, non-WXT `MYTUBE_EXTRACT_API_BASE_URL`, `MEDIA_NEST_API_BASE_URL`은 빌드 설정 전환 기간의 fallback으로만 지원한다.
 - 파일명은 선택 옵션으로 유지한다.
 - 오디오 비트레이트(`128/192/320 kbps`)와 비디오 해상도(`360/720/1080p`)는 Popup에서도 YouTube 썸네일 Overlay와 동일한 고정 선택지 중에서만 고를 수 있다. 임의의 숫자를 직접 입력할 수 없다.
@@ -42,11 +42,12 @@ API 서버 제품 개요는 `docs/api/current-implementation-prd.md`, endpoint�
 - `activeTab` 권한은 사용자가 popup에서 현재 탭 URL 가져오기 버튼을 누를 때만 사용한다.
 - 썸네일 기능은 Popup의 최초 활성화 행동에서 `https://www.youtube.com/*` optional Host Permission을 요청하며, 거부해도 기존 Popup 흐름은 유지한다.
 - 썸네일 Overlay는 홈, 검색 결과, 구독 피드, 시청 페이지 추천 영역의 표준 영상 카드만 대상으로 하고 Shorts는 제외한다.
-- MP3 품질은 `128/192/320 kbps`, MP4 품질은 `360/720/1080p`이며 숫자 선택 즉시 Background가 기존 `/audio` 또는 `/video` query endpoint를 호출한다.
+- MP3 품질은 `128/192/320 kbps`, MP4 품질은 `360/720/1080p`이며 숫자 선택 즉시 Background가 job 생성 요청을 만든다. Popup·Overlay message 경계에서도 mode별 조합을 재검증한다.
 - 썸네일 제목은 Background에서 안전한 `filename`으로 정리해 전달하고, 실패는 페이지 전역 Toast의 재시도로 다시 요청한다. 백분율 진행률은 제공하지 않는다.
+- Background job manager는 여러 job을 독립적으로 추적하고 active record를 영속화한다. service worker 재시작 후 진행 중 job을 즉시 다시 조회하며, 완료·실패 알림과 실패 알림 재시도를 제공한다.
 - Popup은 직접 URL, 사용자 지정 파일명, 고급 옵션, 서버 오류 복구용 기본 진입점으로 계속 유지한다.
 - 현재 서버 CORS는 no-origin 요청과 운영 web origin, local 개발 origin만 허용한다. 고정 extension ID 기반 `chrome-extension://...` origin 허용은 별도 후속 범위로 둔다.
-- Chrome Web Store 배포, 계정, 다운로드 이력, 작업 큐, 진행률 조회는 이번 문서 범위에 포함하지 않는다.
+- Chrome Web Store 배포, 계정, 전체 다운로드 이력, 백분율 진행률 조회는 이번 문서 범위에 포함하지 않는다. 최근 5건의 job 상태 표시는 포함한다.
 
 ## Testing Decisions
 
@@ -58,6 +59,11 @@ API 서버 제품 개요는 `docs/api/current-implementation-prd.md`, endpoint�
 - 비디오 모드가 선택되면 API 서버의 URL 기반 비디오 계약에 맞는 다운로드 URL을 생성하는지 검증한다.
 - `filename`, `bitrate`, `resolution` 설정값이 API 호출 URL에 반영되는지 검증한다.
 - 저장된 `bitrate`/`resolution` 값이 고정 선택지를 벗어나면 각 모드 기본값(`192`/`720`)으로 대체되는지 검증한다.
+- Popup과 Overlay message가 mode에 맞지 않는 품질 조합을 거부하는지 검증한다.
+- 여러 job을 동시에 생성해도 active storage의 기록이 서로 덮어써지지 않는지 검증한다.
+- service worker 재시작 후 최근 이력에 이미 있는 진행 중 job도 즉시 재조회되는지 검증한다.
+- 완료 asset이 만료됐거나 다운로드 URL이 없을 때 성공 다운로드를 시작하지 않고 실패·재시도 상태를 표시하는지 검증한다.
+- API가 반환한 validation message가 Popup 오류 상태에 그대로 전달되는지 검증한다.
 - API base URL이 popup UI나 storage 사용자 설정으로 바뀌지 않는지 검증한다.
 - Chrome extension load unpacked 환경에서 WXT generated manifest, popup asset, script 경로가 깨지지 않는지 확인한다.
 - package test는 Chrome runtime 없이 URL 검증, API URL 생성, popup 상태 전이를 검증하고, package build는 WXT build output의 manifest/popup 정적 파일 참조를 검증한다.
@@ -69,7 +75,7 @@ API 서버 제품 개요는 `docs/api/current-implementation-prd.md`, endpoint�
 
 - MyTube Extract API 서버 엔드포인트 변경
 - API 서버 인증, 사용자 계정, 권한 관리
-- 다운로드 작업 큐와 진행률 조회
+- 백분율 다운로드 진행률 조회
 - 다운로드 이력 저장
 - Chrome Web Store 배포 자동화
 - 고정 extension ID 기반 CORS 허용
@@ -81,4 +87,4 @@ API 서버 제품 개요는 `docs/api/current-implementation-prd.md`, endpoint�
 
 ## Further Notes
 
-현재 `apps/chrome-extension`은 URL 입력 Popup과 YouTube 일반 영상 카드 Overlay를 함께 제공한다. Job 기반 진행률, Shorts, Chrome Web Store 배포 자동화, 최근 URL 저장은 후속 범위다.
+현재 `apps/chrome-extension`은 URL 입력 Popup과 YouTube 일반 영상 카드 Overlay를 함께 제공한다. Job 상태·재시작 복구·최근 5건 목록은 현재 범위이며, 백분율 진행률, Shorts, Chrome Web Store 배포 자동화, 전체 다운로드 이력은 후속 범위다.

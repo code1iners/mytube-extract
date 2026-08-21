@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { type DownloadJob } from '../../src/domain/download-job/download-job';
+import { DownloadJobRequestError } from '../../src/services/mytube-extract/mytube-extract-client';
 import { DOWNLOAD_JOB_SUBMIT_MESSAGE_TYPE, type DownloadJobSubmitRequest } from '../../src/features/download-jobs/download-job-message';
 import {
   type DownloadJobSubmitHandlerDependencies,
@@ -102,6 +103,27 @@ describe('download job submit handler', () => {
 
     await expect(handleSubmit(createRequest())).resolves.toEqual({
       message: 'Could not reach the server.',
+      ok: false,
+    });
+  });
+
+  it('shows the server-provided validation message when job creation is rejected', async () => {
+    /** handler 의존성. */
+    const dependencies: DownloadJobSubmitHandlerDependencies = {
+      jobManager: {
+        submitJob: vi
+          .fn()
+          .mockRejectedValue(new DownloadJobRequestError(400, 'quality is not supported')),
+      },
+      myTubeExtractClient: {
+        assertServerAvailable: vi.fn().mockResolvedValue(undefined),
+      },
+    };
+    /** job 제출 handler. */
+    const handleSubmit = createDownloadJobSubmitHandler(dependencies);
+
+    await expect(handleSubmit(createRequest())).resolves.toEqual({
+      message: 'quality is not supported',
       ok: false,
     });
   });

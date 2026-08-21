@@ -24,7 +24,7 @@ export type MyTubeExtractClient = {
 /** 다운로드 job 요청 HTTP 오류. 호출자가 상태 코드와 서버 안내 메시지로 원인을 구분할 수 있게 한다. */
 export class DownloadJobRequestError extends Error {
   constructor(responseStatus: number, responseMessage: string | undefined) {
-    super('Download job request failed.');
+    super(responseMessage || 'Download job request failed.');
     this.name = 'DownloadJobRequestError';
     this.responseStatus = responseStatus;
     this.responseMessage = responseMessage;

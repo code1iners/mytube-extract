@@ -393,10 +393,19 @@ function createToastController(): ToastController {
     const labelElement = document.createElement('strong');
     /** Toast 상태 설명. */
     const messageElement = document.createElement('span');
+    /** Toast 상태 아이콘. */
+    const iconElement = document.createElement('span');
+    /** Toast 상태 제목과 아이콘을 묶는 heading. */
+    const headingElement = document.createElement('div');
 
     labelElement.textContent = label;
     messageElement.textContent = message;
-    content.append(labelElement, messageElement);
+    iconElement.setAttribute('aria-hidden', 'true');
+    iconElement.className = 'toast__icon';
+    iconElement.textContent = label === '실패' ? '!' : '✓';
+    headingElement.className = 'toast__heading';
+    headingElement.append(iconElement, labelElement);
+    content.append(headingElement, messageElement);
 
     if (retry) {
       /** Toast 재시도 버튼. */
@@ -449,14 +458,16 @@ function createToastStyle(): HTMLStyleElement {
   const style = document.createElement('style');
 
   style.textContent = [
-    ':host { --toast-surface: #ffffff; --toast-text-primary: #484848; --toast-text-secondary: #727272; --toast-border: #e0e0e0; --toast-primary: #e60012; --toast-error: #c62828; --toast-shadow: rgba(0, 0, 0, .07) 0px 2px 8px 0px; display: block; font-family: "Pretendard Variable", ui-sans-serif, system-ui, sans-serif; }',
+    ':host { --toast-surface: #ffffff; --toast-text-primary: #484848; --toast-text-secondary: #727272; --toast-border: #e0e0e0; --toast-primary: #e60012; --toast-error: #c62828; --toast-focus: #4b5cce; --toast-shadow: rgba(0, 0, 0, .07) 0px 2px 8px 0px; display: block; font-family: "Pretendard Variable", ui-sans-serif, system-ui, sans-serif; }',
     '@font-face { font-display: swap; font-family: "Pretendard Variable"; font-style: normal; font-weight: 45 920; src: url(\"' + chrome.runtime.getURL('fonts/PretendardVariable.woff2') + '\") format(\"woff2-variations\"); }',
     '.toast { display: grid; gap: 4px; min-width: 220px; max-width: 360px; padding: 12px; border: 1px solid var(--toast-border); border-radius: 12px; background: var(--toast-surface); color: var(--toast-text-primary); box-shadow: var(--toast-shadow); font: 400 12px/1.45 "Pretendard Variable", ui-sans-serif, system-ui, sans-serif; }',
     '.toast[data-tone=\"error\"] { border-color: var(--toast-error); }',
+    '.toast__heading { display: flex; align-items: center; gap: 6px; }',
+    '.toast__icon { display: inline-grid; width: 16px; height: 16px; flex: 0 0 16px; place-items: center; border-radius: 9999px; font-size: 11px; font-weight: 600; }',
     '.toast strong { font-size: 14px; font-weight: 600; }',
     '.toast span { color: var(--toast-text-secondary); overflow-wrap: anywhere; }',
     '.toast button { min-height: 28px; border: 1px solid var(--toast-primary); border-radius: 8px; background: var(--toast-surface); color: var(--toast-text-primary); cursor: pointer; font: inherit; }',
-    '.toast button:focus-visible { outline: 2px solid var(--toast-primary); outline-offset: 2px; }',
+    '.toast button:focus-visible { outline: 2px solid var(--toast-focus); outline-offset: 2px; }',
   ].join('');
 
   return style;

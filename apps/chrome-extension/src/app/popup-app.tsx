@@ -177,7 +177,7 @@ function RequestStatusFeedback(props: { /** 현재 popup snapshot. */ snapshot: 
         ? 'success'
         : 'info';
 
-  return <p className={`request-status request-status--${tone}`} role={isAlert ? 'alert' : 'status'} aria-live="polite">{props.snapshot.status.message}</p>;
+  return <p className={`request-status request-status--${tone}`} role={isAlert ? 'alert' : 'status'} aria-live="polite"><span aria-hidden="true" className="request-status__icon">{tone === 'danger' ? '!' : tone === 'success' ? '✓' : '…'}</span><span>{props.snapshot.status.message}</span></p>;
 }
 
 /** Popup에 표시할 최근 job 목록을 렌더링한다. */
@@ -202,11 +202,21 @@ function RecentJobItem(props: { /** 표시할 job. */ job: DownloadJob }) {
 }
 
 /** 최근 job 상태의 텍스트·아이콘을 함께 만든다. */
-function getRecentJobStatus(job: DownloadJob): { icon: string; kind: DownloadJob['status']; label: string } {
+function getRecentJobStatus(job: DownloadJob): { icon: string; kind: DownloadJob['displayStatus']; label: string } {
+  if (job.displayStatus === 'expired') return { icon: '!', kind: 'expired', label: '만료됨' };
   if (job.status === 'queued') return { icon: '○', kind: 'queued', label: '대기 중' };
   if (job.status === 'processing') return { icon: '◌', kind: 'processing', label: '처리 중' };
   if (job.status === 'completed') return { icon: '✓', kind: 'completed', label: '완료' };
   return { icon: '!', kind: 'failed', label: '실패' };
+}
+
+/** YouTube Overlay 권한 상태를 텍스트와 함께 전달할 아이콘으로 바꾼다. */
+function getYoutubeOverlayStatusIcon(status: YoutubeOverlaySnapshot['status']): string {
+  if (status === 'enabled') return '✓';
+  if (status === 'denied' || status === 'error') return '!';
+  if (status === 'checking' || status === 'requesting') return '…';
+
+  return '○';
 }
 
 /** 최근 job 생성 시각을 popup에 맞는 짧은 형식으로 표시한다. */
@@ -237,7 +247,7 @@ function YoutubeOverlayActivation(props: { /** Overlay 권한 상태. */ overlay
   const isProblem = props.overlay.status === 'denied' || props.overlay.status === 'error';
 
   return <div className="youtube-overlay-activation" aria-labelledby="youtube-overlay-title">
-    <div><strong id="youtube-overlay-title" className="youtube-overlay-activation__title">YouTube 썸네일 버튼</strong><p className={isProblem ? 'youtube-overlay-activation__message youtube-overlay-activation__message--problem' : 'youtube-overlay-activation__message'} role={isProblem ? 'alert' : 'status'} aria-live="polite">{props.overlay.message}</p></div>
+    <span aria-hidden="true" className="youtube-overlay-activation__icon">{getYoutubeOverlayStatusIcon(props.overlay.status)}</span><div><strong id="youtube-overlay-title" className="youtube-overlay-activation__title">YouTube 썸네일 버튼</strong><p className={isProblem ? 'youtube-overlay-activation__message youtube-overlay-activation__message--problem' : 'youtube-overlay-activation__message'} role={isProblem ? 'alert' : 'status'} aria-live="polite">{props.overlay.message}</p></div>
     {!isEnabled ? <button aria-label="YouTube 썸네일 버튼 활성화" className="secondary-button secondary-button--compact" disabled={isRequesting} type="button" onClick={props.onActivate}>{isRequesting ? '활성화 중' : '버튼 활성화'}</button> : null}
   </div>;
 }

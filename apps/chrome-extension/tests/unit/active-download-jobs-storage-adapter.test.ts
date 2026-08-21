@@ -129,6 +129,57 @@ describe('active download jobs storage adapter', () => {
     );
   });
 
+  it('serializes concurrent read-modify-write operations so active jobs are not lost', async () => {
+    /** 저장된 값과 첫 번째 get callback을 제어하는 가짜 Chrome API. */
+    const storedItems: Record<string, unknown> = {};
+    let firstGetCallback:
+      | ((items: Record<string, unknown>) => void)
+      | undefined;
+    let getCallCount = 0;
+    const rawChromeApi = {
+      runtime: { lastError: null as { message: string } | null },
+      storage: {
+        local: {
+          get: vi.fn(
+            (
+              _keys: readonly string[],
+              callback: (items: Record<string, unknown>) => void,
+            ) => {
+              getCallCount += 1;
+
+              if (getCallCount === 1) {
+                firstGetCallback = callback;
+                return;
+              }
+
+              callback(storedItems);
+            },
+          ),
+          set: vi.fn((items: Record<string, unknown>, callback: () => void) => {
+            storedItems[ACTIVE_DOWNLOAD_JOBS_STORAGE_KEY] =
+              items[ACTIVE_DOWNLOAD_JOBS_STORAGE_KEY];
+            callback();
+          }),
+        },
+      },
+    };
+    /** active jobs storage adapter. */
+    const adapter = createActiveDownloadJobsStorageAdapter(rawChromeApi as unknown as typeof chrome);
+    /** 동시에 도착한 두 job 저장 요청. */
+    const saveA = adapter.saveActiveJob(createRecord({ job: createJob({ jobId: 'job-a' }) }));
+    const saveB = adapter.saveActiveJob(createRecord({ job: createJob({ jobId: 'job-b' }) }));
+
+    await Promise.resolve();
+    expect(firstGetCallback).toBeDefined();
+    firstGetCallback!({});
+    await Promise.all([saveA, saveB]);
+
+    expect(storedItems[ACTIVE_DOWNLOAD_JOBS_STORAGE_KEY]).toEqual({
+      'job-a': expect.objectContaining({ job: expect.objectContaining({ jobId: 'job-a' }) }),
+      'job-b': expect.objectContaining({ job: expect.objectContaining({ jobId: 'job-b' }) }),
+    });
+  });
+
   it('does nothing when removing a jobId that was never saved', async () => {
     /** 테스트용 Chrome API. */
     const chromeApi = createChromeApi({

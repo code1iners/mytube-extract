@@ -216,6 +216,7 @@ export function createPopupDownloadModel(
 
   /** 한 job의 상태를 Popup 안내 상태로 바꾼다. */
   function getJobPopupStatus(job: DownloadJob): PopupStatus {
+    if (job.displayStatus === 'expired') return createDownloadFailedStatus(job.message);
     if (job.status === 'queued') return createJobQueuedStatus(job.message);
     if (job.status === 'processing') return createJobProcessingStatus(job.message);
     if (job.status === 'completed') return DOWNLOAD_STARTED_STATUS;

@@ -46,7 +46,7 @@ MyTube Extract의 Web과 Chrome 확장 popup에 공통 적용하는 Foundation�
 | Surface | `#f8f8f8` | `#202124` |
 | Surface-alt | `#efefef` | `#292a2d` |
 | Hairline | `#e0e0e0` | `#3a3b3e` |
-| Green(eShop) | `#468254` | `#8fd6a0` |
+| Green(eShop) | `#356b43` | `#8fd6a0` |
 | Blue(accent) | `#4b5cce` | `#a9b4f2` |
 | Danger(브랜드 red와 구분되는 별도 오류색) | `#c62828` | `#ff8a80` |
 
@@ -156,7 +156,7 @@ Body line-height `1.6`은 Nintendo 원본에 없는 목표값이다. 한글 밀�
 | Border/Shadow | 2px 굵은 테두리 + 하드 드롭섀도(`0 3px 0`, `0 5px 0`) | hairline + whisper-soft shadow |
 | Radius | 2~4px 고정 | 2~12px + pill(48px/9999px) |
 | Dark mode | violet/teal 역전 | ink/surface 반전, red는 불변 |
-| 상태 화면 | 요청·처리 상태가 동시에 보임 | 요청 전 설정만, 요청 후 처리·결과·오류 단일 화면(유지) |
+| 상태 화면 | 요청·처리 상태가 동시에 보임 | 요청 폼을 유지하면서 최근 요청 목록에서 각 job의 처리·결과·오류를 독립 표시 |
 
 ## 열린 결정
 

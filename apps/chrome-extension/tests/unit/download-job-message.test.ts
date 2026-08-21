@@ -70,6 +70,43 @@ describe('download job submit request guard', () => {
     ).toBe(false);
   });
 
+  it('rejects a fixed quality that belongs to a different download mode', () => {
+    expect(
+      isDownloadJobSubmitRequest({
+        type: DOWNLOAD_JOB_SUBMIT_MESSAGE_TYPE,
+        apiBaseUrl: 'https://mytube-extract-api.codeliners.cc',
+        localFilename: '',
+        mode: 'audio',
+        quality: '1080',
+        sourceUrl: 'https://www.youtube.com/watch?v=abc123_DEF0',
+      }),
+    ).toBe(false);
+
+    expect(
+      isDownloadJobSubmitRequest({
+        type: DOWNLOAD_JOB_SUBMIT_MESSAGE_TYPE,
+        apiBaseUrl: 'https://mytube-extract-api.codeliners.cc',
+        localFilename: '',
+        mode: 'video',
+        quality: '192',
+        sourceUrl: 'https://www.youtube.com/watch?v=abc123_DEF0',
+      }),
+    ).toBe(false);
+  });
+
+  it('rejects non-canonical string representations of a quality', () => {
+    expect(
+      isDownloadJobSubmitRequest({
+        type: DOWNLOAD_JOB_SUBMIT_MESSAGE_TYPE,
+        apiBaseUrl: 'https://mytube-extract-api.codeliners.cc',
+        localFilename: '',
+        mode: 'audio',
+        quality: '0192',
+        sourceUrl: 'https://www.youtube.com/watch?v=abc123_DEF0',
+      }),
+    ).toBe(false);
+  });
+
   it('rejects non-record values', () => {
     expect(isDownloadJobSubmitRequest(null)).toBe(false);
     expect(isDownloadJobSubmitRequest('nope')).toBe(false);

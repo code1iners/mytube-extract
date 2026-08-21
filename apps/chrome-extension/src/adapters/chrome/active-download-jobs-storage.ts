@@ -32,6 +32,9 @@ export type ActiveDownloadJobsStorageAdapter = {
 export function createActiveDownloadJobsStorageAdapter(
   chromeApi: typeof chrome = chrome,
 ): ActiveDownloadJobsStorageAdapter {
+  /** 여러 job의 read-modify-write가 서로의 변경을 덮어쓰지 않도록 직렬화한다. */
+  let storageMutation = Promise.resolve();
+
   /** 저장된 기록 전체를 읽는다. */
   function loadRecordsByJobId(): Promise<TrackedDownloadJobRecordsByJobId> {
     return new Promise((resolve, reject) => {
@@ -67,21 +70,44 @@ export function createActiveDownloadJobsStorageAdapter(
     });
   }
 
+  /** active job 저장소의 read-modify-write 작업을 직렬화한다. */
+  function enqueueStorageMutation(
+    mutation: (
+      recordsByJobId: TrackedDownloadJobRecordsByJobId,
+    ) => Promise<TrackedDownloadJobRecordsByJobId>,
+  ): Promise<void> {
+    const nextMutation = storageMutation.then(async () => {
+      const recordsByJobId = await loadRecordsByJobId();
+      const nextRecordsByJobId = await mutation(recordsByJobId);
+
+      await saveRecordsByJobId(nextRecordsByJobId);
+    });
+
+    storageMutation = nextMutation.then(
+      () => undefined,
+      () => undefined,
+    );
+
+    return nextMutation;
+  }
+
   return {
     async loadActiveJobs() {
       return Object.values(await loadRecordsByJobId());
     },
-    async saveActiveJob(record) {
-      /** 기존 기록에 새 기록을 병합한 결과. */
-      const recordsByJobId = { ...(await loadRecordsByJobId()), [record.job.jobId]: record };
-
-      await saveRecordsByJobId(recordsByJobId);
+    saveActiveJob(record) {
+      return enqueueStorageMutation(async (recordsByJobId) => ({
+        ...recordsByJobId,
+        [record.job.jobId]: record,
+      }));
     },
-    async removeActiveJob(jobId) {
-      /** 대상 job을 제외한 나머지 기록. */
-      const { [jobId]: _removed, ...remainingRecordsByJobId } = await loadRecordsByJobId();
+    removeActiveJob(jobId) {
+      return enqueueStorageMutation(async (recordsByJobId) => {
+        /** 대상 job을 제외한 나머지 기록. */
+        const { [jobId]: _removed, ...remainingRecordsByJobId } = recordsByJobId;
 
-      await saveRecordsByJobId(remainingRecordsByJobId);
+        return remainingRecordsByJobId;
+      });
     },
   };
 }

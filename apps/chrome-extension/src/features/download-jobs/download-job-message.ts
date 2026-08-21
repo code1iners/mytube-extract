@@ -1,11 +1,9 @@
 import { type DownloadJob, type DownloadQuality } from '../../domain/download-job/download-job';
 import { isDownloadMode, type DownloadMode } from '../../domain/download-options/download-options';
+import { getQualityOptions } from '../../domain/download-options/quality-options';
 
 /** Popup에서 Background로 job 제출을 요청하는 메시지 종류. */
 export const DOWNLOAD_JOB_SUBMIT_MESSAGE_TYPE = 'download-job-submit' as const;
-
-/** job 상태로 허용되는 고정 화질 값 목록. */
-const DOWNLOAD_QUALITIES = new Set<DownloadQuality>(['128', '192', '320', '360', '720', '1080']);
 
 /** Popup에서 Background로 전달하는 job 제출 요청. */
 export type DownloadJobSubmitRequest = {
@@ -49,14 +47,17 @@ export function isDownloadJobSubmitRequest(message: unknown): message is Downloa
     typeof message.apiBaseUrl === 'string' &&
     typeof message.localFilename === 'string' &&
     isDownloadMode(message.mode) &&
-    isDownloadQuality(message.quality) &&
+    isDownloadQuality(message.mode, message.quality) &&
     typeof message.sourceUrl === 'string'
   );
 }
 
-/** 값이 job 상태의 고정 화질 값인지 확인한다. */
-function isDownloadQuality(value: unknown): value is DownloadQuality {
-  return DOWNLOAD_QUALITIES.has(value as DownloadQuality);
+/** 값이 해당 다운로드 모드에서 허용되는 고정 화질인지 확인한다. */
+function isDownloadQuality(mode: DownloadMode, value: unknown): value is DownloadQuality {
+  return (
+    typeof value === 'string' &&
+    getQualityOptions(mode).some((qualityOption) => String(qualityOption) === value)
+  );
 }
 
 /** 알 수 없는 값을 record 형태로 좁힌다. */

@@ -126,6 +126,8 @@ export function createDownloadJobManager(
 ): DownloadJobManager {
   /** jobId 기준으로 추적 중인 job 상태. */
   const jobs = new Map<string, DownloadJob>();
+  /** 최근 목록에 이미 존재해도 중복 추적을 막을 수 있도록 실제 추적 루프를 별도로 기록한다. */
+  const trackingJobIds = new Set<string>();
   /** job 목록 변경 listener 목록. */
   const listeners = new Set<() => void>();
   /** 최근 job 저장소를 한 번만 읽기 위한 promise. */
@@ -261,7 +263,12 @@ export function createDownloadJobManager(
       tracking.onStatusChange?.(currentJob);
     }
 
-    if (currentJob.status === 'failed') {
+    const canStartDownload =
+      currentJob.status === 'completed' &&
+      currentJob.displayStatus !== 'expired' &&
+      Boolean(currentJob.downloadUrl);
+
+    if (currentJob.status === 'failed' || !canStartDownload) {
       await notifySafely(() =>
         dependencies.notifications.showFailed(currentJob, {
           apiBaseUrl: tracking.apiBaseUrl,
@@ -282,9 +289,11 @@ export function createDownloadJobManager(
 
   /** 저장돼 있던 진행 중 job 기록 하나의 추적을 재개한다. 대기 없이 즉시 한 번 확인부터 다시 시작한다. */
   async function resumeRecord(record: TrackedDownloadJobRecord): Promise<void> {
-    if (jobs.has(record.job.jobId)) {
+    if (trackingJobIds.has(record.job.jobId)) {
       return;
     }
+
+    trackingJobIds.add(record.job.jobId);
 
     /** 재개 시점에 참조할 추적 옵션. */
     const tracking: JobTrackingOptions = {
@@ -296,31 +305,37 @@ export function createDownloadJobManager(
       type: record.job.type,
     };
 
-    if (!isUnsettled(record.job)) {
-      await persistTracking(record.job, tracking);
-      return;
+    try {
+      if (!isUnsettled(record.job)) {
+        await persistTracking(record.job, tracking);
+        return;
+      }
+
+      setJob(record.job);
+      if (dependencies.recentJobsStore) {
+        await persistRecentJobs();
+      }
+
+      /** 재시작 전 상태는 오래됐을 수 있으므로, 대기 없이 즉시 한 번 다시 확인한다. */
+      const refreshedJob = await dependencies.myTubeExtractClient.getDownloadJob(
+        tracking.apiBaseUrl,
+        record.job.jobId,
+      );
+
+      setJob(refreshedJob);
+      if (dependencies.recentJobsStore) {
+        await persistRecentJobs();
+      }
+      await persistTracking(refreshedJob, tracking);
+
+      await trackJobUntilSettled(refreshedJob, tracking).catch(() => {
+        // 실패는 이미 job 상태에 기록되어 있고, 재개 흐름에는 결과를 기다리는 호출자가 없다.
+      });
+    } catch {
+      // 일시적인 재개 오류가 다른 job의 복구를 막지 않게 하고, active record는 다음 기회를 위해 남긴다.
+    } finally {
+      trackingJobIds.delete(record.job.jobId);
     }
-
-    setJob(record.job);
-    if (dependencies.recentJobsStore) {
-      await persistRecentJobs();
-    }
-
-    /** 재시작 전 상태는 오래됐을 수 있으므로, 대기 없이 즉시 한 번 다시 확인한다. */
-    const refreshedJob = await dependencies.myTubeExtractClient.getDownloadJob(
-      tracking.apiBaseUrl,
-      record.job.jobId,
-    );
-
-    setJob(refreshedJob);
-    if (dependencies.recentJobsStore) {
-      await persistRecentJobs();
-    }
-    await persistTracking(refreshedJob, tracking);
-
-    await trackJobUntilSettled(refreshedJob, tracking).catch(() => {
-      // 실패는 이미 job 상태에 기록되어 있고, 재개 흐름에는 결과를 기다리는 호출자가 없다.
-    });
   }
 
   /** 새 job을 생성하고 상태 추적을 시작한다. 실패 알림의 재시도도 이 경계를 재사용한다. */
@@ -342,14 +357,20 @@ export function createDownloadJobManager(
       type: createInput.type,
     };
 
-    setJob(job);
-    if (dependencies.recentJobsStore) {
-      await persistRecentJobs();
-    }
-    await persistTracking(job, tracking);
-    onStatusChange?.(job);
+    trackingJobIds.add(job.jobId);
 
-    return trackJobUntilSettled(job, tracking);
+    try {
+      setJob(job);
+      if (dependencies.recentJobsStore) {
+        await persistRecentJobs();
+      }
+      await persistTracking(job, tracking);
+      onStatusChange?.(job);
+
+      return await trackJobUntilSettled(job, tracking);
+    } finally {
+      trackingJobIds.delete(job.jobId);
+    }
   }
 
   dependencies.notifications.subscribeRetry((retryInput: DownloadJobRetryInput) =>
