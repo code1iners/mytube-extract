@@ -9,6 +9,10 @@ import {
   createTimeoutPollingScheduler,
 } from '../src/features/download-jobs/download-job-manager';
 import {
+  ensureJobRecoveryAlarm,
+  JOB_RECOVERY_ALARM_NAME,
+} from '../src/features/download-jobs/download-job-recovery';
+import {
   DOWNLOAD_JOB_SUBMIT_MESSAGE_TYPE,
   isDownloadJobSubmitRequest,
 } from '../src/features/download-jobs/download-job-message';
@@ -25,11 +29,6 @@ import {
   YOUTUBE_OVERLAY_SCRIPT_FILE,
 } from '../src/features/youtube-overlay/youtube-overlay-message';
 import { isSupportedYoutubePageUrl } from '../src/features/youtube-overlay/youtube-page';
-
-/** service worker가 유휴 종료 후 다시 깨어났을 때 진행 중 job 상태 확인을 재개시키는 반복 알람 이름. */
-const JOB_RECOVERY_ALARM_NAME = 'download-job-recovery';
-/** 복구 알람 주기(분). Chrome은 배포판 확장에서 1분 미만 주기를 허용하지 않는다. */
-const JOB_RECOVERY_ALARM_PERIOD_MINUTES = 1;
 
 /** Background에서 사용하는 MyTube Extract API client. */
 const myTubeExtractClient = createMyTubeExtractClient();
@@ -59,9 +58,35 @@ const downloadJobManager = createDownloadJobManager({
   scheduler: createTimeoutPollingScheduler(),
 });
 
-// service worker는 유휴 종료 뒤 다시 깨어나거나 브라우저가 재시작될 때마다 이 모듈이 처음부터 다시
-// 평가된다 — 그때마다 저장돼 있던 진행 중 job의 추적을 다시 이어붙인다.
-void downloadJobManager.resumeTracking();
+/** 동시에 여러 이벤트가 recovery를 시작해도 active job 복구를 한 번만 실행한다. */
+let downloadJobRecoveryPromise: Promise<void> | null = null;
+
+/** recovery alarm을 확인한 뒤 저장된 진행 중 job의 추적을 재개한다. */
+function resumeDownloadJobs(): Promise<void> {
+  if (!downloadJobRecoveryPromise) {
+    downloadJobRecoveryPromise = ensureJobRecoveryAlarm(chrome.alarms)
+      .catch(() => {
+        // alarm 확인이 일시적으로 실패해도 job 복구는 시도하고, 다음 시작 때 다시 확인한다.
+      })
+      .then(() => downloadJobManager.resumeTracking())
+      .finally(() => {
+        downloadJobRecoveryPromise = null;
+      });
+  }
+
+  return downloadJobRecoveryPromise;
+}
+
+/** 시작·alarm 이벤트에서 복구 실패가 다른 Background 이벤트를 막지 않게 한다. */
+function triggerDownloadJobRecovery(): void {
+  void resumeDownloadJobs().catch(() => {
+    // 다음 service worker 시작 또는 recovery alarm에서 다시 복구를 시도한다.
+  });
+}
+
+// service worker가 유휴 종료 뒤 다시 깨어나거나 브라우저가 재시작될 때마다 저장된 진행 중 job의
+// 추적을 다시 이어붙이고, 유실된 recovery alarm도 복원한다.
+triggerDownloadJobRecovery();
 
 /** Popup의 job 제출 요청을 처리하는 handler. */
 const handleDownloadJobSubmit = createDownloadJobSubmitHandler({
@@ -71,6 +96,8 @@ const handleDownloadJobSubmit = createDownloadJobSubmitHandler({
 
 /** YouTube 일반 영상 Overlay Background service worker. */
 export default defineBackground(() => {
+  chrome.runtime.onStartup.addListener(triggerDownloadJobRecovery);
+
   chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     if (isYoutubeOverlayEnableRequest(message)) {
       void activateCurrentYoutubeTab()
@@ -116,13 +143,7 @@ export default defineBackground(() => {
       return;
     }
 
-    void downloadJobManager.resumeTracking();
-  });
-
-  // setTimeout 기반 빠른 폴링은 service worker가 종료되면 함께 사라지므로, 유휴 종료로 폴링이
-  // 끊긴 job도 놓치지 않도록 최소 주기의 반복 알람으로 복구 경로를 보장한다.
-  chrome.alarms.create(JOB_RECOVERY_ALARM_NAME, {
-    periodInMinutes: JOB_RECOVERY_ALARM_PERIOD_MINUTES,
+    triggerDownloadJobRecovery();
   });
 
   chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
