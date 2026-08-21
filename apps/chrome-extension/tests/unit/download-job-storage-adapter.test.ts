@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { type DownloadJob } from '../../src/domain/download-job/download-job';
 import {
   LATEST_DOWNLOAD_JOB_STORAGE_KEY,
+  RECENT_DOWNLOAD_JOBS_STORAGE_KEY,
   createDownloadJobStorageAdapter,
 } from '../../src/adapters/chrome/download-job-storage';
 
@@ -24,6 +25,82 @@ function createJob(overrides: Partial<DownloadJob> = {}): DownloadJob {
 }
 
 describe('download job storage adapter', () => {
+  it('loads the recent jobs list and preserves its newest-first order', async () => {
+    /** 저장된 최근 job 목록. */
+    const jobs = [
+      createJob({ jobId: 'job-2', status: 'processing' }),
+      createJob({ jobId: 'job-1', status: 'completed' }),
+    ];
+    /** 테스트용 Chrome API. */
+    const chromeApi = createChromeApi({
+      lastError: null,
+      storedItems: { [RECENT_DOWNLOAD_JOBS_STORAGE_KEY]: jobs },
+    });
+    /** job storage adapter. */
+    const adapter = createDownloadJobStorageAdapter(chromeApi);
+
+    await expect(adapter.loadJobs()).resolves.toEqual(jobs);
+    expect(chromeApi.storage.local.get).toHaveBeenCalledWith(
+      [RECENT_DOWNLOAD_JOBS_STORAGE_KEY, LATEST_DOWNLOAD_JOB_STORAGE_KEY],
+      expect.any(Function),
+    );
+  });
+
+  it('migrates the legacy latest job into a one-item recent jobs list', async () => {
+    /** 기존 단일 job. */
+    const job = createJob({ status: 'processing' });
+    /** 테스트용 Chrome API. */
+    const chromeApi = createChromeApi({
+      lastError: null,
+      storedItems: { [LATEST_DOWNLOAD_JOB_STORAGE_KEY]: job },
+    });
+    /** job storage adapter. */
+    const adapter = createDownloadJobStorageAdapter(chromeApi);
+
+    await expect(adapter.loadJobs()).resolves.toEqual([job]);
+  });
+
+  it('saves the complete recent jobs list under its dedicated storage key', async () => {
+    /** 테스트용 Chrome API. */
+    const chromeApi = createChromeApi({ lastError: null, storedItems: {} });
+    /** job storage adapter. */
+    const adapter = createDownloadJobStorageAdapter(chromeApi);
+    /** 저장할 최근 job 목록. */
+    const jobs = [createJob(), createJob({ jobId: 'job-2', status: 'completed' })];
+
+    await adapter.saveJobs(jobs);
+
+    expect(chromeApi.storage.local.set).toHaveBeenCalledWith(
+      { [RECENT_DOWNLOAD_JOBS_STORAGE_KEY]: jobs },
+      expect.any(Function),
+    );
+  });
+
+  it('notifies recent jobs subscribers only for local recent-list changes', () => {
+    /** 테스트용 Chrome API. */
+    const chromeApi = createChromeApi({ lastError: null, storedItems: {} });
+    /** job storage adapter. */
+    const adapter = createDownloadJobStorageAdapter(chromeApi);
+    /** 구독 listener. */
+    const listener = vi.fn();
+    /** 변경된 job 목록. */
+    const jobs = [createJob({ status: 'completed' })];
+
+    adapter.subscribeJobs(listener);
+
+    chromeApi.storage.onChanged.__fire(
+      { [RECENT_DOWNLOAD_JOBS_STORAGE_KEY]: { newValue: jobs } },
+      'sync',
+    );
+    expect(listener).not.toHaveBeenCalled();
+
+    chromeApi.storage.onChanged.__fire(
+      { [RECENT_DOWNLOAD_JOBS_STORAGE_KEY]: { newValue: jobs } },
+      'local',
+    );
+    expect(listener).toHaveBeenCalledWith(jobs);
+  });
+
   it('resolves null when no job has been saved yet', async () => {
     /** 테스트용 Chrome API. */
     const chromeApi = createChromeApi({ lastError: null, storedItems: {} });

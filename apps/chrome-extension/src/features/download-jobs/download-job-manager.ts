@@ -17,11 +17,21 @@ import {
 
 /** job 생성 직후 상태를 확인하는 간격(ms). */
 export const FAST_POLL_INTERVAL_MS = 2500;
+/** Popup에 보관하는 settled job의 최대 목록 길이. 진행 중 job은 이 상한으로 제거하지 않는다. */
+export const MAX_RECENT_DOWNLOAD_JOBS = 5;
 
 /** 실제 타이머 대신 주입해 폴링 시점을 통제할 수 있는 scheduler. */
 export type JobPollingScheduler = {
   /** delayMs 이후 callback을 실행하도록 예약하고, 취소 함수를 반환한다. */
   scheduleDelay(callback: () => void, delayMs: number): () => void;
+};
+
+/** Popup이 다시 열려도 최근 job 목록을 복원·저장하는 의존성. */
+export type RecentDownloadJobsStore = {
+  /** 저장된 최근 job 목록을 읽는다. */
+  loadJobs(): Promise<DownloadJob[]>;
+  /** 최근 job 목록을 저장한다. */
+  saveJobs(jobs: readonly DownloadJob[]): Promise<void>;
 };
 
 /** Download job manager 의존성. */
@@ -39,6 +49,8 @@ export type DownloadJobManagerDependencies = {
     ActiveDownloadJobsStorageAdapter,
     'loadActiveJobs' | 'removeActiveJob' | 'saveActiveJob'
   >;
+  /** Popup 재오픈 후에도 최근 job 목록을 보여 주기 위한 영속 저장소. */
+  recentJobsStore?: RecentDownloadJobsStore;
 };
 
 /** 다운로드 job 제출 입력. */
@@ -116,11 +128,90 @@ export function createDownloadJobManager(
   const jobs = new Map<string, DownloadJob>();
   /** job 목록 변경 listener 목록. */
   const listeners = new Set<() => void>();
+  /** 최근 job 저장소를 한 번만 읽기 위한 promise. */
+  let recentJobsReady: Promise<void> | null = null;
+  /** 연속된 상태 변경이 오래된 목록을 덮어쓰지 않도록 저장을 직렬화한다. */
+  let recentJobsSaveQueue = Promise.resolve();
+
+  /** 최근 job을 생성 시각 기준 최신순으로 정렬한다. */
+  function getSortedJobs(): DownloadJob[] {
+    return [...jobs.values()].sort((left, right) =>
+      right.createdAt.localeCompare(left.createdAt),
+    );
+  }
+
+  /** 완료·실패 상태인지 판별한다. */
+  function isSettled(job: DownloadJob): boolean {
+    return job.status === 'completed' || job.status === 'failed';
+  }
+
+  /** 목록이 가득 찼을 때 가장 오래된 settled job부터 제거한다. */
+  function retainRecentJobs(): void {
+    while (jobs.size > MAX_RECENT_DOWNLOAD_JOBS) {
+      /** 제거 후보가 될 수 있는 settled job. */
+      const oldestSettledJob = [...jobs.values()]
+        .filter(isSettled)
+        .sort((left, right) => left.createdAt.localeCompare(right.createdAt))[0];
+
+      if (!oldestSettledJob) {
+        // 진행 중 job만 남아 있으면 상태를 잃지 않도록 목록 길이를 초과해 보관한다.
+        return;
+      }
+
+      jobs.delete(oldestSettledJob.jobId);
+    }
+  }
+
+  /** job을 목록에 반영하고 보관 정책을 적용한다. */
+  function rememberJob(job: DownloadJob): void {
+    jobs.set(job.jobId, job);
+    retainRecentJobs();
+  }
 
   /** job 상태를 저장하고 구독자에게 알린다. */
   function setJob(job: DownloadJob): void {
-    jobs.set(job.jobId, job);
+    rememberJob(job);
     listeners.forEach((listener) => listener());
+  }
+
+  /** 저장된 최근 job을 manager에 복원한다. 읽기 실패는 다운로드 흐름을 막지 않는다. */
+  function ensureRecentJobsLoaded(): Promise<void> {
+    if (!dependencies.recentJobsStore) {
+      return Promise.resolve();
+    }
+
+    if (!recentJobsReady) {
+      recentJobsReady = dependencies.recentJobsStore
+        .loadJobs()
+        .then((storedJobs) => {
+          storedJobs.forEach(rememberJob);
+        })
+        .catch(() => {
+          // 최근 이력 저장소가 일시적으로 unavailable이어도 새 다운로드는 계속 허용한다.
+        });
+    }
+
+    return recentJobsReady;
+  }
+
+  /** 현재 목록을 저장한다. 저장 실패가 job 추적이나 다운로드를 막지는 않는다. */
+  function persistRecentJobs(): Promise<void> {
+    if (!dependencies.recentJobsStore) {
+      return Promise.resolve();
+    }
+
+    /** 이번 상태 변경 시점의 최근 job snapshot. */
+    const jobsSnapshot = getSortedJobs();
+
+    recentJobsSaveQueue = recentJobsSaveQueue.then(async () => {
+      try {
+        await dependencies.recentJobsStore?.saveJobs(jobsSnapshot);
+      } catch {
+        // Popup 이력 저장 실패가 실제 job 처리 결과를 바꾸지 않게 한다.
+      }
+    });
+
+    return recentJobsSaveQueue;
   }
 
   // 완료 처리(자동 다운로드)나 다음 폴링으로 넘어가기 전에 항상 이 저장을 기다린다 — 그래야
@@ -163,6 +254,9 @@ export function createDownloadJobManager(
         currentJob.jobId,
       );
       setJob(currentJob);
+      if (dependencies.recentJobsStore) {
+        await persistRecentJobs();
+      }
       await persistTracking(currentJob, tracking);
       tracking.onStatusChange?.(currentJob);
     }
@@ -208,6 +302,9 @@ export function createDownloadJobManager(
     }
 
     setJob(record.job);
+    if (dependencies.recentJobsStore) {
+      await persistRecentJobs();
+    }
 
     /** 재시작 전 상태는 오래됐을 수 있으므로, 대기 없이 즉시 한 번 다시 확인한다. */
     const refreshedJob = await dependencies.myTubeExtractClient.getDownloadJob(
@@ -216,6 +313,9 @@ export function createDownloadJobManager(
     );
 
     setJob(refreshedJob);
+    if (dependencies.recentJobsStore) {
+      await persistRecentJobs();
+    }
     await persistTracking(refreshedJob, tracking);
 
     await trackJobUntilSettled(refreshedJob, tracking).catch(() => {
@@ -225,6 +325,10 @@ export function createDownloadJobManager(
 
   /** 새 job을 생성하고 상태 추적을 시작한다. 실패 알림의 재시도도 이 경계를 재사용한다. */
   async function submitJob(input: SubmitDownloadJobInput): Promise<DownloadJob> {
+    if (dependencies.recentJobsStore) {
+      await ensureRecentJobsLoaded();
+    }
+
     const { localFilename, onStatusChange, ...createInput } = input;
     /** 새로 생성된 job. */
     const job = await dependencies.myTubeExtractClient.createDownloadJob(createInput);
@@ -239,6 +343,9 @@ export function createDownloadJobManager(
     };
 
     setJob(job);
+    if (dependencies.recentJobsStore) {
+      await persistRecentJobs();
+    }
     await persistTracking(job, tracking);
     onStatusChange?.(job);
 
@@ -251,7 +358,7 @@ export function createDownloadJobManager(
 
   return {
     getJobs() {
-      return [...jobs.values()].sort((left, right) => right.createdAt.localeCompare(left.createdAt));
+      return getSortedJobs();
     },
     subscribe(listener) {
       listeners.add(listener);
@@ -262,6 +369,10 @@ export function createDownloadJobManager(
     },
     submitJob,
     async resumeTracking() {
+      if (dependencies.recentJobsStore) {
+        await ensureRecentJobsLoaded();
+      }
+
       /** 영속 저장소에 남아 있던 진행 중 job 기록들. */
       const records = await dependencies.activeJobsStore.loadActiveJobs();
 

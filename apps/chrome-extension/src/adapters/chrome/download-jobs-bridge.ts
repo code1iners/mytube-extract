@@ -28,10 +28,14 @@ export type SubmitDownloadJobBridgeInput = {
 // job 제출은 메시지로 Background에 위임하고, 상태 조회·구독은 Background가 기록한
 // storage만 읽는다 — Popup은 서버를 직접 조회하지 않는다.
 export type DownloadJobsBridge = {
+  /** Background가 저장해 둔 최근 job 목록을 읽는다. */
+  getJobs(): Promise<DownloadJob[]>;
   /** Background가 저장해 둔 최근 job 상태를 읽는다. */
   getLatestJob(): Promise<DownloadJob | null>;
   /** Background에 새 다운로드 job 제출을 요청하고, 생성 직후 상태를 돌려받는다. */
   submitJob(input: SubmitDownloadJobBridgeInput): Promise<DownloadJob>;
+  /** 저장된 최근 job이 바뀔 때마다 호출된다. */
+  subscribeJobs(listener: (jobs: DownloadJob[]) => void): () => void;
   /** 저장된 최근 job이 바뀔 때마다 호출된다. */
   subscribeLatestJob(listener: (job: DownloadJob) => void): () => void;
 };
@@ -42,6 +46,9 @@ export function createDownloadJobsBridge(
   storage: DownloadJobStorageAdapter = createDownloadJobStorageAdapter(chromeApi),
 ): DownloadJobsBridge {
   return {
+    getJobs() {
+      return storage.loadJobs();
+    },
     getLatestJob() {
       return storage.loadLatestJob();
     },
@@ -74,6 +81,9 @@ export function createDownloadJobsBridge(
           },
         );
       });
+    },
+    subscribeJobs(listener) {
+      return storage.subscribeJobs(listener);
     },
     subscribeLatestJob(listener) {
       return storage.subscribeLatestJob(listener);

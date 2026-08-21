@@ -289,8 +289,6 @@ async function verifyServerUnavailableFlow(origin) {
     await page.getByLabel('추출 URL').fill('https://www.youtube.com/watch?v=abc123_DEF0');
     await page.getByRole('button', { name: '추출 시작' }).click();
     await expectStatusText(page, 'Server is unavailable.');
-    await expectRequestSettingsHidden(page);
-    await page.getByRole('button', { name: '요청 설정으로 돌아가기' }).click();
     await page.getByLabel('추출 URL').waitFor({ timeout: 10000 });
 
     /** Fake Chrome downloads API가 요청한 URL. */
@@ -334,9 +332,15 @@ async function verifyDownloadFlow(origin) {
     await expectDownloadButtonVisibleInViewport(page);
     await page.getByRole('button', { name: '추출 시작' }).click();
     await expectStatusText(page, '추출 요청을 시작했습니다.');
-    await expectRequestSettingsHidden(page);
-    await page.getByRole('button', { name: '새 요청' }).click();
     await page.getByLabel('추출 URL').waitFor({ timeout: 10000 });
+    await page.getByRole('heading', { name: '최근 요청' }).waitFor({ timeout: 10000 });
+
+    /** 완료된 job 목록 항목 수. */
+    const recentJobCount = await page.getByRole('listitem').count();
+
+    if (recentJobCount !== 1) {
+      throw new Error(`Expected one recent job, got ${recentJobCount}`);
+    }
 
     /** Fake Chrome downloads API가 요청한 URL. */
     const downloadUrl = await page.evaluate(() => globalThis.__myTubeExtractDownloadUrl);
@@ -435,7 +439,9 @@ async function routeMyTubeExtractApi(page, { requests, healthOk }) {
  * 직접 흉내 낸다. */
 async function installFakeChromeApi(page, options) {
   await page.addInitScript((chromeOptions) => {
-    /** 최근 job을 저장하는 storage key. entrypoints/popup/dev-preview-chrome-api.ts, src/adapters/chrome/download-job-storage.ts와 동일한 key를 사용한다. */
+    /** 최근 job 목록을 저장하는 storage key. entrypoints/popup/dev-preview-chrome-api.ts, src/adapters/chrome/download-job-storage.ts와 동일한 key를 사용한다. */
+    const RECENT_DOWNLOAD_JOBS_STORAGE_KEY = 'recentDownloadJobs';
+    /** 이전 버전에서 사용하던 단일 job storage key. */
     const LATEST_DOWNLOAD_JOB_STORAGE_KEY = 'latestDownloadJob';
     /** 등록된 storage.onChanged listener 목록. */
     const storageChangeListeners = [];
@@ -509,7 +515,14 @@ async function installFakeChromeApi(page, options) {
           downloadUrl: rawJob.downloadUrl ? `${request.apiBaseUrl}${rawJob.downloadUrl}` : null,
         };
 
-        setStorageItems({ [LATEST_DOWNLOAD_JOB_STORAGE_KEY]: job });
+        /** 기존에 저장된 최근 job 목록. */
+        const recentJobs =
+          globalThis.__myTubeExtractStoredOptions[RECENT_DOWNLOAD_JOBS_STORAGE_KEY] ?? [];
+
+        setStorageItems({
+          [LATEST_DOWNLOAD_JOB_STORAGE_KEY]: job,
+          [RECENT_DOWNLOAD_JOBS_STORAGE_KEY]: [job, ...recentJobs],
+        });
 
         if (job.status === 'completed' && job.downloadUrl) {
           await new Promise((resolve) => {
@@ -645,16 +658,6 @@ async function closeBrowserContext(context) {
 /** Status text가 기대값이 될 때까지 기다린다. */
 async function expectStatusText(page, expectedText) {
   await page.getByText(expectedText, { exact: true }).waitFor({ timeout: 10000 });
-}
-
-/** 처리·결과·오류 화면에 request form이 남지 않았는지 확인한다. */
-async function expectRequestSettingsHidden(page) {
-  /** request form URL input 개수. */
-  const sourceUrlInputCount = await page.getByLabel('추출 URL').count();
-
-  if (sourceUrlInputCount !== 0) {
-    throw new Error('Expected request settings to be hidden after submission.');
-  }
 }
 
 /** Download button disabled 상태를 확인한다. */

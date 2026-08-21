@@ -66,6 +66,8 @@ function createDependencies(
       ...overrides.storage,
     },
     downloadJobs: {
+      getJobs: vi.fn().mockResolvedValue([]),
+      subscribeJobs: vi.fn().mockReturnValue(() => {}),
       getLatestJob: vi.fn().mockResolvedValue(null),
       submitJob: vi.fn().mockResolvedValue(createCompletedJob()),
       subscribeLatestJob: vi.fn().mockReturnValue(() => {}),
@@ -267,9 +269,11 @@ describe('popup download model', () => {
     /** Popup model dependency. */
     const dependencies = createDependencies({
       downloadJobs: {
-        getLatestJob: vi
+        getJobs: vi
           .fn()
-          .mockResolvedValue(createJob({ message: '영상을 다운로드하고 있습니다.', status: 'processing' })),
+          .mockResolvedValue([
+            createJob({ message: '영상을 다운로드하고 있습니다.', status: 'processing' }),
+          ]),
       },
     });
     /** Popup download model. */
@@ -291,9 +295,11 @@ describe('popup download model', () => {
     /** Popup model dependency. */
     const dependencies = createDependencies({
       downloadJobs: {
-        getLatestJob: vi
+        getJobs: vi
           .fn()
-          .mockResolvedValue(createJob({ message: '로그인이 필요한 영상입니다.', status: 'failed' })),
+          .mockResolvedValue([
+            createJob({ message: '로그인이 필요한 영상입니다.', status: 'failed' }),
+          ]),
       },
     });
     /** Popup download model. */
@@ -319,11 +325,11 @@ describe('popup download model', () => {
 
   it('updates the snapshot when background pushes a job change without a new submit', async () => {
     /** background가 저장한 최근 job 구독 listener. */
-    let latestJobListener: ((job: DownloadJob) => void) | undefined;
+    let latestJobListener: ((jobs: DownloadJob[]) => void) | undefined;
     /** Popup model dependency. */
     const dependencies = createDependencies({
       downloadJobs: {
-        subscribeLatestJob: vi.fn().mockImplementation((listener) => {
+        subscribeJobs: vi.fn().mockImplementation((listener) => {
           latestJobListener = listener;
 
           return () => {};
@@ -335,7 +341,9 @@ describe('popup download model', () => {
 
     await model.initialize();
 
-    latestJobListener?.(createJob({ message: '영상을 다운로드하고 있습니다.', status: 'processing' }));
+    latestJobListener?.([
+      createJob({ message: '영상을 다운로드하고 있습니다.', status: 'processing' }),
+    ]);
 
     expect(model.getSnapshot()).toMatchObject({
       downloading: true,
@@ -348,7 +356,7 @@ describe('popup download model', () => {
 
   it('does not let a late submit response overwrite a status the background subscription already pushed', async () => {
     /** background가 저장한 최근 job 구독 listener. */
-    let latestJobListener: ((job: DownloadJob) => void) | undefined;
+    let latestJobListener: ((jobs: DownloadJob[]) => void) | undefined;
     /** job 제출 응답을 늦추는 resolve 함수. */
     let resolveSubmit: (job: DownloadJob) => void = () => {};
     /** Popup model dependency. */
@@ -360,7 +368,7 @@ describe('popup download model', () => {
               resolveSubmit = resolve;
             }),
         ),
-        subscribeLatestJob: vi.fn().mockImplementation((listener) => {
+        subscribeJobs: vi.fn().mockImplementation((listener) => {
           latestJobListener = listener;
 
           return () => {};
@@ -377,7 +385,7 @@ describe('popup download model', () => {
 
     // storage 구독이 먼저 completed 상태를 반영한다 — 예를 들어 service worker가 느리게
     // 응답을 돌려주는 동안 폴링이 이미 완료 상태까지 진행된 경우다.
-    latestJobListener?.(createCompletedJob());
+    latestJobListener?.([createCompletedJob()]);
 
     expect(model.getSnapshot().status).toMatchObject({ kind: 'download-started' });
 
@@ -507,14 +515,14 @@ describe('popup download model', () => {
 
   it('reflects queued and processing job status live via the background job subscription', async () => {
     /** background가 저장한 최근 job 구독 listener. */
-    let latestJobListener: ((job: DownloadJob) => void) | undefined;
+    let latestJobListener: ((jobs: DownloadJob[]) => void) | undefined;
     /** Popup model dependency. */
     const dependencies = createDependencies({
       downloadJobs: {
         submitJob: vi
           .fn()
           .mockResolvedValue(createJob({ message: '요청이 대기 중입니다.', status: 'queued' })),
-        subscribeLatestJob: vi.fn().mockImplementation((listener) => {
+        subscribeJobs: vi.fn().mockImplementation((listener) => {
           latestJobListener = listener;
 
           return () => {};
@@ -533,14 +541,16 @@ describe('popup download model', () => {
       message: '요청이 대기 중입니다.',
     });
 
-    latestJobListener?.(createJob({ message: '영상을 다운로드하고 있습니다.', status: 'processing' }));
+    latestJobListener?.([
+      createJob({ message: '영상을 다운로드하고 있습니다.', status: 'processing' }),
+    ]);
 
     expect(model.getSnapshot().status).toMatchObject({
       kind: 'job-processing',
       message: '영상을 다운로드하고 있습니다.',
     });
 
-    latestJobListener?.(createCompletedJob());
+    latestJobListener?.([createCompletedJob()]);
 
     expect(model.getSnapshot().status).toMatchObject({
       kind: 'download-started',
@@ -638,5 +648,57 @@ describe('popup download model', () => {
         localFilename: '.. etc passwd',
       }),
     );
+  });
+
+  it('keeps multiple job states independently while allowing a new request during processing', async () => {
+    /** background가 저장한 최근 job 목록 listener. */
+    let jobsListener: ((jobs: DownloadJob[]) => void) | undefined;
+    /** 오래된 대기 job. */
+    const firstJob = createJob({
+      createdAt: '2026-06-24T05:32:00.000Z',
+      jobId: 'job-1',
+      status: 'queued',
+    });
+    /** 최신 처리 중 job. */
+    const secondJob = createJob({
+      createdAt: '2026-06-24T05:33:00.000Z',
+      jobId: 'job-2',
+      message: '두 번째 영상을 처리하고 있습니다.',
+      status: 'processing',
+    });
+    /** Popup model dependency. */
+    const dependencies = createDependencies({
+      downloadJobs: {
+        subscribeJobs: vi.fn().mockImplementation((listener) => {
+          jobsListener = listener;
+
+          return () => {};
+        }),
+      },
+    });
+    /** Popup download model. */
+    const model = createPopupDownloadModel(dependencies);
+
+    await model.initialize();
+    await model.updateOption('sourceUrl', 'https://www.youtube.com/watch?v=abc123_DEF0');
+    jobsListener?.([secondJob, firstJob]);
+
+    expect(model.getSnapshot()).toMatchObject({
+      canDownload: true,
+      downloading: true,
+      jobs: [secondJob, firstJob],
+      status: { kind: 'job-processing', message: '두 번째 영상을 처리하고 있습니다.' },
+    });
+
+    const secondCompletedJob = createCompletedJob({
+      createdAt: secondJob.createdAt,
+      jobId: secondJob.jobId,
+      message: '두 번째 영상 추출이 완료되었습니다.',
+    });
+    jobsListener?.([secondCompletedJob, firstJob]);
+
+    expect(model.getSnapshot().jobs).toEqual([secondCompletedJob, firstJob]);
+    expect(model.getSnapshot().jobs.find((job) => job.jobId === 'job-1')?.status).toBe('queued');
+    expect(model.getSnapshot().downloading).toBe(true);
   });
 });

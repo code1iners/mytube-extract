@@ -103,6 +103,17 @@ describe('download jobs bridge', () => {
     await expect(bridge.getLatestJob()).resolves.toEqual(job);
   });
 
+  it('reads all recent jobs from the storage adapter', async () => {
+    /** 저장된 job 목록. */
+    const jobs = [createJob({ jobId: 'job-2' }), createJob({ jobId: 'job-1' })];
+    /** 테스트용 storage adapter. */
+    const storage = createStorage({ jobs });
+    /** download jobs bridge. */
+    const bridge = createDownloadJobsBridge(createChromeApi({}), storage);
+
+    await expect(bridge.getJobs()).resolves.toEqual(jobs);
+  });
+
   it('delegates subscribeLatestJob to the storage adapter', () => {
     /** 테스트용 storage adapter. */
     const storage = createStorage();
@@ -114,6 +125,19 @@ describe('download jobs bridge', () => {
     bridge.subscribeLatestJob(listener);
 
     expect(storage.subscribeLatestJob).toHaveBeenCalledWith(listener);
+  });
+
+  it('delegates subscribeJobs to the storage adapter', () => {
+    /** 테스트용 storage adapter. */
+    const storage = createStorage();
+    /** download jobs bridge. */
+    const bridge = createDownloadJobsBridge(createChromeApi({}), storage);
+    /** 구독 listener. */
+    const listener = vi.fn();
+
+    bridge.subscribeJobs(listener);
+
+    expect(storage.subscribeJobs).toHaveBeenCalledWith(listener);
   });
 });
 
@@ -138,8 +162,14 @@ function createChromeApi({
 }
 
 /** 테스트용 download job storage adapter를 만든다. */
-function createStorage({ latestJob = null }: { latestJob?: DownloadJob | null } = {}) {
+function createStorage({
+  jobs = [],
+  latestJob = null,
+}: { jobs?: DownloadJob[]; latestJob?: DownloadJob | null } = {}) {
   return {
+    loadJobs: vi.fn().mockResolvedValue(jobs),
+    saveJobs: vi.fn().mockResolvedValue(undefined),
+    subscribeJobs: vi.fn().mockReturnValue(() => {}),
     loadLatestJob: vi.fn().mockResolvedValue(latestJob),
     saveLatestJob: vi.fn().mockResolvedValue(undefined),
     subscribeLatestJob: vi.fn().mockReturnValue(() => {}),

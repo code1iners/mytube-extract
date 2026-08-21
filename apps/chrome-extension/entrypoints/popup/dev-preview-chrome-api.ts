@@ -1,10 +1,13 @@
 import { type TrackedDownloadJobRecord } from '../../src/adapters/chrome/active-download-jobs-storage';
 import { createNoopDownloadNotificationsAdapter } from '../../src/adapters/chrome/notifications';
-import { LATEST_DOWNLOAD_JOB_STORAGE_KEY } from '../../src/adapters/chrome/download-job-storage';
+import {
+  LATEST_DOWNLOAD_JOB_STORAGE_KEY,
+  RECENT_DOWNLOAD_JOBS_STORAGE_KEY,
+} from '../../src/adapters/chrome/download-job-storage';
+import { type DownloadJob } from '../../src/domain/download-job/download-job';
 import {
   createDownloadJobManager,
   createTimeoutPollingScheduler,
-  persistLatestJob,
 } from '../../src/features/download-jobs/download-job-manager';
 import { isDownloadJobSubmitRequest } from '../../src/features/download-jobs/download-job-message';
 import { createDownloadJobSubmitHandler } from '../../src/features/download-jobs/download-job-submit-handler';
@@ -140,16 +143,34 @@ function createDevPreviewChromeApi({
     },
     myTubeExtractClient,
     notifications: createNoopDownloadNotificationsAdapter(),
+    recentJobsStore: {
+      loadJobs: () => {
+        const storedJobs = currentOptions[RECENT_DOWNLOAD_JOBS_STORAGE_KEY];
+
+        if (Array.isArray(storedJobs)) {
+          return Promise.resolve(storedJobs as DownloadJob[]);
+        }
+
+        const legacyJob = currentOptions[LATEST_DOWNLOAD_JOB_STORAGE_KEY] as
+          | DownloadJob
+          | undefined;
+
+        return Promise.resolve(legacyJob ? [legacyJob] : []);
+      },
+      saveJobs: (jobs) => {
+        setStorageItems({
+          [LATEST_DOWNLOAD_JOB_STORAGE_KEY]: jobs[0],
+          [RECENT_DOWNLOAD_JOBS_STORAGE_KEY]: jobs,
+        });
+        return Promise.resolve();
+      },
+    },
     scheduler: createTimeoutPollingScheduler(),
   });
   /** Preview용 job 제출 요청 handler. Background의 message handler와 동일하게 동작한다. */
   const handleDownloadJobSubmit = createDownloadJobSubmitHandler({
     jobManager: downloadJobManager,
     myTubeExtractClient,
-  });
-
-  persistLatestJob(downloadJobManager, (job) => {
-    setStorageItems({ [LATEST_DOWNLOAD_JOB_STORAGE_KEY]: job });
   });
 
   /** Popup이 사용하는 Chrome API subset. */

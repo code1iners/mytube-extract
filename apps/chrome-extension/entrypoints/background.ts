@@ -7,7 +7,6 @@ import { createYoutubeOverlayAdapter } from '../src/adapters/chrome/youtube-over
 import {
   createDownloadJobManager,
   createTimeoutPollingScheduler,
-  persistLatestJob,
 } from '../src/features/download-jobs/download-job-manager';
 import { isDownloadJobSubmitRequest } from '../src/features/download-jobs/download-job-message';
 import { createDownloadJobSubmitHandler } from '../src/features/download-jobs/download-job-submit-handler';
@@ -54,6 +53,7 @@ const downloadJobManager = createDownloadJobManager({
   downloads,
   myTubeExtractClient,
   notifications,
+  recentJobsStore: downloadJobStorage,
   scheduler: createTimeoutPollingScheduler(),
 });
 
@@ -65,12 +65,6 @@ void downloadJobManager.resumeTracking();
 const handleDownloadJobSubmit = createDownloadJobSubmitHandler({
   jobManager: downloadJobManager,
   myTubeExtractClient,
-});
-
-// job 상태가 바뀔 때마다 최신 job을 저장해 Popup이 서버를 직접 조회하지 않고도
-// storage 구독만으로 최신 상태를 읽을 수 있게 한다.
-persistLatestJob(downloadJobManager, (job) => {
-  void downloadJobStorage.saveLatestJob(job);
 });
 
 /** YouTube 일반 영상 Overlay Background service worker. */

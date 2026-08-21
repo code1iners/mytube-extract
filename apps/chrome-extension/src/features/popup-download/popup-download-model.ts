@@ -62,6 +62,10 @@ export type PopupDownloadSnapshot = {
   canDownload: boolean;
   /** 다운로드 진행 중 여부. */
   downloading: boolean;
+  /** 현재 제출 요청의 job 생성 응답을 기다리는지 여부. */
+  submitting: boolean;
+  /** 최근 job 목록. 최신순으로 정렬한다. */
+  jobs: DownloadJob[];
   /** 현재 form option. */
   options: DownloadOptions;
   /** 현재 상태. */
@@ -97,6 +101,8 @@ export type PopupDownloadModel = {
 const INITIAL_SNAPSHOT: PopupDownloadSnapshot = {
   canDownload: false,
   downloading: false,
+  submitting: false,
+  jobs: [],
   options: DEFAULT_DOWNLOAD_OPTIONS,
   status: MISSING_SOURCE_URL_STATUS,
   youtubeOverlay: {
@@ -113,6 +119,16 @@ const JOB_STATUS_RANK: Record<DownloadJobStatus, number> = {
   processing: 1,
   queued: 0,
 };
+
+/** 아직 끝나지 않은 job인지 확인한다. */
+function isUnsettledJob(job: DownloadJob): boolean {
+  return job.status === 'queued' || job.status === 'processing';
+}
+
+/** Popup 목록을 최신 job부터 정렬한다. */
+function sortJobs(jobs: readonly DownloadJob[]): DownloadJob[] {
+  return [...jobs].sort((left, right) => right.createdAt.localeCompare(left.createdAt));
+}
 
 /** Chrome runtime용 popup model을 만든다. */
 export function createChromePopupDownloadModel(): PopupDownloadModel {
@@ -132,6 +148,8 @@ export function createPopupDownloadModel(
   let snapshot = INITIAL_SNAPSHOT;
   /** Snapshot 변경 listener 목록. */
   const listeners = new Set<() => void>();
+  /** 비동기 초기화가 사용자의 이미 입력한 값·제출 상태를 덮어쓰지 않게 한다. */
+  let hasUserInteracted = false;
 
   /** Snapshot을 갱신하고 listener에게 알린다. */
   function setSnapshot(nextSnapshot: PopupDownloadSnapshot) {
@@ -155,7 +173,7 @@ export function createPopupDownloadModel(
 
       return {
         ...baseSnapshot,
-        canDownload: !baseSnapshot.downloading,
+        canDownload: !baseSnapshot.submitting,
         status: createReadyStatus(),
       };
     } catch {
@@ -167,56 +185,81 @@ export function createPopupDownloadModel(
     }
   }
 
-  /** Background가 추적 중인 job 상태를 snapshot에 반영한다. */
-  function applyDownloadJobStatus(
+  /** Background가 저장한 최근 job 목록을 snapshot에 반영한다. */
+  function applyDownloadJobsStatus(
     baseSnapshot: PopupDownloadSnapshot,
-    job: DownloadJob,
+    jobs: readonly DownloadJob[],
   ): PopupDownloadSnapshot {
-    if (job.status === 'queued' || job.status === 'processing') {
-      return {
-        ...baseSnapshot,
-        canDownload: false,
-        downloading: true,
-        status:
-          job.status === 'queued'
-            ? createJobQueuedStatus(job.message)
-            : createJobProcessingStatus(job.message),
-      };
+    /** 화면에 표시할 정렬된 job 목록. */
+    const sortedJobs = sortJobs(jobs);
+    /** 가장 최근 job의 상태를 form 아래 안내에도 반영한다. */
+    const latestJob = sortedJobs[0];
+    /** 진행 중 job이 하나라도 있는지 여부. */
+    const hasUnsettledJob = sortedJobs.some(isUnsettledJob);
+    /** job 목록과 진행 상태를 반영한 기본 snapshot. */
+    const nextSnapshot = renderReadyState({
+      ...baseSnapshot,
+      downloading: hasUnsettledJob,
+      jobs: sortedJobs,
+      submitting: baseSnapshot.submitting,
+    });
+
+    if (!latestJob) {
+      return nextSnapshot;
     }
 
-    /** job이 끝난 뒤 재요청 가능 여부까지 반영한 snapshot. */
-    const settledSnapshot = renderReadyState({ ...baseSnapshot, downloading: false });
-
     return {
-      ...settledSnapshot,
-      status:
-        job.status === 'completed' ? DOWNLOAD_STARTED_STATUS : createDownloadFailedStatus(job.message),
+      ...nextSnapshot,
+      status: getJobPopupStatus(latestJob),
     };
   }
 
-  /** 마지막으로 반영한 job. job 제출 응답과 storage 구독이 서로 다른 시점에 도착할 수 있어,
-   * 뒤늦게 도착한 응답이 이미 반영된 더 진행된 상태를 덮어쓰지 않도록 순서를 비교하는 데 쓴다. */
-  let lastAppliedJob: DownloadJob | null = null;
+  /** 한 job의 상태를 Popup 안내 상태로 바꾼다. */
+  function getJobPopupStatus(job: DownloadJob): PopupStatus {
+    if (job.status === 'queued') return createJobQueuedStatus(job.message);
+    if (job.status === 'processing') return createJobProcessingStatus(job.message);
+    if (job.status === 'completed') return DOWNLOAD_STARTED_STATUS;
+    return createDownloadFailedStatus(job.message);
+  }
 
-  /** job 갱신을 snapshot에 반영해도 되는지 확인한다. 같은 job의 더 이전 단계로 되돌아가는
-   * 갱신이면 무시한다. */
+  /** job별 마지막 상태. 제출 응답과 storage 구독이 서로 다른 시점에 도착해도 되돌리지 않는다. */
+  const lastAppliedJobs = new Map<string, DownloadJob>();
+
+  /** job 갱신이 같은 job의 더 이전 단계로 되돌아가는지 확인한다. */
   function acceptJobUpdate(job: DownloadJob): boolean {
-    if (lastAppliedJob && lastAppliedJob.jobId === job.jobId) {
-      if (JOB_STATUS_RANK[job.status] < JOB_STATUS_RANK[lastAppliedJob.status]) {
-        return false;
-      }
+    /** 같은 job에 대해 이미 반영한 최신 상태. */
+    const lastAppliedJob = lastAppliedJobs.get(job.jobId);
+
+    if (lastAppliedJob && JOB_STATUS_RANK[job.status] < JOB_STATUS_RANK[lastAppliedJob.status]) {
+      return false;
     }
 
-    lastAppliedJob = job;
+    lastAppliedJobs.set(job.jobId, job);
 
     return true;
   }
 
+  /** 저장소에서 온 목록의 각 job을 순서 역행 없이 병합한다. */
+  function mergeJobList(jobs: readonly DownloadJob[]): DownloadJob[] {
+    return jobs.map((job) => {
+      const accepted = acceptJobUpdate(job);
+
+      return accepted ? job : lastAppliedJobs.get(job.jobId) ?? job;
+    });
+  }
+
+  /** 현재 snapshot의 job 하나를 목록에 추가하거나 갱신한다. */
+  function upsertJob(job: DownloadJob): DownloadJob[] {
+    const jobsById = new Map(snapshot.jobs.map((item) => [item.jobId, item]));
+
+    jobsById.set(job.jobId, job);
+
+    return sortJobs([...jobsById.values()]);
+  }
+
   // Popup이 열려 있는 동안 Background가 기록한 job 상태 변경을 새로고침 없이 반영한다.
-  dependencies.downloadJobs.subscribeLatestJob((job) => {
-    if (acceptJobUpdate(job)) {
-      setSnapshot(applyDownloadJobStatus(snapshot, job));
-    }
+  dependencies.downloadJobs.subscribeJobs((jobs) => {
+    setSnapshot(applyDownloadJobsStatus(snapshot, mergeJobList(jobs)));
   });
 
   return {
@@ -268,27 +311,45 @@ export function createPopupDownloadModel(
         sourceUrl: '',
       };
 
-      /** Background가 저장해 둔 최근 job. 있으면 요청 form보다 그 상태를 먼저 보여준다. */
-      let latestJob: DownloadJob | null = null;
+      /** Background가 저장해 둔 최근 job 목록. */
+      let jobs: DownloadJob[] = [];
 
       try {
-        latestJob = await dependencies.downloadJobs.getLatestJob();
+        jobs = await dependencies.downloadJobs.getJobs();
       } catch {
-        latestJob = null;
+        jobs = [];
       }
 
       /** 옵션·권한 상태까지 반영한 기본 snapshot. */
       const baseSnapshot = renderReadyState({
         ...snapshot,
-        options,
+        options: hasUserInteracted ? snapshot.options : options,
         youtubeOverlay,
       });
 
-      setSnapshot(
-        latestJob && acceptJobUpdate(latestJob)
-          ? applyDownloadJobStatus(baseSnapshot, latestJob)
-          : baseSnapshot,
-      );
+      /** 초기화 중 먼저 반영된 job 목록이 있으면 그 목록을 유지한다. */
+      const jobsToApply = snapshot.jobs.length ? snapshot.jobs : jobs;
+
+      if (snapshot.submitting && jobsToApply.length === 0) {
+        setSnapshot({
+          ...baseSnapshot,
+          canDownload: false,
+          status: snapshot.status,
+          submitting: true,
+        });
+        return;
+      }
+
+      if (
+        hasUserInteracted &&
+        snapshot.status.kind === 'download-failed' &&
+        jobsToApply.length === 0
+      ) {
+        setSnapshot(baseSnapshot);
+        return;
+      }
+
+      setSnapshot(applyDownloadJobsStatus(baseSnapshot, mergeJobList(jobsToApply)));
     },
     async activateYoutubeOverlay() {
       if (snapshot.youtubeOverlay.status === 'requesting') {
@@ -334,6 +395,8 @@ export function createPopupDownloadModel(
       }
     },
     async importCurrentTabUrl() {
+      hasUserInteracted = true;
+
       try {
         /** 현재 활성 탭 URL. */
         const currentTabUrl = await dependencies.tabs.getCurrentTabUrl();
@@ -366,7 +429,8 @@ export function createPopupDownloadModel(
       setSnapshot(
         renderReadyState({
           ...snapshot,
-          downloading: false,
+          downloading: snapshot.jobs.some(isUnsettledJob),
+          submitting: false,
         }),
       );
     },
@@ -381,8 +445,10 @@ export function createPopupDownloadModel(
       /** 제출 시점의 popup snapshot. */
       const submittedSnapshot = snapshot;
 
+      hasUserInteracted = true;
+
       if (
-        submittedSnapshot.downloading ||
+        submittedSnapshot.submitting ||
         !submittedSnapshot.canDownload
       ) {
         return;
@@ -391,13 +457,13 @@ export function createPopupDownloadModel(
       setSnapshot({
         ...submittedSnapshot,
         canDownload: false,
-        downloading: true,
+        submitting: true,
         status: CHECKING_SERVER_STATUS,
       });
 
       try {
         // job 생성과 상태 추적은 Background가 전담한다 — 여기서는 생성 직후 상태만 받고,
-        // 이후 진행 상황은 subscribeLatestJob 구독으로 반영된다.
+        // 이후 진행 상황은 subscribeJobs 구독으로 반영된다.
         const job = await dependencies.downloadJobs.submitJob({
           apiBaseUrl: submittedSnapshot.options.apiBaseUrl,
           localFilename: resolveLocalFilename(submittedSnapshot.options.filename),
@@ -407,9 +473,19 @@ export function createPopupDownloadModel(
         });
 
         // 응답이 늦게 도착해 storage 구독이 이미 더 진행된 상태를 반영했다면 되돌리지 않는다.
-        if (acceptJobUpdate(job)) {
-          setSnapshot(applyDownloadJobStatus(snapshot, job));
-        }
+        const accepted = acceptJobUpdate(job);
+
+        setSnapshot(
+          accepted
+            ? applyDownloadJobsStatus(
+                { ...snapshot, submitting: false },
+                upsertJob(job),
+              )
+            : {
+                ...renderReadyState({ ...snapshot, submitting: false }),
+                status: snapshot.status,
+              },
+        );
       } catch (error) {
         /** 사용자에게 표시할 실패 메시지. */
         const errorMessage =
@@ -417,7 +493,7 @@ export function createPopupDownloadModel(
         /** 실패 후 재시도 가능한 snapshot. */
         const failedSnapshot = renderReadyState({
           ...snapshot,
-          downloading: false,
+          submitting: false,
         });
 
         setSnapshot({
@@ -427,6 +503,8 @@ export function createPopupDownloadModel(
       }
     },
     async updateOption(key, value) {
+      hasUserInteracted = true;
+
       /** 변경된 다운로드 옵션. */
       const options = {
         ...snapshot.options,

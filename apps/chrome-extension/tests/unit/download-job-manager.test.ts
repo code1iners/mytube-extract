@@ -8,6 +8,8 @@ import {
 import {
   DownloadJobFailedError,
   FAST_POLL_INTERVAL_MS,
+  MAX_RECENT_DOWNLOAD_JOBS,
+  type RecentDownloadJobsStore,
   type DownloadJobManagerDependencies,
   type JobPollingScheduler,
   createDownloadJobManager,
@@ -92,6 +94,24 @@ function createFakeActiveJobsStore(
     }),
     saveActiveJob: vi.fn(async (record: TrackedDownloadJobRecord) => {
       recordsByJobId.set(record.job.jobId, record);
+    }),
+  };
+}
+
+/** 테스트에서 최근 job 목록 저장 호출을 관찰할 수 있는 가짜 store를 만든다. */
+function createFakeRecentJobsStore(
+  initialJobs: DownloadJob[] = [],
+): RecentDownloadJobsStore & { jobs: DownloadJob[] } {
+  /** 저장된 최근 job 목록. */
+  const state = { jobs: [...initialJobs] };
+
+  return {
+    get jobs() {
+      return state.jobs;
+    },
+    loadJobs: vi.fn(async () => [...state.jobs]),
+    saveJobs: vi.fn(async (jobs: DownloadJob[]) => {
+      state.jobs = [...jobs];
     }),
   };
 }
@@ -797,6 +817,113 @@ describe('download job manager restart recovery', () => {
     );
     expect(activeJobsStore.removeActiveJob).toHaveBeenCalledWith('job-a');
     expect(activeJobsStore.removeActiveJob).toHaveBeenCalledWith('job-b');
+  });
+});
+
+describe('download job manager recent jobs retention', () => {
+  it('removes the oldest completed job when the terminal list reaches six jobs', async () => {
+    /** 최근 job 저장소. */
+    const recentJobsStore = createFakeRecentJobsStore();
+    /** 순서대로 생성할 완료 job 목록. */
+    const completedJobs = Array.from({ length: MAX_RECENT_DOWNLOAD_JOBS + 1 }, (_, index) =>
+      createJob({
+        createdAt: `2026-06-24T05:32:0${index + 1}.000Z`,
+        displayStatus: 'completed',
+        downloadUrl: `/downloads/job-${index + 1}/file`,
+        jobId: `job-${index + 1}`,
+        progress: 100,
+        status: 'completed',
+      }),
+    );
+    /** job manager dependency. */
+    const dependencies = createDependencies({
+      myTubeExtractClient: {
+        createDownloadJob: vi.fn().mockImplementation(() =>
+          Promise.resolve(completedJobs.shift()),
+        ),
+        getDownloadJob: vi.fn(),
+      },
+      recentJobsStore,
+    });
+    /** job manager. */
+    const manager = createDownloadJobManager(dependencies);
+
+    for (let index = 0; index < MAX_RECENT_DOWNLOAD_JOBS + 1; index += 1) {
+      await manager.submitJob({
+        apiBaseUrl: 'http://127.0.0.1:3030',
+        quality: '192',
+        sourceUrl: `https://www.youtube.com/watch?v=job-${index + 1}`,
+        type: 'audio',
+      });
+    }
+
+    expect(manager.getJobs().map((job) => job.jobId)).toEqual([
+      'job-6',
+      'job-5',
+      'job-4',
+      'job-3',
+      'job-2',
+    ]);
+    expect(recentJobsStore.jobs).toEqual(manager.getJobs());
+  });
+
+  it('keeps every unsettled job even when more than five jobs are active', async () => {
+    /** 최근 job 저장소에 이미 진행 중인 5건이 있다. */
+    const initialJobs = Array.from({ length: MAX_RECENT_DOWNLOAD_JOBS }, (_, index) =>
+      createJob({
+        createdAt: `2026-06-24T05:32:0${index + 1}.000Z`,
+        jobId: `job-${index + 1}`,
+        status: 'processing',
+      }),
+    );
+    /** 최근 job 저장소. */
+    const recentJobsStore = createFakeRecentJobsStore(initialJobs);
+    /** 수동 폴링 scheduler. */
+    const manualScheduler = createManualScheduler();
+    /** job manager dependency. */
+    const dependencies = createDependencies({
+      myTubeExtractClient: {
+        createDownloadJob: vi.fn().mockResolvedValue(
+          createJob({
+            createdAt: '2026-06-24T05:32:06.000Z',
+            jobId: 'job-6',
+            status: 'queued',
+          }),
+        ),
+        getDownloadJob: vi.fn().mockResolvedValue(
+          createJob({
+            downloadUrl: '/downloads/job-6/file',
+            jobId: 'job-6',
+            status: 'completed',
+          }),
+        ),
+      },
+      recentJobsStore,
+      scheduler: manualScheduler.scheduler,
+    });
+    /** job manager. */
+    const manager = createDownloadJobManager(dependencies);
+
+    const submitPromise = manager.submitJob({
+      apiBaseUrl: 'http://127.0.0.1:3030',
+      quality: '192',
+      sourceUrl: 'https://www.youtube.com/watch?v=job-6',
+      type: 'audio',
+    });
+    await tick(10);
+
+    expect(manager.getJobs().map((job) => job.jobId)).toEqual([
+      'job-6',
+      'job-5',
+      'job-4',
+      'job-3',
+      'job-2',
+      'job-1',
+    ]);
+
+    // 활성 job은 자동 제거하지 않는다 — 완료된 뒤에는 새로 settled된 job만 정책 대상이 된다.
+    manualScheduler.flushNext();
+    await submitPromise;
   });
 });
 

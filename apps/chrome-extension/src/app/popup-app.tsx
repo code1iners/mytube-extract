@@ -1,14 +1,8 @@
 import { type ChangeEvent, type FormEvent, useEffect, useRef, useState } from 'react';
 import { type QualityOption, getQualityOptions } from '../domain/download-options/quality-options';
-import { type PopupStatusKind } from '../domain/popup-state/popup-state';
+import { type DownloadJob } from '../domain/download-job/download-job';
 import { type PopupDownloadModel, type PopupDownloadSnapshot, type YoutubeOverlaySnapshot, createChromePopupDownloadModel } from '../features/popup-download/popup-download-model';
 import { type ThemePreference, getThemePreference, setThemePreference } from '../shared/theme-preference';
-
-/** Popup에서 단독으로 보여 줄 화면 단계. */
-type PopupViewPhase = 'request' | 'processing' | 'result' | 'error';
-
-/** Popup status의 시각적 강조 색상. */
-type StatusTone = 'danger' | 'info' | 'success' | 'warning';
 
 /** 형식별 옵션 필드 copy. */
 type AdaptiveOptionCopy = {
@@ -52,12 +46,6 @@ export function PopupApp() {
 
   /** 현재 다운로드 모드. */
   const selectedMode = snapshot.options.mode;
-  /** 현재 status에 맞는 단일 popup 화면. */
-  const viewPhase = getPopupViewPhase(snapshot.status.kind);
-  /** 현재 상태 visual tone. */
-  const statusTone = getStatusTone(snapshot.status.kind);
-  /** 현재 상태 label. */
-  const statusLabel = getStatusLabel(snapshot.status.kind);
   /** 제출 버튼 문구. */
   const submitLabel = getSubmitLabel(snapshot);
   /** 원본 URL 입력 피드백. */
@@ -133,11 +121,6 @@ export function PopupApp() {
     void getPopupModel().activateYoutubeOverlay();
   }
 
-  /** 완료 또는 오류 화면에서 설정 form으로 돌아간다. */
-  function handleReturnToForm() {
-    void getPopupModel().returnToForm();
-  }
-
   /** native select theme 선택을 localStorage와 화면에 반영한다. */
   function handleThemeChange(event: ChangeEvent<HTMLSelectElement>) {
     /** 선택한 theme 방식. */
@@ -146,16 +129,14 @@ export function PopupApp() {
     setThemePreference(preference);
   }
 
-  return <main className="popup-shell" data-phase={viewPhase} data-status={snapshot.status.kind}>
+  return <main className="popup-shell" data-phase="request" data-status={snapshot.status.kind}>
     <header className="popup-header">
       <div><h1 className="popup-title">MyTube <span>Extract</span></h1><p>영상 추출 도구</p></div>
       <label className="popup-theme-control"><span>테마</span><select value={themePreference} onChange={handleThemeChange}><option value="system">시스템</option><option value="light">라이트</option><option value="dark">다크</option></select></label>
     </header>
     <p className="policy-strip">저작권 및 플랫폼 정책을 준수해 사용하세요.</p>
-    {viewPhase === 'request' ? <RequestForm snapshot={snapshot} selectedMode={selectedMode} adaptiveOption={adaptiveOption} sourceUrlFeedback={sourceUrlFeedback} submitLabel={submitLabel} onActivateYoutubeOverlay={handleActivateYoutubeOverlay} onImportCurrentTabUrl={handleImportCurrentTabUrl} onModeChange={handleModeChange} onQualityOptionChange={handleQualityOptionChange} onSubmit={handleSubmit} onTextOptionChange={handleTextOptionChange} /> : null}
-    {viewPhase === 'processing' ? <StatusScreen label={statusLabel} message={snapshot.status.message} tone={statusTone} /> : null}
-    {viewPhase === 'result' ? <StatusScreen label={statusLabel} message={snapshot.status.message} tone={statusTone} actionLabel="새 요청" onAction={handleReturnToForm} /> : null}
-    {viewPhase === 'error' ? <StatusScreen label={statusLabel} message={snapshot.status.message} tone={statusTone} actionLabel="요청 설정으로 돌아가기" isAlert onAction={handleReturnToForm} /> : null}
+    <RequestForm snapshot={snapshot} selectedMode={selectedMode} adaptiveOption={adaptiveOption} sourceUrlFeedback={sourceUrlFeedback} submitLabel={submitLabel} onActivateYoutubeOverlay={handleActivateYoutubeOverlay} onImportCurrentTabUrl={handleImportCurrentTabUrl} onModeChange={handleModeChange} onQualityOptionChange={handleQualityOptionChange} onSubmit={handleSubmit} onTextOptionChange={handleTextOptionChange} />
+    <RecentJobsList jobs={snapshot.jobs} />
   </main>;
 }
 
@@ -163,12 +144,85 @@ export function PopupApp() {
 function RequestForm(props: { /** 현재 popup snapshot. */ snapshot: PopupDownloadSnapshot; /** 선택 mode. */ selectedMode: 'audio' | 'video'; /** mode별 옵션. */ adaptiveOption: AdaptiveOptionCopy; /** URL 입력 피드백. */ sourceUrlFeedback: SourceUrlFeedback | null; /** CTA 문구. */ submitLabel: string; /** YouTube 썸네일 Overlay 활성화. */ onActivateYoutubeOverlay: () => void; /** 현재 탭 URL 가져오기. */ onImportCurrentTabUrl: () => void; /** mode 변경. */ onModeChange: (event: ChangeEvent<HTMLInputElement>) => void; /** 고정 선택지 품질 option 변경 handler 생성기. */ onQualityOptionChange: <Key extends 'bitrate' | 'resolution'>(key: Key) => (event: ChangeEvent<HTMLSelectElement>) => void; /** form 제출. */ onSubmit: (event: FormEvent<HTMLFormElement>) => void; /** 텍스트 option 변경 handler 생성기. */ onTextOptionChange: <Key extends 'sourceUrl' | 'filename'>(key: Key) => (event: ChangeEvent<HTMLInputElement>) => void }) {
   return <form className="download-form" onSubmit={props.onSubmit}>
     <YoutubeOverlayActivation overlay={props.snapshot.youtubeOverlay} onActivate={props.onActivateYoutubeOverlay} />
-    <label className={props.sourceUrlFeedback?.hasInputError ? 'field source-field has-warning' : 'field source-field'}><span className="field-label">추출 URL</span><span className="field-description">YouTube watch, Shorts, youtu.be URL을 붙여넣으세요.</span><input aria-describedby={props.sourceUrlFeedback ? 'source-url-feedback' : undefined} aria-invalid={props.sourceUrlFeedback?.hasInputError || undefined} autoComplete="off" name="sourceUrl" placeholder="https://www.youtube.com/watch?v=..." type="url" value={props.snapshot.options.sourceUrl} onChange={props.onTextOptionChange('sourceUrl')} /><button className="secondary-button" disabled={props.snapshot.downloading} type="button" onClick={props.onImportCurrentTabUrl}>현재 탭 사용</button>{props.sourceUrlFeedback ? <p className={props.sourceUrlFeedback.hasInputError ? 'field-feedback field-feedback--error' : 'field-feedback'} id="source-url-feedback" role={props.sourceUrlFeedback.hasInputError ? 'alert' : undefined}>{props.sourceUrlFeedback.message}</p> : null}</label>
+    <label className={props.sourceUrlFeedback?.hasInputError ? 'field source-field has-warning' : 'field source-field'}><span className="field-label">추출 URL</span><span className="field-description">YouTube watch, Shorts, youtu.be URL을 붙여넣으세요.</span><input aria-describedby={props.sourceUrlFeedback ? 'source-url-feedback' : undefined} aria-invalid={props.sourceUrlFeedback?.hasInputError || undefined} autoComplete="off" name="sourceUrl" placeholder="https://www.youtube.com/watch?v=..." type="url" value={props.snapshot.options.sourceUrl} onChange={props.onTextOptionChange('sourceUrl')} /><button className="secondary-button" disabled={props.snapshot.submitting} type="button" onClick={props.onImportCurrentTabUrl}>현재 탭 사용</button>{props.sourceUrlFeedback ? <p className={props.sourceUrlFeedback.hasInputError ? 'field-feedback field-feedback--error' : 'field-feedback'} id="source-url-feedback" role={props.sourceUrlFeedback.hasInputError ? 'alert' : undefined}>{props.sourceUrlFeedback.message}</p> : null}</label>
     <fieldset className="mode-group"><legend>추출 형식</legend><label className={props.selectedMode === 'audio' ? 'mode-option is-selected' : 'mode-option'}><input checked={props.selectedMode === 'audio'} name="mode" type="radio" value="audio" onChange={props.onModeChange} />오디오</label><label className={props.selectedMode === 'video' ? 'mode-option is-selected' : 'mode-option'}><input checked={props.selectedMode === 'video'} name="mode" type="radio" value="video" onChange={props.onModeChange} />비디오</label></fieldset>
     <label className="field"><span className="field-label">파일명</span><span className="field-description">비워두면 서버 기본값을 사용합니다.</span><input autoComplete="off" name="filename" type="text" value={props.snapshot.options.filename} onChange={props.onTextOptionChange('filename')} /></label>
     <label className="field"><span className="field-label">{props.adaptiveOption.label}</span><span className="field-description">{props.adaptiveOption.description}</span><select name={props.adaptiveOption.name} value={props.adaptiveOption.value} onChange={props.onQualityOptionChange(props.adaptiveOption.name)}>{props.adaptiveOption.options.map((option) => <option key={option} value={option}>{option}{props.adaptiveOption.unit}</option>)}</select></label>
     <button className="primary-button" disabled={!props.snapshot.canDownload} type="submit">{props.submitLabel}</button>
+    <RequestStatusFeedback snapshot={props.snapshot} />
   </form>;
+}
+
+/** 서버 확인 또는 최신 job 상태를 form 아래에 짧게 안내한다. */
+function RequestStatusFeedback(props: { /** 현재 popup snapshot. */ snapshot: PopupDownloadSnapshot }) {
+  const visibleStatuses = new Set([
+    'checking-server',
+    'job-queued',
+    'job-processing',
+    'download-started',
+    'download-failed',
+  ]);
+
+  if (!visibleStatuses.has(props.snapshot.status.kind)) {
+    return null;
+  }
+
+  /** 서버 확인 중인지 또는 오류인지 여부. */
+  const isAlert = props.snapshot.status.kind === 'download-failed';
+  /** 상태에 맞는 CSS tone. */
+  const tone =
+    props.snapshot.status.kind === 'download-failed'
+      ? 'danger'
+      : props.snapshot.status.kind === 'download-started'
+        ? 'success'
+        : 'info';
+
+  return <p className={`request-status request-status--${tone}`} role={isAlert ? 'alert' : 'status'} aria-live="polite">{props.snapshot.status.message}</p>;
+}
+
+/** Popup에 표시할 최근 job 목록을 렌더링한다. */
+function RecentJobsList(props: { /** 최신순 최근 job 목록. */ jobs: DownloadJob[] }) {
+  return <section className="recent-jobs" aria-labelledby="recent-jobs-title">
+    <div className="recent-jobs__header"><h2 id="recent-jobs-title">최근 요청</h2><span>{props.jobs.length}건</span></div>
+    {props.jobs.length ? <ol className="recent-jobs__list">{props.jobs.map((job) => <RecentJobItem key={job.jobId} job={job} />)}</ol> : <p className="recent-jobs__empty">아직 보낸 요청이 없습니다.</p>}
+  </section>;
+}
+
+/** 최근 job 하나의 상태와 요청 옵션을 표시한다. */
+function RecentJobItem(props: { /** 표시할 job. */ job: DownloadJob }) {
+  /** job 상태 표시 정보. */
+  const status = getRecentJobStatus(props.job);
+  /** 표시할 요청 형식과 화질. */
+  const optionLabel = props.job.type === 'audio' ? `오디오 · ${props.job.quality} kbps` : `비디오 · ${props.job.quality}p`;
+
+  return <li className={`recent-job recent-job--${status.kind}`} data-job-id={props.job.jobId}>
+    <div className="recent-job__heading"><span className="recent-job__icon" aria-hidden="true">{status.icon}</span><strong>{status.label}</strong><span className="recent-job__option">{optionLabel}</span><time dateTime={props.job.createdAt}>{formatRecentJobTime(props.job.createdAt)}</time></div>
+    <p className="recent-job__message">{props.job.message}</p>
+  </li>;
+}
+
+/** 최근 job 상태의 텍스트·아이콘을 함께 만든다. */
+function getRecentJobStatus(job: DownloadJob): { icon: string; kind: DownloadJob['status']; label: string } {
+  if (job.status === 'queued') return { icon: '○', kind: 'queued', label: '대기 중' };
+  if (job.status === 'processing') return { icon: '◌', kind: 'processing', label: '처리 중' };
+  if (job.status === 'completed') return { icon: '✓', kind: 'completed', label: '완료' };
+  return { icon: '!', kind: 'failed', label: '실패' };
+}
+
+/** 최근 job 생성 시각을 popup에 맞는 짧은 형식으로 표시한다. */
+function formatRecentJobTime(createdAt: string): string {
+  const date = new Date(createdAt);
+
+  if (Number.isNaN(date.getTime())) {
+    return '';
+  }
+
+  return new Intl.DateTimeFormat('ko-KR', {
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+    month: 'numeric',
+  }).format(date);
 }
 
 /** YouTube 썸네일 Overlay의 최초 활성화와 현재 권한 상태를 보여준다. */
@@ -188,42 +242,9 @@ function YoutubeOverlayActivation(props: { /** Overlay 권한 상태. */ overlay
   </div>;
 }
 
-/** 처리, 결과, 오류 단계의 단일 status screen을 렌더링한다. */
-function StatusScreen(props: { /** 상태 라벨. */ label: string; /** 상태 설명. */ message: string; /** 상태 색상. */ tone: StatusTone; /** form 복귀 행동. */ onAction?: () => void; /** 행동 버튼 문구. */ actionLabel?: string; /** 오류 alert 여부. */ isAlert?: boolean }) {
-  return <section className={`status-card status-card--${props.tone}`} aria-labelledby="status-title"><p id="status-title" className="status-label">{props.label}</p><p className="status-text" role={props.isAlert ? 'alert' : 'status'} aria-live="polite">{props.message}</p>{props.onAction ? <button className="primary-button" type="button" onClick={props.onAction}>{props.actionLabel}</button> : null}</section>;
-}
-
-/** 서버 확인 또는 job 대기/처리 중처럼 진행 중임을 나타내는 상태인지 확인한다. */
-function isJobInProgressStatus(statusKind: PopupStatusKind): boolean {
-  return statusKind === 'checking-server' || statusKind === 'job-queued' || statusKind === 'job-processing';
-}
-
-/** status kind를 요청·처리·결과·오류 단일 화면으로 바꾼다. */
-function getPopupViewPhase(statusKind: PopupStatusKind): PopupViewPhase {
-  if (isJobInProgressStatus(statusKind)) return 'processing';
-  if (statusKind === 'download-started') return 'result';
-  if (statusKind === 'download-failed') return 'error';
-  return 'request';
-}
-
-/** 상태별 visual tone을 반환한다. */
-function getStatusTone(statusKind: PopupStatusKind): StatusTone {
-  if (statusKind === 'ready' || statusKind === 'download-started') return 'success';
-  if (isJobInProgressStatus(statusKind)) return 'info';
-  if (statusKind === 'missing-source-url' || statusKind === 'invalid-source-url') return 'warning';
-  return 'danger';
-}
-
-/** 상태별 짧은 label을 반환한다. */
-function getStatusLabel(statusKind: PopupStatusKind) {
-  /** 상태 label map. */
-  const labels: Record<PopupStatusKind, string> = { 'missing-source-url': '입력 필요', 'invalid-source-url': 'URL 확인', ready: '준비 완료', 'checking-server': '서버 확인 중', 'job-queued': '대기 중', 'job-processing': '처리 중', 'download-started': '요청 완료', 'download-failed': '오류' };
-  return labels[statusKind];
-}
-
 /** 제출 버튼에 표시할 문구를 반환한다. */
 function getSubmitLabel(snapshot: PopupDownloadSnapshot) {
-  if (snapshot.downloading || snapshot.status.kind === 'checking-server') return '서버 확인 중';
+  if (snapshot.submitting || snapshot.status.kind === 'checking-server') return '서버 확인 중';
   if (snapshot.status.kind === 'download-failed' && snapshot.canDownload) return '다시 시도';
   return '추출 시작';
 }
