@@ -6,15 +6,65 @@ import { tmpdir } from 'os';
 import { join } from 'path';
 import { AudioService } from '../../src/audio/audio.service';
 import { MediaDownloadService } from '../../src/media/media-download.service';
+import { createUrlMediaSource } from '../../src/media/media-source-policy';
 import { YoutubeDlMediaDownloader } from '../../src/media/youtube-dl-media-downloader';
 import { VideoService } from '../../src/video/video.service';
 
 /**
  * 이 스위트는 mock 없이 실제 yt-dlp 바이너리로 실제 YouTube 영상을 다운로드한다.
  * `pnpm --filter api run test:e2e:real`로만 실행되며 `test:e2e`(mock e2e)와는 분리돼 있다.
- * 삭제/지역제한 위험이 가장 낮은 고정 테스트 영상(YouTube 최초 업로드, 19초)을 사용한다.
+ * 기존 고정 테스트 영상과 이번 fallback 회귀 대상 URL을 같은 direct 경계에서 검증한다.
  */
-const REAL_TEST_VIDEO_URL = 'https://www.youtube.com/watch?v=jNQXAC9IVRw';
+const REAL_MEDIA_CASES = [
+  {
+    description: '기존 고정 영상을 mp4 360p로 다운로드한다',
+    expectedFormat: 'bestvideo[height<=360]+bestaudio/best',
+    filename: 'real-e2e-video',
+    kind: 'video',
+    quality: 360,
+    url: 'https://www.youtube.com/watch?v=jNQXAC9IVRw',
+  },
+  {
+    description: '기존 고정 영상을 mp3 128kbps로 다운로드한다',
+    expectedFormat: 'bestaudio[abr<=128]/best',
+    filename: 'real-e2e-audio',
+    kind: 'audio',
+    quality: 128,
+    url: 'https://www.youtube.com/watch?v=jNQXAC9IVRw',
+  },
+  {
+    description: 'known-good 영상을 mp3 320kbps로 다운로드한다',
+    expectedFormat: 'bestaudio[abr<=320]/best',
+    filename: 'real-e2e-known-good-audio-320',
+    kind: 'audio',
+    quality: 320,
+    url: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ',
+  },
+  {
+    description: 'known-good 영상을 mp4 1080p로 다운로드한다',
+    expectedFormat: 'bestvideo[height<=1080]+bestaudio/best',
+    filename: 'real-e2e-known-good-video-1080',
+    kind: 'video',
+    quality: 1080,
+    url: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ',
+  },
+  {
+    description: '기존 실패 영상을 mp3 320kbps로 다운로드한다',
+    expectedFormat: 'bestaudio[abr<=320]/best',
+    filename: 'real-e2e-failed-audio-320',
+    kind: 'audio',
+    quality: 320,
+    url: 'https://youtu.be/a0iBRRoDnDw?si=PGGG5psGrOm34WkG',
+  },
+  {
+    description: '기존 실패 영상을 mp4 1080p로 다운로드한다',
+    expectedFormat: 'bestvideo[height<=1080]+bestaudio/best',
+    filename: 'real-e2e-failed-video-1080',
+    kind: 'video',
+    quality: 1080,
+    url: 'https://youtu.be/a0iBRRoDnDw?si=PGGG5psGrOm34WkG',
+  },
+] as const;
 
 /** 우리 코드가 고칠 수 없는 환경 요인 — 이 reason이면 실패시키지 않고 경고만 남긴다. */
 const SKIPPABLE_DIAGNOSTIC_REASONS = new Set([
@@ -39,63 +89,47 @@ describe('실제 yt-dlp 통합 (network 필요)', () => {
     await rm(workDir, { force: true, recursive: true });
   });
 
-  it('실제 영상을 mp4로 다운로드한다 (video)', async () => {
-    /** video.service.ts와 동일한 job 생성 로직 — mediaDownloadService는 이 메서드에서 쓰이지 않는다. */
+  it.each(REAL_MEDIA_CASES)('$description', async (testCase) => {
+    /** API direct 경계에서 service와 downloader 사이에 전달할 검증된 source. */
+    const source = createUrlMediaSource(testCase.url);
+    /** video service job builder — mediaDownloadService는 이 메서드에서 쓰이지 않는다. */
     const videoService = new VideoService(
       undefined as unknown as MediaDownloadService,
     );
-    const job = videoService.createVideoDownloadJob({
-      filename: 'real-e2e-video',
-      resolution: 360,
-      source: {
-        kind: 'youtube-id',
-        safeLabel: 'youtube:jNQXAC9IVRw',
-        url: REAL_TEST_VIDEO_URL,
-      },
-    });
-    const outputPath = join(workDir, 'real-e2e-video.mp4');
-    const downloader = new YoutubeDlMediaDownloader(configService);
-
-    const completed = await downloadOrSkip(() =>
-      downloader.download({
-        format: job.format,
-        kind: job.kind,
-        mergeOutputFormat: job.mergeOutputFormat,
-        outputPath,
-        sourceUrl: job.source.url,
-      }),
-    );
-
-    if (completed) {
-      assertNonEmptyFile(outputPath);
-    }
-  });
-
-  it('실제 영상을 mp3로 다운로드한다 (audio)', async () => {
-    /** audio.service.ts와 동일한 job 생성 로직. */
+    /** audio service job builder. */
     const audioService = new AudioService(
       undefined as unknown as MediaDownloadService,
     );
-    const job = audioService.createAudioDownloadJob({
-      bitrate: 128,
-      filename: 'real-e2e-audio',
-      source: {
-        kind: 'youtube-id',
-        safeLabel: 'youtube:jNQXAC9IVRw',
-        url: REAL_TEST_VIDEO_URL,
-      },
-    });
-    const outputPath = join(workDir, 'real-e2e-audio.mp3');
+    /** 요청 품질에 맞춰 service가 만든 direct media job. */
+    const job =
+      testCase.kind === 'audio'
+        ? audioService.createAudioDownloadJob({
+            bitrate: testCase.quality,
+            filename: testCase.filename,
+            source,
+          })
+        : videoService.createVideoDownloadJob({
+            filename: testCase.filename,
+            resolution: testCase.quality,
+            source,
+          });
+    /** yt-dlp가 만들어야 하는 최종 artifact 경로. */
+    const outputPath = join(workDir, job.downloadName);
+    /** API direct yt-dlp adapter. */
     const downloader = new YoutubeDlMediaDownloader(configService);
 
+    expect(job.format).toBe(testCase.expectedFormat);
+
+    /** 실제 direct media 요청 완료 여부. */
     const completed = await downloadOrSkip(() =>
       downloader.download({
         audioFormat: job.audioFormat,
         extractAudio: job.extractAudio,
         format: job.format,
         kind: job.kind,
+        mergeOutputFormat: job.mergeOutputFormat,
         outputPath,
-        sourceUrl: job.source.url,
+        sourceUrl: source.url,
       }),
     );
 
