@@ -100,6 +100,7 @@ fallback은 client 전환 전용 오류 allowlist에만 적용한다. embed-disa
 ## 추가 참고
 
 - 현재 web_embedded 고정은 과거 android_vr 계열 403 회귀를 피하기 위한 결정이었다. 이번 변경은 그 동작을 무조건 삭제하는 것이 아니라 기본 client를 우선하고, 검증된 client 전환 오류에서만 web_embedded를 제한적으로 보조 경로로 사용하는 것이다.
+- 상세한 실험 관찰과 YTDown 조사 결과는 [역사적 진단 기록](../../docs/research/2026-08-24-youtube-extraction-client-investigation.md)에 보존한다. 구현 계약과 작업 우선순위는 이 스펙과 ADR을 따른다.
 - known-good URL과 실패 URL의 real integration 편입은 이번 회귀를 재현하고 기존 성공 경로를 보호하기 위한 것이다. YouTube 쪽 영상 상태가 바뀌면 테스트가 환경 요인이 아니라 실제 영상 상태 변화로 실패할 수 있으므로, 실패 reason과 마지막 진단을 함께 확인해야 한다.
 - yt-dlp의 기본 client 구성과 YouTube의 format·SABR·PO token 정책은 변할 수 있다. pin 변경이나 새로운 client 추가가 필요해지면 이 ADR과 real integration 성공 행렬을 다시 검토한다.
 - 구현 완료 선언에는 fake runner 단위 테스트, 기존 real integration, API direct 운영 검증, queued worker의 completed/downloadUrl/실제 파일 검증을 각각 별도 증거로 남긴다.
