@@ -15,3 +15,25 @@
 - [ ] 각 queued job의 type과 quality가 요청값과 일치하고, R2 전달 이후에도 파일이 non-empty인지 확인한다.
 - [ ] direct와 queued 결과를 구분해 기록하고, provider·네트워크·인증 등 환경 요인으로 확인하지 못한 항목은 완료로 표시하지 않는다.
 - [ ] signed URL, cookie, token, API key와 같은 민감하거나 만료 가능한 값을 티켓에 기록하지 않는다.
+
+## Comments
+
+### 2026-08-24 production 운영 smoke
+
+- 대상: `https://mytube-extract-api.codeliners.cc` production API. 사전 확인한 `GET /health`는 HTTP 200이며 `worker.available=true`를 반환했다.
+- 자동 검증: `pnpm run lint`, `pnpm run build`, `pnpm run test` 통과. `pnpm --filter api run test:e2e:real`은 1 suite/6 tests 통과했다. API와 worker의 `EXPECTED_YT_DLP_VERSION=2026.08.19 pnpm --filter ... run verify:runtime`도 통과했으며, 두 local runtime 모두 `yt-dlp 2026.08.19`를 확인했다. 이 local 증거는 production 배포 증거를 대신하지 않는다.
+
+| Surface | Video ID | Type | Quality | Observed result |
+| --- | --- | --- | --- | --- |
+| API direct | `dQw4w9WgXcQ` | audio | 320 | HTTP 200, `audio/mpeg`, attachment, 3,750,165 bytes |
+| API direct | `dQw4w9WgXcQ` | video | 1080 | HTTP 200, `video/mp4`, attachment, 33,829,665 bytes |
+| API direct | `a0iBRRoDnDw` | audio | 320 | HTTP 500, generic extraction error; non-empty media file 아님 |
+| API direct | `a0iBRRoDnDw` | video | 1080 | HTTP 500, generic extraction error; non-empty media file 아님 |
+| worker queued | `dQw4w9WgXcQ` | audio | 320 | 재시도 요청은 기존 asset cache hit로 즉시 `completed`; file HTTP 200, `audio/mpeg`, 3,750,165 bytes. fresh worker 증거로 세지 않음 |
+| worker queued | `dQw4w9WgXcQ` | video | 1080 | `queued` → `processing` → `completed`, type/quality 일치, file HTTP 200, `video/mp4`, 33,829,665 bytes; fresh worker 성공 |
+| worker queued | `a0iBRRoDnDw` | audio | 320 | `queued` → `processing` → `failed`, `EXTRACTION_FAILED`, `downloadUrl` 없음 |
+| worker queued | `a0iBRRoDnDw` | video | 1080 | `queued` → `processing` → `failed`, `EXTRACTION_FAILED`, `downloadUrl` 없음 |
+
+- 첫 queued audio runner는 로컬 smoke 변수명 충돌로 POST 직후 중단되어 최종 job ID를 보존하지 못했다. 이후 재시도는 cache hit였으므로 해당 케이스를 fresh worker 완료로 판정하지 않았다.
+- 현재 production target에서는 기존 실패 ID의 direct·queued audio/video가 모두 실패했다. local current HEAD의 real integration 성공만으로 production 운영 완료를 선언할 수 없으며, 현재 구현을 승인된 production/staging target에 배포한 뒤 8개 케이스를 다시 검증해야 한다.
+- 이번 확인에서는 push, deploy, DB/R2 삭제, signed URL·cookie·token·API key 기록을 수행하지 않았다. 티켓은 미완료 상태로 유지한다.
