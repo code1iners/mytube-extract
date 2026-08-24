@@ -45,3 +45,20 @@
 - 실제 target `https://mytube-extract-api.codeliners.cc/health` 재확인 결과 HTTP 530, Cloudflare `error code: 1033`이었다. health와 `worker.available=true`를 관찰하지 못했으므로 post-deploy direct 4건과 queued 4건은 실행·완료로 판정하지 않았다.
 - 로컬 검증 환경에도 API·cloudflared Docker container가 없어 로컬 deployment verification은 실패했다. 이는 원격 배포 상태를 추정하는 근거로 사용하지 않는다.
 - ticket은 미완료 상태를 유지하며, target health가 복구된 뒤 direct/queued 8개 케이스를 다시 독립 검증해야 한다.
+
+### 2026-08-24 target recovery 후 smoke 재검증
+
+- 실행 시각: 2026-08-24 16:54–16:56 KST. `GET /health`는 HTTP 200이며 `worker.available=true`를 반환했다.
+
+| Surface | Video ID | Type | Quality | Observed result |
+| --- | --- | --- | --- | --- |
+| API direct | `dQw4w9WgXcQ` | audio | 320 | PASS, HTTP 200, `audio/mpeg`, attachment, 3,750,165 bytes |
+| API direct | `dQw4w9WgXcQ` | video | 1080 | PASS, HTTP 200, `video/mp4`, attachment, 33,829,665 bytes |
+| API direct | `a0iBRRoDnDw` | audio | 320 | FAIL, HTTP 500 JSON response, media artifact 아님 |
+| API direct | `a0iBRRoDnDw` | video | 1080 | FAIL, HTTP 500 JSON response, media artifact 아님 |
+| worker queued | `dQw4w9WgXcQ` | audio | 320 | initial `completed` cache hit, type/quality 일치, file HTTP 200 `audio/mpeg`, attachment, 3,750,165 bytes; fresh worker 증거 아님 |
+| worker queued | `dQw4w9WgXcQ` | video | 1080 | initial `completed` cache hit, type/quality 일치, file HTTP 200 `video/mp4`, attachment, 33,829,665 bytes; fresh worker 증거 아님 |
+| worker queued | `a0iBRRoDnDw` | audio | 320 | `queued` → `failed`, type/quality 일치, `EXTRACTION_FAILED`, `downloadUrl` 없음 |
+| worker queued | `a0iBRRoDnDw` | video | 1080 | `queued` → `failed`, type/quality 일치, `EXTRACTION_FAILED`, `downloadUrl` 없음 |
+
+- health 복구는 확인했지만 direct/queued 8건이 모두 요구 조건을 충족하지 않았고, cache hit은 fresh worker 성공으로 판정하지 않았다. ticket은 미완료 상태를 유지한다.
