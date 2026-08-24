@@ -3,6 +3,7 @@ import {
   applyYoutubeClientOptions,
   runYoutubeClientPolicy,
   type YoutubeClient,
+  type YoutubeClientFallbackCallback,
   type YoutubeDlExecute,
   type YoutubeDlRun,
 } from '@mytube-extract/media-downloader';
@@ -30,6 +31,8 @@ export type DownloadExtractionJobInput = {
     client: YoutubeClient;
     error: unknown;
   }) => void;
+  /** client fallback 시작과 성공을 기록하는 worker callback. */
+  onFallback?: YoutubeClientFallbackCallback;
 };
 
 /** 실제 extraction에 성공한 final artifact path를 반환한다. */
@@ -48,6 +51,7 @@ export async function downloadExtractionJob(input: DownloadExtractionJobInput) {
           client,
         ),
       execute: input.execute,
+      onFallback: input.onFallback,
       onRetry: input.onRetry,
       outputPath,
       run: input.run,

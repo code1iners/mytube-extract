@@ -1,8 +1,11 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import {
   applyYoutubeClientOptions,
+  createSafeDiagnosticLog,
+  createSafeErrorLog,
   runYoutubeClientPolicy,
+  type YoutubeClientFallbackEvent,
   type YoutubeDlExecute,
 } from '@mytube-extract/media-downloader';
 import { existsSync } from 'fs';
@@ -13,6 +16,9 @@ import { MediaDownloader } from './media-downloader.port';
 /** youtube-dl-exec를 API media downloader port 뒤에 격리하는 adapter. */
 @Injectable()
 export class YoutubeDlMediaDownloader implements MediaDownloader {
+  /** API downloader의 fallback 관찰 로그. */
+  private readonly logger = new Logger(YoutubeDlMediaDownloader.name);
+
   constructor(private readonly configService: ConfigService) {}
 
   /** API의 단일 실행 계약을 공통 yt-dlp runner에 위임한다. */
@@ -43,9 +49,22 @@ export class YoutubeDlMediaDownloader implements MediaDownloader {
       createYoutubeOptions: (client) =>
         applyYoutubeClientOptions(youtubeOptions, client),
       execute: youtubeExec as unknown as YoutubeDlExecute,
+      onFallback: (event) => this.logFallback(event),
       outputPath: options.outputPath,
       signal: options.signal,
       sourceUrl: options.sourceUrl,
     });
+  }
+
+  /** URL 없이 client 전환과 성공 결과만 API server log에 남긴다. */
+  private logFallback(event: YoutubeClientFallbackEvent) {
+    const diagnostic = event.error ? createSafeDiagnosticLog(event.error) : '';
+    const errorName = event.error ? createSafeErrorLog(event.error) : '';
+
+    this.logger.warn(
+      `YouTube client fallback: outcome=${event.outcome} from=${event.fromClient} to=${event.toClient} attempt=${event.attempt}${
+        diagnostic ? ` ${diagnostic}` : errorName ? ` ${errorName}` : ''
+      }`,
+    );
   }
 }

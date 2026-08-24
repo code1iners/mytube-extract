@@ -2,6 +2,7 @@ import {
   applyYoutubeClientOptions,
   normalizeYoutubeDlError,
   runYoutubeClientAttempts,
+  type YoutubeClientFallbackCallback,
 } from '@mytube-extract/media-downloader';
 import { youtubeDl } from 'youtube-dl-exec';
 import {
@@ -25,6 +26,8 @@ export type VideoPreflightInput = {
   run?: YoutubeMetadataRun;
   /** retry delay를 대체하는 테스트 seam. */
   wait?: (milliseconds: number) => Promise<void>;
+  /** client fallback 시작과 성공을 기록하는 worker callback. */
+  onFallback?: YoutubeClientFallbackCallback;
 };
 
 /** worker video metadata preflight에 공통 YouTube client 정책을 적용한다. */
@@ -54,6 +57,7 @@ export async function runVideoPreflight(input: VideoPreflightInput) {
         throw normalizeYoutubeDlError(error);
       }
     },
+    onFallback: input.onFallback,
     sourceUrl: input.sourceUrl,
     wait: input.wait,
   });

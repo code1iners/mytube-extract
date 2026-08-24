@@ -133,10 +133,10 @@ export function createSubtitleResultObjectKey(jobId: string) {
 /** 품질 key와 type으로 yt-dlp format selector를 만든다. */
 export function createYtDlpFormat(type: ExtractionType, quality: string) {
   if (type === ExtractionType.audio) {
-    return `bestaudio[abr<=${quality}]/best`;
+    return `bestaudio[abr<=${quality}]/best[abr<=${quality}]`;
   }
 
-  return `bestvideo[height<=${quality}]+bestaudio/best`;
+  return `bestvideo[height<=${quality}]+bestaudio/best[height<=${quality}]`;
 }
 
 /** worker 다운로드 job에 전달할 yt-dlp 옵션을 만든다. */

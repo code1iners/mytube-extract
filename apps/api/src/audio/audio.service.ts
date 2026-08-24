@@ -14,7 +14,7 @@ export class AudioService {
   createAudioDownloadJob(request: AudioMediaRequest): MediaDownloadJob {
     /** 오디오 비트레이트 제한을 반영한 yt-dlp format selector. */
     const format = request.bitrate
-      ? `bestaudio[abr<=${request.bitrate}]/best`
+      ? `bestaudio[abr<=${request.bitrate}]/best[abr<=${request.bitrate}]`
       : 'bestaudio/best';
 
     return {

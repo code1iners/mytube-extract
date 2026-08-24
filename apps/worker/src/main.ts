@@ -14,6 +14,7 @@ import {
 import {
   createSafeDiagnosticLog,
   createSafeErrorLog,
+  type YoutubeClientFallbackEvent,
   type YoutubeDlExecute,
 } from '@mytube-extract/media-downloader';
 import { spawn } from 'node:child_process';
@@ -380,7 +381,11 @@ async function processJob(job: ClaimedDownloadJob) {
     const format = createYtDlpFormat(job.type, job.quality);
 
     if (job.type === ExtractionType.video) {
-      await runVideoPreflight({ format, sourceUrl: job.url });
+      await runVideoPreflight({
+        format,
+        onFallback: (event) => logYoutubeFallback(job, 'preflight', event),
+        sourceUrl: job.url,
+      });
     }
 
     /** R2 object key. */
@@ -404,6 +409,7 @@ async function processJob(job: ClaimedDownloadJob) {
         });
       },
       execute: youtubeExec as unknown as YoutubeDlExecute,
+      onFallback: (event) => logYoutubeFallback(job, 'download', event),
       onRetry: ({ attempt, client, error }) => {
         /** source URL을 제외한 재시도 진단 문자열. */
         const diagnostic = createSafeDiagnosticLog(error);
@@ -455,6 +461,26 @@ async function processJob(job: ClaimedDownloadJob) {
   } catch (error) {
     await markFailed(job.id, getWorkerFailureCode(error), error);
   }
+}
+
+/** URL 없이 queued job의 client fallback 시작과 성공을 worker log에 남긴다. */
+function logYoutubeFallback(
+  job: ClaimedDownloadJob,
+  phase: 'preflight' | 'download',
+  event: YoutubeClientFallbackEvent,
+) {
+  /** fallback 시작 오류에서 URL과 민감 값을 제거한 진단 문자열. */
+  const diagnostic = event.error
+    ? createSafeDiagnosticLog(event.error)
+    : '';
+  /** 진단이 없는 fallback 시작 오류의 타입명. */
+  const errorName = event.error ? createSafeErrorLog(event.error) : '';
+
+  console.warn(
+    `YouTube client fallback: job=${job.id} phase=${phase} type=${job.type} quality=${job.quality} outcome=${event.outcome} from=${event.fromClient} to=${event.toClient} attempt=${event.attempt}${
+      diagnostic ? ` ${diagnostic}` : errorName ? ` ${errorName}` : ''
+    }`,
+  );
 }
 
 /** claim된 자막 job을 영어 SRT로 변환하고 R2에 업로드한다. */

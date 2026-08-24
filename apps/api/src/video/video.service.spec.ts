@@ -47,7 +47,7 @@ describe('VideoService', () => {
       contentType: 'video/mp4',
       downloadName: 'sample video.mp4',
       failureMessage: 'Failed generating video file',
-      format: 'bestvideo[height<=720]+bestaudio/best',
+      format: 'bestvideo[height<=720]+bestaudio/best[height<=720]',
       kind: 'video',
       mergeOutputFormat: 'mp4',
       source: request.source,

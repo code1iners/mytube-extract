@@ -49,7 +49,7 @@ describe('AudioService', () => {
       downloadName: 'sample audio.mp3',
       extractAudio: true,
       failureMessage: 'Error generating audio file',
-      format: 'bestaudio[abr<=320]/best',
+      format: 'bestaudio[abr<=320]/best[abr<=320]',
       kind: 'audio',
       source: request.source,
     });

@@ -1,4 +1,5 @@
 import { ConfigService } from '@nestjs/config';
+import { Logger } from '@nestjs/common';
 import { runYoutubeClientPolicy } from '@mytube-extract/media-downloader';
 import { existsSync } from 'fs';
 import { exec as youtubeExec } from 'youtube-dl-exec';
@@ -76,6 +77,64 @@ describe('YoutubeDlMediaDownloader', () => {
       extractorArgs: 'youtube:player_client=web_embedded',
     });
     expect(defaultOptions).not.toHaveProperty('ignoreErrors');
+    expect(policyInput?.onFallback).toEqual(expect.any(Function));
+  });
+
+  it('logs fallback start and success without exposing source details', async () => {
+    await downloader.download({
+      format: 'bestaudio/best',
+      kind: 'audio',
+      outputPath: '/tmp/sample.mp3',
+      sourceUrl: 'https://www.youtube.com/watch?v=abc123_DEF0',
+    });
+
+    /** API logger output captured from the fallback callback. */
+    const warnSpy = jest
+      .spyOn(Logger.prototype, 'warn')
+      .mockImplementation(() => undefined);
+    /** shared policy input captured from the API adapter. */
+    const policyInput = runYoutubeClientPolicyMock.mock.calls[0]?.[0];
+    /** fallback callback passed to the shared policy. */
+    const onFallback = policyInput?.onFallback;
+    /** fallback start error containing values that must be redacted. */
+    const fallbackError = Object.assign(new Error('fallback required'), {
+      diagnostic: {
+        reason: 'client-switch-required',
+        stderrTail:
+          'https://youtube.example/watch?v=abc token=secret-value /tmp/private/file',
+        tool: 'yt-dlp',
+      },
+    });
+
+    try {
+      onFallback?.({
+        attempt: 1,
+        error: fallbackError,
+        fromClient: 'default',
+        outcome: 'started',
+        toClient: 'web_embedded',
+      });
+      onFallback?.({
+        attempt: 1,
+        fromClient: 'default',
+        outcome: 'succeeded',
+        toClient: 'web_embedded',
+      });
+
+      expect(warnSpy).toHaveBeenCalledTimes(2);
+      expect(warnSpy.mock.calls[0]?.[0]).toContain(
+        'outcome=started from=default to=web_embedded',
+      );
+      expect(warnSpy.mock.calls[1]?.[0]).toContain(
+        'outcome=succeeded from=default to=web_embedded',
+      );
+      expect(warnSpy.mock.calls[0]?.[0]).not.toContain('secret-value');
+      expect(warnSpy.mock.calls[0]?.[0]).not.toContain('/tmp/private');
+      expect(warnSpy.mock.calls[0]?.[0]).toContain('youtube.example');
+      expect(warnSpy.mock.calls[0]?.[0]).not.toContain('/watch?v=abc');
+    } finally {
+      warnSpy.mockRestore();
+    }
   });
 
   it('omits a configured ffmpeg path that does not exist locally', async () => {

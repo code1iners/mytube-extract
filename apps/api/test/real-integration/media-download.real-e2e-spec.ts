@@ -1,9 +1,11 @@
 import { ConfigService } from '@nestjs/config';
 import { getDownloaderDiagnostic } from '@mytube-extract/media-downloader';
+import { execFile } from 'child_process';
 import { existsSync, statSync } from 'fs';
 import { mkdtemp, rm } from 'fs/promises';
 import { tmpdir } from 'os';
 import { join } from 'path';
+import { promisify } from 'util';
 import { AudioService } from '../../src/audio/audio.service';
 import { MediaDownloadService } from '../../src/media/media-download.service';
 import { createUrlMediaSource } from '../../src/media/media-source-policy';
@@ -17,54 +19,63 @@ import { VideoService } from '../../src/video/video.service';
  */
 const REAL_MEDIA_CASES = [
   {
+    allowEnvironmentSkip: true,
     description: '기존 고정 영상을 mp4 360p로 다운로드한다',
-    expectedFormat: 'bestvideo[height<=360]+bestaudio/best',
+    expectedFormat: 'bestvideo[height<=360]+bestaudio/best[height<=360]',
     filename: 'real-e2e-video',
     kind: 'video',
     quality: 360,
     url: 'https://www.youtube.com/watch?v=jNQXAC9IVRw',
   },
   {
+    allowEnvironmentSkip: true,
     description: '기존 고정 영상을 mp3 128kbps로 다운로드한다',
-    expectedFormat: 'bestaudio[abr<=128]/best',
+    expectedFormat: 'bestaudio[abr<=128]/best[abr<=128]',
     filename: 'real-e2e-audio',
     kind: 'audio',
     quality: 128,
     url: 'https://www.youtube.com/watch?v=jNQXAC9IVRw',
   },
   {
+    allowEnvironmentSkip: false,
     description: 'known-good 영상을 mp3 320kbps로 다운로드한다',
-    expectedFormat: 'bestaudio[abr<=320]/best',
+    expectedFormat: 'bestaudio[abr<=320]/best[abr<=320]',
     filename: 'real-e2e-known-good-audio-320',
     kind: 'audio',
     quality: 320,
     url: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ',
   },
   {
+    allowEnvironmentSkip: false,
     description: 'known-good 영상을 mp4 1080p로 다운로드한다',
-    expectedFormat: 'bestvideo[height<=1080]+bestaudio/best',
+    expectedFormat: 'bestvideo[height<=1080]+bestaudio/best[height<=1080]',
     filename: 'real-e2e-known-good-video-1080',
     kind: 'video',
     quality: 1080,
     url: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ',
   },
   {
+    allowEnvironmentSkip: false,
     description: '기존 실패 영상을 mp3 320kbps로 다운로드한다',
-    expectedFormat: 'bestaudio[abr<=320]/best',
+    expectedFormat: 'bestaudio[abr<=320]/best[abr<=320]',
     filename: 'real-e2e-failed-audio-320',
     kind: 'audio',
     quality: 320,
     url: 'https://youtu.be/a0iBRRoDnDw?si=PGGG5psGrOm34WkG',
   },
   {
+    allowEnvironmentSkip: false,
     description: '기존 실패 영상을 mp4 1080p로 다운로드한다',
-    expectedFormat: 'bestvideo[height<=1080]+bestaudio/best',
+    expectedFormat: 'bestvideo[height<=1080]+bestaudio/best[height<=1080]',
     filename: 'real-e2e-failed-video-1080',
     kind: 'video',
     quality: 1080,
     url: 'https://youtu.be/a0iBRRoDnDw?si=PGGG5psGrOm34WkG',
   },
 ] as const;
+
+/** ffprobe subprocess 호출 함수. */
+const execFileAsync = promisify(execFile);
 
 /** 우리 코드가 고칠 수 없는 환경 요인 — 이 reason이면 실패시키지 않고 경고만 남긴다. */
 const SKIPPABLE_DIAGNOSTIC_REASONS = new Set([
@@ -121,20 +132,23 @@ describe('실제 yt-dlp 통합 (network 필요)', () => {
     expect(job.format).toBe(testCase.expectedFormat);
 
     /** 실제 direct media 요청 완료 여부. */
-    const completed = await downloadOrSkip(() =>
-      downloader.download({
-        audioFormat: job.audioFormat,
-        extractAudio: job.extractAudio,
-        format: job.format,
-        kind: job.kind,
-        mergeOutputFormat: job.mergeOutputFormat,
-        outputPath,
-        sourceUrl: source.url,
-      }),
+    const completed = await downloadOrSkip(
+      () =>
+        downloader.download({
+          audioFormat: job.audioFormat,
+          extractAudio: job.extractAudio,
+          format: job.format,
+          kind: job.kind,
+          mergeOutputFormat: job.mergeOutputFormat,
+          outputPath,
+          sourceUrl: source.url,
+        }),
+      testCase.allowEnvironmentSkip,
     );
 
     if (completed) {
       assertNonEmptyFile(outputPath);
+      await assertQualityCap(outputPath, testCase);
     }
   });
 });
@@ -144,7 +158,10 @@ describe('실제 yt-dlp 통합 (network 필요)', () => {
  * 환경 요인 실패는 경고만 남기고 통과시킨다. 그 외 실패(코드가 원인인 실패)는 그대로 던져
  * 테스트를 실패시키고 pre-push를 막는다.
  */
-async function downloadOrSkip(download: () => Promise<void>) {
+async function downloadOrSkip(
+  download: () => Promise<void>,
+  allowEnvironmentSkip: boolean,
+) {
   try {
     await download();
     return true;
@@ -153,6 +170,7 @@ async function downloadOrSkip(download: () => Promise<void>) {
     const diagnostic = getDownloaderDiagnostic(error);
 
     if (
+      allowEnvironmentSkip &&
       diagnostic?.reason &&
       SKIPPABLE_DIAGNOSTIC_REASONS.has(diagnostic.reason)
     ) {
@@ -171,4 +189,61 @@ async function downloadOrSkip(download: () => Promise<void>) {
 function assertNonEmptyFile(path: string) {
   expect(existsSync(path)).toBe(true);
   expect(statSync(path).size).toBeGreaterThan(0);
+}
+
+/** ffprobe가 확인한 media stream 품질 메타데이터의 최소 구조. */
+type FfprobeOutput = {
+  /** media stream 목록. */
+  streams?: Array<{
+    /** audio bitrate 또는 video height. */
+    bit_rate?: string;
+    /** video stream 높이. */
+    height?: number;
+  }>;
+  /** stream에 bitrate가 없을 때 사용할 container metadata. */
+  format?: {
+    /** 전체 container bitrate. */
+    bit_rate?: string;
+  };
+};
+
+/** 실제 artifact의 audio bitrate 또는 video height가 요청 상한 이하인지 확인한다. */
+async function assertQualityCap(
+  path: string,
+  testCase: (typeof REAL_MEDIA_CASES)[number],
+) {
+  /** 품질 확인에 사용할 ffprobe field. */
+  const field = testCase.kind === 'audio' ? 'stream=bit_rate' : 'stream=height';
+  /** ffprobe 출력에서 읽을 stream 종류. */
+  const stream = testCase.kind === 'audio' ? 'a:0' : 'v:0';
+  /** 실제 media metadata. */
+  const { stdout } = await execFileAsync('ffprobe', [
+    '-v',
+    'error',
+    '-select_streams',
+    stream,
+    '-show_entries',
+    `${field}:format=bit_rate`,
+    '-of',
+    'json',
+    path,
+  ]);
+  /** ffprobe JSON 결과. */
+  const metadata = JSON.parse(stdout) as FfprobeOutput;
+  /** 확인할 실제 품질 값. */
+  const rawValue =
+    testCase.kind === 'audio'
+      ? (metadata.streams?.[0]?.bit_rate ?? metadata.format?.bit_rate)
+      : metadata.streams?.[0]?.height;
+  /** 숫자로 변환한 실제 품질 값. */
+  const measuredValue = Number(rawValue);
+
+  expect(Number.isFinite(measuredValue)).toBe(true);
+
+  if (testCase.kind === 'audio') {
+    expect(measuredValue).toBeLessThanOrEqual(testCase.quality * 1000);
+    return;
+  }
+
+  expect(measuredValue).toBeLessThanOrEqual(testCase.quality);
 }

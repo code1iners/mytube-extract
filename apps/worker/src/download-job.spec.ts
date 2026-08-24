@@ -5,6 +5,7 @@ import { basename, dirname, join } from 'node:path';
 import { test } from 'node:test';
 import { ExtractionType } from '@mytube-extract/db';
 import type {
+  YoutubeClientFallbackEvent,
   YoutubeDlExecute,
   YoutubeDlRunInput,
 } from '@mytube-extract/media-downloader';
@@ -34,25 +35,25 @@ const unusedExecute = (() => {
 const REPRESENTATIVE_WORKER_JOBS = [
   {
     expectedExtension: 'mp3',
-    format: 'bestaudio[abr<=320]/best',
+    format: 'bestaudio[abr<=320]/best[abr<=320]',
     sourceUrl: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ',
     type: ExtractionType.audio,
   },
   {
     expectedExtension: 'mp4',
-    format: 'bestvideo[height<=1080]+bestaudio/best',
+    format: 'bestvideo[height<=1080]+bestaudio/best[height<=1080]',
     sourceUrl: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ',
     type: ExtractionType.video,
   },
   {
     expectedExtension: 'mp3',
-    format: 'bestaudio[abr<=320]/best',
+    format: 'bestaudio[abr<=320]/best[abr<=320]',
     sourceUrl: 'https://www.youtube.com/watch?v=a0iBRRoDnDw',
     type: ExtractionType.audio,
   },
   {
     expectedExtension: 'mp4',
-    format: 'bestvideo[height<=1080]+bestaudio/best',
+    format: 'bestvideo[height<=1080]+bestaudio/best[height<=1080]',
     sourceUrl: 'https://www.youtube.com/watch?v=a0iBRRoDnDw',
     type: ExtractionType.video,
   },
@@ -148,11 +149,14 @@ test('retries one transient failure with the same output path and preserves part
 test('switches the worker extraction to web_embedded without retrying the default client', async () => {
   /** runner 입력 기록. */
   const attempts: YoutubeDlRunInput[] = [];
+  /** worker fallback 시작과 성공 이벤트. */
+  const fallbackEvents: YoutubeClientFallbackEvent[] = [];
 
   /** 성공한 extraction artifact. */
   const outputPath = await downloadExtractionJob({
     createYoutubeOptions: (path) => ({ output: path }),
     execute: unusedExecute,
+    onFallback: (event) => fallbackEvents.push(event),
     run: async (input) => {
       attempts.push(input);
 
@@ -177,6 +181,28 @@ test('switches the worker extraction to web_embedded without retrying the defaul
   assert.equal(
     attempts[1]?.youtubeOptions.extractorArgs,
     'youtube:player_client=web_embedded',
+  );
+  assert.deepEqual(
+    fallbackEvents.map(({ attempt, fromClient, outcome, toClient }) => ({
+      attempt,
+      fromClient,
+      outcome,
+      toClient,
+    })),
+    [
+      {
+        attempt: 1,
+        fromClient: 'default',
+        outcome: 'started',
+        toClient: 'web_embedded',
+      },
+      {
+        attempt: 1,
+        fromClient: 'default',
+        outcome: 'succeeded',
+        toClient: 'web_embedded',
+      },
+    ],
   );
   assert.equal(existsSync(outputPath), true);
 

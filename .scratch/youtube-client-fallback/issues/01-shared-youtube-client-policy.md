@@ -17,5 +17,5 @@
 
 - `packages/media-downloader`에 `default` 우선, allowlist 기반 `web_embedded` fallback, 같은 client transient retry, fallback 1회 예산과 client별 redacted diagnostic을 공통화했다.
 - API `YoutubeDlMediaDownloader`와 worker `downloadExtractionJob`이 공통 정책과 option factory를 사용하도록 연결했고, 기존 `EXTRACTION_FAILED`·`YOUTUBE_AUTH_REQUIRED` mapping 및 artifact 검증 경계를 유지했다.
-- API·worker Docker image의 `yt-dlp` pin을 `2026.08.19`로 맞추고 runtime check를 실행했다. 두 이미지에서 `node v22.22.3`, `yt-dlp 2026.08.19`, `ffmpeg 5.1.9`를 확인했다.
+- API·worker Dockerfile의 `yt-dlp` pin을 `2026.08.19`로 맞추고, local API·worker runtime check에서 `yt-dlp 2026.08.19`와 ffmpeg 실행을 확인했다. 이 local check는 빌드된 Docker image 또는 운영 배포 image 검증을 대신하지 않는다.
 - 검증: `pnpm run lint`, `pnpm run build`, `pnpm run test` 통과; media-downloader 20 tests, API 24 suites/201 tests, worker 5 tests 통과. 실제 YouTube direct/queued 파일 smoke는 후속 티켓 02–04 범위다.

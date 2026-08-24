@@ -4,7 +4,10 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
 import type { YoutubeDlExecute } from './youtube-dl-runner';
-import { runYoutubeClientPolicy } from './youtube-client-policy';
+import {
+  runYoutubeClientPolicy,
+  type YoutubeClientFallbackEvent,
+} from './youtube-client-policy';
 
 /** fake runner test에서 호출되지 않아야 하는 process starter. */
 const unusedExecute = (() => {
@@ -49,6 +52,8 @@ test('uses the default client once when the first attempt succeeds', async () =>
 test('switches to web_embedded once for a client-switch failure', async () => {
   /** 정책이 실행한 yt-dlp client 순서. */
   const runClients: string[] = [];
+  /** fallback 시작과 성공 이벤트. */
+  const fallbackEvents: YoutubeClientFallbackEvent[] = [];
   /** 테스트용 작업 디렉터리. */
   const workDir = await mkdtemp(join(tmpdir(), 'youtube-client-policy-'));
   /** 최종 artifact 경로. */
@@ -61,6 +66,7 @@ test('switches to web_embedded once for a client-switch failure', async () => {
           ? { extractorArgs: 'youtube:player_client=web_embedded' }
           : {},
       execute: unusedExecute,
+      onFallback: (event) => fallbackEvents.push(event),
       outputPath,
       run: async (input) => {
         /** 실행된 yt-dlp client. */
@@ -86,6 +92,30 @@ test('switches to web_embedded once for a client-switch failure', async () => {
       'default',
       'youtube:player_client=web_embedded',
     ]);
+    assert.equal(fallbackEvents.length, 2);
+    assert.deepEqual(
+      fallbackEvents.map(({ attempt, fromClient, outcome, toClient }) => ({
+        attempt,
+        fromClient,
+        outcome,
+        toClient,
+      })),
+      [
+        {
+          attempt: 1,
+          fromClient: 'default',
+          outcome: 'started',
+          toClient: 'web_embedded',
+        },
+        {
+          attempt: 1,
+          fromClient: 'default',
+          outcome: 'succeeded',
+          toClient: 'web_embedded',
+        },
+      ],
+    );
+    assert.ok(fallbackEvents[0]?.error instanceof Error);
   } finally {
     await rm(workDir, { force: true, recursive: true });
   }

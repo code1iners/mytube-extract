@@ -14,7 +14,7 @@ export class VideoService {
   createVideoDownloadJob(request: VideoMediaRequest): MediaDownloadJob {
     /** 영상 높이 제한을 반영한 yt-dlp format selector. */
     const format = request.resolution
-      ? `bestvideo[height<=${request.resolution}]+bestaudio/best`
+      ? `bestvideo[height<=${request.resolution}]+bestaudio/best[height<=${request.resolution}]`
       : 'bestvideo+bestaudio/best';
 
     return {

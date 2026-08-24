@@ -57,20 +57,20 @@ assert.equal(
 );
 assert.equal(
   createYtDlpFormat(ExtractionType.audio, '320'),
-  'bestaudio[abr<=320]/best',
+  'bestaudio[abr<=320]/best[abr<=320]',
 );
 assert.equal(
   createYtDlpFormat(ExtractionType.video, '1080'),
-  'bestvideo[height<=1080]+bestaudio/best',
+  'bestvideo[height<=1080]+bestaudio/best[height<=1080]',
 );
 assert.equal(
   createYtDlpFormat(ExtractionType.video, '720'),
-  'bestvideo[height<=720]+bestaudio/best',
+  'bestvideo[height<=720]+bestaudio/best[height<=720]',
 );
 assert.deepEqual(
   createDownloadYoutubeOptions({
     ffmpegLocation: '/usr/bin/ffmpeg',
-    format: 'bestaudio[abr<=320]/best',
+    format: 'bestaudio[abr<=320]/best[abr<=320]',
     outputPath: '/tmp/output.mp3',
     type: ExtractionType.audio,
   }),
@@ -79,20 +79,20 @@ assert.deepEqual(
     audioFormat: 'mp3',
     extractAudio: true,
     ffmpegLocation: '/usr/bin/ffmpeg',
-    format: 'bestaudio[abr<=320]/best',
+    format: 'bestaudio[abr<=320]/best[abr<=320]',
     jsRuntimes: 'node',
     output: '/tmp/output.mp3',
   },
 );
 assert.deepEqual(
   createDownloadYoutubeOptions({
-    format: 'bestvideo[height<=1080]+bestaudio/best',
+    format: 'bestvideo[height<=1080]+bestaudio/best[height<=1080]',
     outputPath: '/tmp/output.mp4',
     type: ExtractionType.video,
   }),
   {
     addMetadata: true,
-    format: 'bestvideo[height<=1080]+bestaudio/best',
+    format: 'bestvideo[height<=1080]+bestaudio/best[height<=1080]',
     jsRuntimes: 'node',
     mergeOutputFormat: 'mp4',
     output: '/tmp/output.mp4',

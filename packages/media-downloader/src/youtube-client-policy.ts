@@ -34,6 +34,25 @@ export type YoutubeClientAttemptRun = (
   input: YoutubeClientAttemptInput,
 ) => Promise<void>;
 
+/** client 전환 시작과 성공을 server-safe 진단으로 알리는 이벤트. */
+export type YoutubeClientFallbackEvent = {
+  /** fallback을 시작한 기존 client. */
+  fromClient: YoutubeClient;
+  /** fallback으로 시도할 client. */
+  toClient: YoutubeClient;
+  /** fallback client에서 실행한 시도 번호. */
+  attempt: number;
+  /** fallback 전환의 관찰 단계. */
+  outcome: 'started' | 'succeeded';
+  /** fallback을 시작하게 만든 오류. 성공 이벤트에는 없다. */
+  error?: unknown;
+};
+
+/** client fallback 관찰 이벤트를 받는 callback. */
+export type YoutubeClientFallbackCallback = (
+  event: YoutubeClientFallbackEvent,
+) => void;
+
 /** 공통 client 정책 입력. */
 export type YoutubeClientAttemptsInput = {
   /** client별 yt-dlp option을 만드는 함수. */
@@ -54,6 +73,8 @@ export type YoutubeClientAttemptsInput = {
     client: YoutubeClient;
     error: unknown;
   }) => void;
+  /** client fallback 시작과 성공 직전에 server-safe 진단을 남기는 callback. */
+  onFallback?: YoutubeClientFallbackCallback;
 };
 
 /** YouTube client 정책 실행 입력. */
@@ -80,6 +101,8 @@ export type YoutubeClientPolicyInput = {
     client: YoutubeClient;
     error: unknown;
   }) => void;
+  /** client fallback 시작과 성공 직전에 server-safe 진단을 남기는 callback. */
+  onFallback?: YoutubeClientFallbackCallback;
 };
 
 /** 정책에서 사용할 같은 client retry 횟수. */
@@ -116,6 +139,7 @@ export async function runYoutubeClientPolicy(
   await runYoutubeClientAttempts({
     createYoutubeOptions: input.createYoutubeOptions,
     cleanupOutput: () => cleanupOutput(input.outputPath),
+    onFallback: input.onFallback,
     onRetry: input.onRetry,
     run: ({ signal, sourceUrl, youtubeOptions }) =>
       run({
@@ -143,6 +167,8 @@ export async function runYoutubeClientAttempts(
   let attempt = 1;
   /** 모든 client 시도의 server-only 진단. */
   const attempts: DownloaderAttemptDiagnostic[] = [];
+  /** default client 실패 뒤 fallback client가 실행 중인지 여부. */
+  let fallbackStarted = false;
 
   while (true) {
     try {
@@ -154,6 +180,15 @@ export async function runYoutubeClientAttempts(
         youtubeOptions: input.createYoutubeOptions(client),
       });
 
+      if (fallbackStarted) {
+        input.onFallback?.({
+          attempt,
+          fromClient: 'default',
+          outcome: 'succeeded',
+          toClient: client,
+        });
+      }
+
       return;
     } catch (error) {
       const diagnostic = getDownloaderDiagnostic(error);
@@ -164,6 +199,14 @@ export async function runYoutubeClientAttempts(
         diagnostic?.reason === 'client-switch-required'
       ) {
         await input.cleanupOutput?.();
+        fallbackStarted = true;
+        input.onFallback?.({
+          attempt: 1,
+          error,
+          fromClient: client,
+          outcome: 'started',
+          toClient: 'web_embedded',
+        });
         client = 'web_embedded';
         attempt = 1;
         continue;
