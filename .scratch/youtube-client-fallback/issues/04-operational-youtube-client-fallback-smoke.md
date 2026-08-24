@@ -6,15 +6,15 @@
 
 **Status:** ready-for-agent
 
-- [ ] dQw4w9WgXcQ의 API direct audio 320 요청이 실제 non-empty 파일 응답까지 완료된다.
-- [ ] dQw4w9WgXcQ의 API direct video 1080 요청이 실제 non-empty 파일 응답까지 완료된다.
+- [x] dQw4w9WgXcQ의 API direct audio 320 요청이 실제 non-empty 파일 응답까지 완료된다.
+- [x] dQw4w9WgXcQ의 API direct video 1080 요청이 실제 non-empty 파일 응답까지 완료된다.
 - [ ] a0iBRRoDnDw의 API direct audio 320 요청이 실제 non-empty 파일 응답까지 완료된다.
 - [ ] a0iBRRoDnDw의 API direct video 1080 요청이 실제 non-empty 파일 응답까지 완료된다.
 - [ ] dQw4w9WgXcQ의 worker queued audio 320과 video 1080 job이 completed가 되고 유효한 downloadUrl로 파일을 받을 수 있다.
 - [ ] a0iBRRoDnDw의 worker queued audio 320과 video 1080 job이 completed가 되고 유효한 downloadUrl로 파일을 받을 수 있다.
 - [ ] 각 queued job의 type과 quality가 요청값과 일치하고, R2 전달 이후에도 파일이 non-empty인지 확인한다.
-- [ ] direct와 queued 결과를 구분해 기록하고, provider·네트워크·인증 등 환경 요인으로 확인하지 못한 항목은 완료로 표시하지 않는다.
-- [ ] signed URL, cookie, token, API key와 같은 민감하거나 만료 가능한 값을 티켓에 기록하지 않는다.
+- [x] direct와 queued 결과를 구분해 기록하고, provider·네트워크·인증 등 환경 요인으로 확인하지 못한 항목은 완료로 표시하지 않는다.
+- [x] signed URL, cookie, token, API key와 같은 민감하거나 만료 가능한 값을 티켓에 기록하지 않는다.
 
 ## Comments
 
@@ -62,3 +62,4 @@
 | worker queued | `a0iBRRoDnDw` | video | 1080 | `queued` → `failed`, type/quality 일치, `EXTRACTION_FAILED`, `downloadUrl` 없음 |
 
 - health 복구는 확인했지만 direct/queued 8건이 모두 요구 조건을 충족하지 않았고, cache hit은 fresh worker 성공으로 판정하지 않았다. ticket은 미완료 상태를 유지한다.
+- 부분 체크 기준: 현재 production에서 독립적으로 확인된 known-good direct 2건과 evidence·민감정보 관리 항목만 체크했다. known-good queued 2건은 cache hit이고 실패 ID의 direct·queued 4건은 실패했으므로 나머지 acceptance는 미체크로 유지한다.
