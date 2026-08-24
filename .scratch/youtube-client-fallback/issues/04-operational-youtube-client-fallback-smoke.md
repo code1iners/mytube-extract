@@ -37,3 +37,11 @@
 - 첫 queued audio runner는 로컬 smoke 변수명 충돌로 POST 직후 중단되어 최종 job ID를 보존하지 못했다. 이후 재시도는 cache hit였으므로 해당 케이스를 fresh worker 완료로 판정하지 않았다.
 - 현재 production target에서는 기존 실패 ID의 direct·queued audio/video가 모두 실패했다. local current HEAD의 real integration 성공만으로 production 운영 완료를 선언할 수 없으며, 현재 구현을 승인된 production/staging target에 배포한 뒤 8개 케이스를 다시 검증해야 한다.
 - 이번 확인에서는 push, deploy, DB/R2 삭제, signed URL·cookie·token·API key 기록을 수행하지 않았다. 티켓은 미완료 상태로 유지한다.
+
+### 2026-08-24 post-review 배포 후 재검증
+
+- 코드 기준점: `4d87a89` (`fix: YouTube client fallback 및 진단 로그 보안 개선`). worker video preflight의 공통 fallback 경계 우회 수정과 관련 테스트가 포함되어 있다.
+- 최신 자동 검증(2026-08-24 16:25 KST): `pnpm run lint`, `pnpm run build`, `pnpm run test`(12 tasks, API 24 suites/201 tests), `pnpm --filter api run test:e2e:real`(1 suite/6 tests), API/worker `EXPECTED_YT_DLP_VERSION=2026.08.19 pnpm --filter ... run verify:runtime` 모두 통과했다.
+- 실제 target `https://mytube-extract-api.codeliners.cc/health` 재확인 결과 HTTP 530, Cloudflare `error code: 1033`이었다. health와 `worker.available=true`를 관찰하지 못했으므로 post-deploy direct 4건과 queued 4건은 실행·완료로 판정하지 않았다.
+- 로컬 검증 환경에도 API·cloudflared Docker container가 없어 로컬 deployment verification은 실패했다. 이는 원격 배포 상태를 추정하는 근거로 사용하지 않는다.
+- ticket은 미완료 상태를 유지하며, target health가 복구된 뒤 direct/queued 8개 케이스를 다시 독립 검증해야 한다.
