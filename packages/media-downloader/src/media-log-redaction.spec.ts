@@ -53,14 +53,19 @@ test('redacts cookie values from downloader diagnostics', () => {
   const error = Object.assign(new Error('cookie failure'), {
     diagnostic: {
       stderrTail:
-        'Cookie: SID=secret-cookie; PREF=dark-mode\nSet-Cookie: SESSION=secret-session',
+        'Cookie: SID=secret-cookie; PREF=dark-mode\nSet-Cookie: SESSION=secret-session\ncookie=secret-cookie Authorization: Bearer secret-bearer',
       tool: 'yt-dlp',
     },
   });
   /** server-safe diagnostic string. */
   const log = createSafeDiagnosticLog(error);
 
-  assert.doesNotMatch(log, /secret-cookie|dark-mode|secret-session/);
+  assert.doesNotMatch(
+    log,
+    /secret-cookie|dark-mode|secret-session|secret-bearer/,
+  );
   assert.match(log, /Cookie: \[redacted\]/);
   assert.match(log, /Set-Cookie: \[redacted\]/);
+  assert.match(log, /cookie=\[redacted\]/i);
+  assert.match(log, /\[redacted-bearer\]/);
 });

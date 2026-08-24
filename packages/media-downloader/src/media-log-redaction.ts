@@ -153,6 +153,14 @@ function sanitizeDiagnosticText(value: string) {
     .replace(/https?:\/\/[^\s'"]+/g, (url) => redactUrlForLog(url))
     .replace(/\/(?:tmp|var|app|home|Users|private)\/[^\s'"]+/g, '[local-path]')
     .replace(/\b(?:cookie|set-cookie):[^\r\n]*/gi, redactCookieHeader)
+    .replace(
+      /(\b(?:token|key|secret|password|cookie)=)[^\s&'"]+/gi,
+      '$1[redacted]',
+    )
+    .replace(
+      /\b(?:authorization|proxy-authorization):\s*Bearer\s+[^\s'"]+/gi,
+      '[redacted-bearer]',
+    )
     .replace(/([?&]?(?:token|key|secret|password)=)[^\s&'"]+/gi, '$1[redacted]')
     .replace(/\s+/g, ' ')
     .slice(0, DIAGNOSTIC_TEXT_LIMIT);

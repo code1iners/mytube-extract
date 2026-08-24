@@ -172,6 +172,7 @@ export async function runYoutubeClientAttempts(
 
   while (true) {
     try {
+      // 현재 client로 metadata 또는 artifact 단일 시도를 실행한다.
       await input.run({
         attempt,
         client,
@@ -191,9 +192,12 @@ export async function runYoutubeClientAttempts(
 
       return;
     } catch (error) {
+      // 실패한 시도의 구조화 진단을 누적해 최종 오류에 보존한다.
+      /** 현재 실패의 구조화 진단. */
       const diagnostic = getDownloaderDiagnostic(error);
       attempts.push(createAttemptDiagnostic(client, attempt, diagnostic));
 
+      // client 전환 대상 오류는 같은 client retry 없이 web_embedded로 전환한다.
       if (
         client === 'default' &&
         diagnostic?.reason === 'client-switch-required'
@@ -212,6 +216,7 @@ export async function runYoutubeClientAttempts(
         continue;
       }
 
+      // 나머지 transient 오류는 default client에서만 한 번 재시도한다.
       if (
         client === 'default' &&
         attempt < MAX_DEFAULT_CLIENT_ATTEMPTS &&
@@ -224,6 +229,7 @@ export async function runYoutubeClientAttempts(
         continue;
       }
 
+      // fallback 실패 또는 재시도 불가 오류는 누적 진단과 함께 종료한다.
       throw attachAttemptDiagnostics(error, attempts);
     }
   }

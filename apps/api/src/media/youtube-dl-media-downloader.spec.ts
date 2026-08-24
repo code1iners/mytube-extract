@@ -61,7 +61,9 @@ describe('YoutubeDlMediaDownloader', () => {
     );
     /** shared policy input captured from the API adapter. */
     const policyInput = runYoutubeClientPolicyMock.mock.calls[0]?.[0];
+    /** 기본 client option factory 결과. */
     const defaultOptions = policyInput?.createYoutubeOptions('default');
+    /** fallback client option factory 결과. */
     const fallbackOptions = policyInput?.createYoutubeOptions('web_embedded');
 
     expect(defaultOptions).toEqual({

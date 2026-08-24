@@ -58,7 +58,9 @@ export class YoutubeDlMediaDownloader implements MediaDownloader {
 
   /** URL 없이 client 전환과 성공 결과만 API server log에 남긴다. */
   private logFallback(event: YoutubeClientFallbackEvent) {
+    /** fallback 시작 오류에서 URL과 민감 값을 제거한 진단 문자열. */
     const diagnostic = event.error ? createSafeDiagnosticLog(event.error) : '';
+    /** 진단이 없는 fallback 시작 오류의 타입명. */
     const errorName = event.error ? createSafeErrorLog(event.error) : '';
 
     this.logger.warn(
