@@ -405,12 +405,12 @@ async function processJob(job: ClaimedDownloadJob) {
         });
       },
       execute: youtubeExec as unknown as YoutubeDlExecute,
-      onRetry: ({ attempt, error }) => {
+      onRetry: ({ attempt, client, error }) => {
         /** source URL을 제외한 재시도 진단 문자열. */
         const diagnostic = createSafeDiagnosticLog(error);
 
         console.warn(
-          `Extraction retry: job=${job.id} type=${job.type} quality=${job.quality} attempt=${attempt}${
+          `Extraction retry: job=${job.id} type=${job.type} quality=${job.quality} client=${client} attempt=${attempt}${
             diagnostic ? ` ${diagnostic}` : ` ${createSafeErrorLog(error)}`
           }`,
         );

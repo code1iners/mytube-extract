@@ -14,7 +14,31 @@ export function redactUrlForLog(url: string) {
 const DIAGNOSTIC_TEXT_LIMIT = 1200;
 
 /** downloader가 에러에 붙이는 server-only 진단 정보. */
+export type DownloaderAttemptDiagnostic = {
+  /** 실행한 YouTube player client. */
+  client: string;
+  /** 해당 client의 시도 번호. */
+  attempt: number;
+  /** 알려진 downloader 실패 분류. */
+  reason?: string;
+  /** 프로세스 종료 코드. */
+  exitCode?: number | null;
+  /** 프로세스 종료 signal. */
+  signal?: string | null;
+  /** 프로세스 kill 여부. */
+  killed?: boolean;
+  /** stdout 마지막 일부. */
+  stdoutTail?: string;
+  /** stderr 마지막 일부. */
+  stderrTail?: string;
+};
+
+/** downloader가 에러에 붙이는 server-only 진단 정보. */
 export type DownloaderDiagnostic = {
+  /** 마지막으로 실행한 YouTube player client. */
+  client?: string;
+  /** 마지막 client의 시도 번호. */
+  attempt?: number;
   /** 진단 대상 도구 이름. */
   tool?: string;
   /** 알려진 downloader 실패 분류. */
@@ -29,6 +53,8 @@ export type DownloaderDiagnostic = {
   stdoutTail?: string;
   /** stderr 마지막 일부. */
   stderrTail?: string;
+  /** client별 시도 진단 목록. */
+  attempts?: readonly DownloaderAttemptDiagnostic[];
 };
 
 /** Error에 server-only 진단 정보를 붙인 후보. */
@@ -61,6 +87,8 @@ export function createSafeDiagnosticLog(error: unknown) {
 
   /** 로그에 포함할 key=value 조각. */
   const parts = [
+    formatDiagnosticPart('client', diagnostic.client),
+    formatDiagnosticPart('attempt', diagnostic.attempt),
     formatDiagnosticPart('tool', diagnostic.tool),
     formatDiagnosticPart('reason', diagnostic.reason),
     formatDiagnosticPart('exitCode', diagnostic.exitCode),
@@ -68,6 +96,7 @@ export function createSafeDiagnosticLog(error: unknown) {
     formatDiagnosticPart('killed', diagnostic.killed),
     formatDiagnosticPart('stderrTail', diagnostic.stderrTail),
     formatDiagnosticPart('stdoutTail', diagnostic.stdoutTail),
+    formatDiagnosticAttempts(diagnostic.attempts),
   ].filter(Boolean);
 
   return parts.join(' ');
@@ -89,6 +118,33 @@ function formatDiagnosticPart(key: string, value: unknown) {
   }
 
   return `${key}=${sanitizeDiagnosticText(String(value))}`;
+}
+
+/** client별 시도 진단을 안전한 한 줄 문자열로 만든다. */
+function formatDiagnosticAttempts(
+  attempts: readonly DownloaderAttemptDiagnostic[] | undefined,
+) {
+  if (!attempts || attempts.length === 0) {
+    return '';
+  }
+
+  /** client별 시도 결과를 쉼표로 구분한 표현. */
+  const formattedAttempts = attempts.map((attempt) => {
+    const parts = [
+      formatDiagnosticPart('client', attempt.client),
+      formatDiagnosticPart('attempt', attempt.attempt),
+      formatDiagnosticPart('reason', attempt.reason),
+      formatDiagnosticPart('exitCode', attempt.exitCode),
+      formatDiagnosticPart('signal', attempt.signal),
+      formatDiagnosticPart('killed', attempt.killed),
+      formatDiagnosticPart('stderrTail', attempt.stderrTail),
+      formatDiagnosticPart('stdoutTail', attempt.stdoutTail),
+    ].filter(Boolean);
+
+    return `{${parts.join(',')}}`;
+  });
+
+  return sanitizeDiagnosticText(`attempts=${formattedAttempts.join('|')}`);
 }
 
 /** stderr/stdout tail에서 민감하거나 과한 내용을 줄인다. */

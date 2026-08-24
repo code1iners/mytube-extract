@@ -217,9 +217,9 @@ function createStreamTail(stream: Readable | undefined) {
 
 /**
  * stderr에서 재시도로 해결되지 않는 네트워크 단절 신호를 찾는 패턴.
- * 'TransportError'는 실제 yt-dlp 2026.07.04에서 DNS 실패·connection refused를
- * 모두 감싸는 공통 wrapper라 실측으로 확인해 추가했다. 나머지는 구버전 yt-dlp나
- * 다른 OS의 Python urllib 메시지 형태를 대비한 보조 패턴이다.
+ * 'TransportError'는 진단 당시 yt-dlp 2026.07.04에서 DNS 실패·connection refused를
+ * 모두 감싸는 공통 wrapper라 실측으로 확인해 추가했다. 나머지는 다른 yt-dlp 버전이나
+ * OS의 Python urllib 메시지 형태를 대비한 보조 패턴이다.
  */
 const NETWORK_UNREACHABLE_STDERR_PATTERNS = [
   'TransportError',
@@ -231,21 +231,54 @@ const NETWORK_UNREACHABLE_STDERR_PATTERNS = [
   'getaddrinfo',
 ];
 
-/** stderr에서 알려진 YouTube 인증 실패 또는 네트워크 단절을 분류한다. */
+/** web_embedded가 영상 embed 제한을 해결할 수 없는 stderr 문구. */
+const EMBED_DISABLED_STDERR_PATTERNS = [
+  'playback on other websites has been disabled by the video owner',
+  'embedding has been disabled by the video owner',
+];
+
+/** 기본 client 대신 web_embedded를 시도할 수 있는 제한된 stderr 문구. */
+const CLIENT_SWITCH_STDERR_PATTERNS = [
+  'requested format is not available',
+  'no video formats found',
+  'the following content is not available on this app',
+  'this video is not available on this app',
+];
+
+/** stderr에서 알려진 YouTube 인증, embed 제한, 네트워크, client 전환을 분류한다. */
 function detectDiagnosticReason(stderrTail: string) {
+  /** 비교를 안정화한 stderr 표현. */
+  const normalizedStderr = stderrTail.toLowerCase();
+
   if (
-    stderrTail.includes('Sign in to confirm you') ||
-    stderrTail.includes('LOGIN_REQUIRED')
+    normalizedStderr.includes('sign in to confirm you') ||
+    normalizedStderr.includes('login_required')
   ) {
     return 'youtube-auth-required';
   }
 
   if (
+    EMBED_DISABLED_STDERR_PATTERNS.some((pattern) =>
+      normalizedStderr.includes(pattern),
+    )
+  ) {
+    return 'embed-disabled';
+  }
+
+  if (
     NETWORK_UNREACHABLE_STDERR_PATTERNS.some((pattern) =>
-      stderrTail.includes(pattern),
+      normalizedStderr.includes(pattern.toLowerCase()),
     )
   ) {
     return 'network-unreachable';
+  }
+
+  if (
+    CLIENT_SWITCH_STDERR_PATTERNS.some((pattern) =>
+      normalizedStderr.includes(pattern),
+    )
+  ) {
+    return 'client-switch-required';
   }
 
   return undefined;

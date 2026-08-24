@@ -152,8 +152,6 @@ export function createDownloadYoutubeOptions(input: {
 }) {
   return {
     addMetadata: true,
-    /** android_vr 기본 client의 세그먼트 403 Forbidden을 우회하는 player client. */
-    extractorArgs: 'youtube:player_client=web_embedded',
     format: input.format,
     jsRuntimes: 'node' as const,
     output: input.outputPath,

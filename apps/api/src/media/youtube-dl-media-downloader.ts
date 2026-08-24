@@ -1,7 +1,8 @@
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import {
-  runYoutubeDl,
+  applyYoutubeClientOptions,
+  runYoutubeClientPolicy,
   type YoutubeDlExecute,
 } from '@mytube-extract/media-downloader';
 import { existsSync } from 'fs';
@@ -22,11 +23,9 @@ export class YoutubeDlMediaDownloader implements MediaDownloader {
     /** 실제 존재하는 ffmpeg 경로만 yt-dlp에 전달한다. */
     const availableFfmpegLocation =
       ffmpegLocation && existsSync(ffmpegLocation) ? ffmpegLocation : '';
-    /** youtube-dl-exec에 전달할 API 공통 옵션. */
+    /** client와 무관한 API 공통 yt-dlp option. */
     const youtubeOptions = {
       addMetadata: true,
-      /** android_vr 기본 client의 세그먼트 403을 우회하는 player client. */
-      extractorArgs: 'youtube:player_client=web_embedded',
       format: options.format,
       jsRuntimes: 'node' as const,
       output: options.outputPath,
@@ -40,12 +39,13 @@ export class YoutubeDlMediaDownloader implements MediaDownloader {
         : {}),
     };
 
-    await runYoutubeDl({
+    await runYoutubeClientPolicy({
+      createYoutubeOptions: (client) =>
+        applyYoutubeClientOptions(youtubeOptions, client),
       execute: youtubeExec as unknown as YoutubeDlExecute,
       outputPath: options.outputPath,
       signal: options.signal,
       sourceUrl: options.sourceUrl,
-      youtubeOptions,
     });
   }
 }

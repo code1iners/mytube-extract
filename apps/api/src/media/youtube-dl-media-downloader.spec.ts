@@ -1,5 +1,5 @@
 import { ConfigService } from '@nestjs/config';
-import { runYoutubeDl } from '@mytube-extract/media-downloader';
+import { runYoutubeClientPolicy } from '@mytube-extract/media-downloader';
 import { existsSync } from 'fs';
 import { exec as youtubeExec } from 'youtube-dl-exec';
 import { YoutubeDlMediaDownloader } from './youtube-dl-media-downloader';
@@ -14,14 +14,15 @@ jest.mock('youtube-dl-exec', () => ({
 }));
 
 jest.mock('@mytube-extract/media-downloader', () => ({
-  runYoutubeDl: jest.fn(),
+  ...jest.requireActual('@mytube-extract/media-downloader'),
+  runYoutubeClientPolicy: jest.fn(),
 }));
 
 describe('YoutubeDlMediaDownloader', () => {
   /** API downloader adapter. */
   let downloader: YoutubeDlMediaDownloader;
-  /** injected yt-dlp runner mock. */
-  const runYoutubeDlMock = jest.mocked(runYoutubeDl);
+  /** injected YouTube client policy mock. */
+  const runYoutubeClientPolicyMock = jest.mocked(runYoutubeClientPolicy);
   /** original yt-dlp process starter. */
   const youtubeExecMock = jest.mocked(youtubeExec);
   /** configured ffmpeg path existence check. */
@@ -30,14 +31,14 @@ describe('YoutubeDlMediaDownloader', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     existsSyncMock.mockReturnValue(true);
-    runYoutubeDlMock.mockResolvedValue();
+    runYoutubeClientPolicyMock.mockResolvedValue();
 
     downloader = new YoutubeDlMediaDownloader({
       get: jest.fn().mockReturnValue('/usr/bin/ffmpeg'),
     } as unknown as ConfigService);
   });
 
-  it('delegates one audio download attempt without ignoreErrors', async () => {
+  it('delegates the base options and client factory to the shared policy', async () => {
     await expect(
       downloader.download({
         audioFormat: 'mp3',
@@ -49,27 +50,32 @@ describe('YoutubeDlMediaDownloader', () => {
       }),
     ).resolves.toBeUndefined();
 
-    expect(runYoutubeDlMock).toHaveBeenCalledTimes(1);
-    expect(runYoutubeDlMock).toHaveBeenCalledWith(
+    expect(runYoutubeClientPolicyMock).toHaveBeenCalledTimes(1);
+    expect(runYoutubeClientPolicyMock).toHaveBeenCalledWith(
       expect.objectContaining({
         execute: youtubeExecMock,
         outputPath: '/tmp/sample.mp3',
         sourceUrl: 'https://www.youtube.com/watch?v=abc123_DEF0',
-        youtubeOptions: expect.objectContaining({
-          addMetadata: true,
-          audioFormat: 'mp3',
-          extractAudio: true,
-          extractorArgs: 'youtube:player_client=web_embedded',
-          ffmpegLocation: '/usr/bin/ffmpeg',
-          format: 'bestaudio/best',
-          jsRuntimes: 'node',
-          output: '/tmp/sample.mp3',
-        }),
       }),
     );
-    expect(
-      runYoutubeDlMock.mock.calls[0]?.[0].youtubeOptions,
-    ).not.toHaveProperty('ignoreErrors');
+    /** shared policy input captured from the API adapter. */
+    const policyInput = runYoutubeClientPolicyMock.mock.calls[0]?.[0];
+    const defaultOptions = policyInput?.createYoutubeOptions('default');
+    const fallbackOptions = policyInput?.createYoutubeOptions('web_embedded');
+
+    expect(defaultOptions).toEqual({
+      addMetadata: true,
+      audioFormat: 'mp3',
+      extractAudio: true,
+      ffmpegLocation: '/usr/bin/ffmpeg',
+      format: 'bestaudio/best',
+      jsRuntimes: 'node',
+      output: '/tmp/sample.mp3',
+    });
+    expect(fallbackOptions).toMatchObject({
+      extractorArgs: 'youtube:player_client=web_embedded',
+    });
+    expect(defaultOptions).not.toHaveProperty('ignoreErrors');
   });
 
   it('omits a configured ffmpeg path that does not exist locally', async () => {
@@ -83,13 +89,16 @@ describe('YoutubeDlMediaDownloader', () => {
       sourceUrl: 'https://www.youtube.com/watch?v=abc123_DEF0',
     });
 
-    expect(runYoutubeDlMock).toHaveBeenCalledWith(
+    expect(runYoutubeClientPolicyMock).toHaveBeenCalledWith(
       expect.objectContaining({
-        youtubeOptions: expect.not.objectContaining({
-          ffmpegLocation: '/usr/bin/ffmpeg',
-        }),
+        createYoutubeOptions: expect.any(Function),
       }),
     );
+    expect(
+      runYoutubeClientPolicyMock.mock.calls[0]?.[0].createYoutubeOptions(
+        'default',
+      ),
+    ).not.toHaveProperty('ffmpegLocation', '/usr/bin/ffmpeg');
   });
 
   it('forwards abort signals to the shared runner without adding API retries', async () => {
@@ -104,8 +113,8 @@ describe('YoutubeDlMediaDownloader', () => {
       sourceUrl: 'https://www.youtube.com/watch?v=abc123_DEF0',
     });
 
-    expect(runYoutubeDlMock).toHaveBeenCalledTimes(1);
-    expect(runYoutubeDlMock).toHaveBeenCalledWith(
+    expect(runYoutubeClientPolicyMock).toHaveBeenCalledTimes(1);
+    expect(runYoutubeClientPolicyMock).toHaveBeenCalledWith(
       expect.objectContaining({ signal: abortController.signal }),
     );
   });

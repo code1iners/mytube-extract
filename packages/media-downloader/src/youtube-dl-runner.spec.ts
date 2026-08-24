@@ -253,6 +253,56 @@ test('non-zero close with a getaddrinfo failure stderr classifies as network-unr
   });
 });
 
+test('non-zero close with embed-disabled stderr avoids client fallback', async () => {
+  /** fake child process controls. */
+  const fake = createFakeProcess();
+  /** runner completion promise. */
+  const result = runYoutubeDl({
+    execute: () => fake.process,
+    outputPath: '/tmp/output.mp4',
+    sourceUrl: 'https://www.youtube.com/watch?v=abc123_DEF0',
+    youtubeOptions: { output: '/tmp/output.mp4' },
+  });
+
+  fake.process.stderr.write(
+    'ERROR: Playback on other websites has been disabled by the video owner\n',
+  );
+  fake.process.emit('close', 1, null);
+
+  await assert.rejects(result, (error: unknown) => {
+    /** runner diagnostic candidate. */
+    const diagnostic = (error as { diagnostic?: Record<string, unknown> })
+      .diagnostic;
+
+    assert.equal(diagnostic?.reason, 'embed-disabled');
+    return true;
+  });
+});
+
+test('non-zero close with an allowlisted format failure requests a client switch', async () => {
+  /** fake child process controls. */
+  const fake = createFakeProcess();
+  /** runner completion promise. */
+  const result = runYoutubeDl({
+    execute: () => fake.process,
+    outputPath: '/tmp/output.mp4',
+    sourceUrl: 'https://www.youtube.com/watch?v=abc123_DEF0',
+    youtubeOptions: { output: '/tmp/output.mp4' },
+  });
+
+  fake.process.stderr.write('ERROR: Requested format is not available\n');
+  fake.process.emit('close', 1, null);
+
+  await assert.rejects(result, (error: unknown) => {
+    /** runner diagnostic candidate. */
+    const diagnostic = (error as { diagnostic?: Record<string, unknown> })
+      .diagnostic;
+
+    assert.equal(diagnostic?.reason, 'client-switch-required');
+    return true;
+  });
+});
+
 test('promise rejection is handled until close supplies the final process outcome', async () => {
   /** fake child process controls. */
   const fake = createFakeProcess();

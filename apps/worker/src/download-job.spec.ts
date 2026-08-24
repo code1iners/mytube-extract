@@ -63,6 +63,44 @@ test('retries one transient failure with the same output path and preserves part
   await rm(dirname(outputPath), { force: true, recursive: true });
 });
 
+test('switches the worker extraction to web_embedded without retrying the default client', async () => {
+  /** runner 입력 기록. */
+  const attempts: YoutubeDlRunInput[] = [];
+
+  /** 성공한 extraction artifact. */
+  const outputPath = await downloadExtractionJob({
+    createYoutubeOptions: (path) => ({ output: path }),
+    execute: unusedExecute,
+    run: async (input) => {
+      attempts.push(input);
+
+      if (attempts.length === 1) {
+        throw Object.assign(new Error('client switch required'), {
+          diagnostic: {
+            reason: 'client-switch-required',
+            tool: 'yt-dlp',
+          },
+        });
+      }
+
+      await writeFile(input.outputPath, 'valid final output');
+    },
+    sourceUrl: 'https://www.youtube.com/watch?v=a0iBRRoDnDw',
+    type: 'video',
+    wait: async () => undefined,
+  });
+
+  assert.equal(attempts.length, 2);
+  assert.equal(attempts[0]?.youtubeOptions.extractorArgs, undefined);
+  assert.equal(
+    attempts[1]?.youtubeOptions.extractorArgs,
+    'youtube:player_client=web_embedded',
+  );
+  assert.equal(existsSync(outputPath), true);
+
+  await rm(dirname(outputPath), { force: true, recursive: true });
+});
+
 test('does not retry a YouTube auth failure and removes its work directory', async () => {
   /** runner invocation count. */
   let runCalls = 0;
