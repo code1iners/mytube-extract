@@ -63,3 +63,10 @@
 
 - health 복구는 확인했지만 direct/queued 8건이 모두 요구 조건을 충족하지 않았고, cache hit은 fresh worker 성공으로 판정하지 않았다. ticket은 미완료 상태를 유지한다.
 - 부분 체크 기준: 현재 production에서 독립적으로 확인된 known-good direct 2건과 evidence·민감정보 관리 항목만 체크했다. known-good queued 2건은 cache hit이고 실패 ID의 direct·queued 4건은 실패했으므로 나머지 acceptance는 미체크로 유지한다.
+
+### 2026-08-24 production 실패 ID local differential probe
+
+- 실행 시각: 2026-08-24 17:03 KST. 현재 HEAD의 local `yt-dlp 2026.08.19`로 `a0iBRRoDnDw`를 client별 비교했다.
+- local `default` client는 audio 320과 video 1080 모두 exit 0으로 완료했다.
+- local `web_embedded` client는 audio/video 모두 `Video unavailable. Playback on other websites has been disabled by the video owner`로 실패했다.
+- 이 결과는 production 성공을 대신하지 않지만, production API가 같은 ID를 500으로 반환하는 원인이 코드 fallback allowlist만으로 단정되지 않음을 보여준다. production API/worker의 실제 image commit, yt-dlp runtime, provider/network 진단 로그를 추가 확인해야 한다.
