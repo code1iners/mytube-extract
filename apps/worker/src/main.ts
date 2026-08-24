@@ -383,7 +383,6 @@ async function processJob(job: ClaimedDownloadJob) {
     if (job.type === ExtractionType.video) {
       await runVideoPreflight({
         format,
-        onFallback: (event) => logYoutubeFallback(job, 'preflight', event),
         sourceUrl: job.url,
       });
     }
@@ -466,7 +465,7 @@ async function processJob(job: ClaimedDownloadJob) {
 /** URL 없이 queued job의 client fallback 시작과 성공을 worker log에 남긴다. */
 function logYoutubeFallback(
   job: ClaimedDownloadJob,
-  phase: 'preflight' | 'download',
+  phase: 'download',
   event: YoutubeClientFallbackEvent,
 ) {
   /** fallback 시작 오류에서 URL과 민감 값을 제거한 진단 문자열. */

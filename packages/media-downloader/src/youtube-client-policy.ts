@@ -59,6 +59,8 @@ export type YoutubeClientAttemptsInput = {
   createYoutubeOptions: (client: YoutubeClient) => Record<string, unknown>;
   /** 정규화된 YouTube source URL. */
   sourceUrl: string;
+  /** 현재 경계에서 client fallback을 허용할지 여부. */
+  allowClientFallback?: boolean;
   /** 실행 취소 신호. */
   signal?: AbortSignal;
   /** metadata 또는 artifact 단일 시도 runner. */
@@ -199,6 +201,7 @@ export async function runYoutubeClientAttempts(
 
       // client 전환 대상 오류는 같은 client retry 없이 web_embedded로 전환한다.
       if (
+        input.allowClientFallback !== false &&
         client === 'default' &&
         diagnostic?.reason === 'client-switch-required'
       ) {
