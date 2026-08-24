@@ -47,3 +47,20 @@ test('keeps client attempt diagnostics server-safe', () => {
   assert.match(log, /client-switch-required/);
   assert.doesNotMatch(log, /secret-value|\/tmp\/private|password/);
 });
+
+test('redacts cookie values from downloader diagnostics', () => {
+  /** raw process diagnostic containing a cookie header. */
+  const error = Object.assign(new Error('cookie failure'), {
+    diagnostic: {
+      stderrTail:
+        'Cookie: SID=secret-cookie; PREF=dark-mode\nSet-Cookie: SESSION=secret-session',
+      tool: 'yt-dlp',
+    },
+  });
+  /** server-safe diagnostic string. */
+  const log = createSafeDiagnosticLog(error);
+
+  assert.doesNotMatch(log, /secret-cookie|dark-mode|secret-session/);
+  assert.match(log, /Cookie: \[redacted\]/);
+  assert.match(log, /Set-Cookie: \[redacted\]/);
+});

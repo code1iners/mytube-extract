@@ -1,6 +1,9 @@
 import { stat } from 'node:fs/promises';
 import type { Readable } from 'node:stream';
-import type { DownloaderDiagnostic } from './media-log-redaction';
+import {
+  getDownloaderDiagnostic,
+  type DownloaderDiagnostic,
+} from './media-log-redaction';
 
 /** yt-dlp 실패 원인 확인에 남길 stream tail line 수. */
 const DIAGNOSTIC_TAIL_LINES = 12;
@@ -52,6 +55,53 @@ export type YoutubeDlRunError = Error & {
   /** client에 직접 노출하지 않는 subprocess 진단 정보. */
   diagnostic: DownloaderDiagnostic;
 };
+
+/** youtube-dl-exec가 reject할 때 노출할 수 있는 최소 오류 표면. */
+type YoutubeDlExecError = Error & {
+  /** upstream stderr 원문. */
+  stderr?: unknown;
+  /** upstream stdout 원문. */
+  stdout?: unknown;
+  /** upstream process 종료 코드. */
+  exitCode?: unknown;
+  /** upstream process 종료 signal. */
+  signal?: unknown;
+  /** upstream process kill 여부. */
+  killed?: unknown;
+};
+
+/** raw youtube-dl-exec 오류를 공통 client 정책용 진단 오류로 정규화한다. */
+export function normalizeYoutubeDlError(error: unknown) {
+  if (error instanceof Error && getDownloaderDiagnostic(error)) {
+    return error as YoutubeDlRunError;
+  }
+
+  /** youtube-dl-exec 오류에서 읽을 수 있는 제한된 표면. */
+  const candidate =
+    error && typeof error === 'object'
+      ? (error as YoutubeDlExecError)
+      : undefined;
+  /** upstream stderr 마지막 일부. */
+  const stderrTail = createDiagnosticTail(candidate?.stderr);
+
+  return createRunnerError(
+    error instanceof Error ? error.message : 'yt-dlp request failed',
+    {
+      exitCode:
+        typeof candidate?.exitCode === 'number'
+          ? candidate.exitCode
+          : undefined,
+      killed:
+        typeof candidate?.killed === 'boolean' ? candidate.killed : undefined,
+      reason: detectDiagnosticReason(stderrTail ?? ''),
+      signal:
+        typeof candidate?.signal === 'string' ? candidate.signal : undefined,
+      stderrTail,
+      stdoutTail: createDiagnosticTail(candidate?.stdout),
+      tool: 'yt-dlp',
+    },
+  );
+}
 
 /** 단일 yt-dlp subprocess를 실행하고 최종 output artifact를 검증한다. */
 export function runYoutubeDl(input: YoutubeDlRunInput): Promise<void> {
@@ -213,6 +263,19 @@ function createStreamTail(stream: Readable | undefined) {
   });
 
   return () => lines.join('\n');
+}
+
+/** 외부 오류 출력에서 마지막 diagnostic line만 보관한다. */
+function createDiagnosticTail(value: unknown) {
+  if (typeof value !== 'string') {
+    return undefined;
+  }
+
+  return value
+    .split(/\r?\n/)
+    .filter(Boolean)
+    .slice(-DIAGNOSTIC_TAIL_LINES)
+    .join('\n');
 }
 
 /**

@@ -36,7 +36,6 @@ import {
   createWhisperCliArgs,
   createWhisperModelEnvName,
   createWhisperSrtOutputPath,
-  createVideoPreflightDecision,
   createWorkerHeartbeatUpsertArgs,
   createYtDlpFormat,
   DEFAULT_SUBTITLE_AUDIO_MAX_BYTES,
@@ -55,9 +54,9 @@ import {
   SubtitleWorkerFailureCode,
   SubtitleWorkerJobFailure,
   WorkerFailureCode,
-  WorkerJobFailure,
 } from './worker.logic';
 import { downloadExtractionJob } from './download-job';
+import { runVideoPreflight } from './video-preflight';
 
 /** worker idle polling 간격. */
 const LOOP_INTERVAL_MS = parseEnvNumber(
@@ -381,7 +380,7 @@ async function processJob(job: ClaimedDownloadJob) {
     const format = createYtDlpFormat(job.type, job.quality);
 
     if (job.type === ExtractionType.video) {
-      await assertVideoPreflight(job.url, format);
+      await runVideoPreflight({ format, sourceUrl: job.url });
     }
 
     /** R2 object key. */
@@ -839,29 +838,6 @@ async function markSubtitleFailed(
     },
     where: { id: jobId },
   });
-}
-
-/** video 다운로드 전 선택 format이 worker 처리 정책 안에 있는지 확인한다. */
-async function assertVideoPreflight(url: string, format: string) {
-  /** yt-dlp format selector가 적용된 metadata. */
-  const metadata = await youtubeDl(url, {
-    dumpSingleJson: true,
-    format,
-    jsRuntimes: 'node',
-    noPlaylist: true,
-  });
-  /** worker 처리 가능 여부. */
-  const decision = createVideoPreflightDecision(metadata);
-
-  if (!decision.ok) {
-    throw new WorkerJobFailure(decision.errorCode, decision.message);
-  }
-
-  console.log(
-    `Video preflight passed: formats=${decision.formatIds.join(',') || 'unknown'} estimatedBytes=${
-      decision.estimatedBytes ?? 'unknown'
-    }`,
-  );
 }
 
 /** 지정 시간만큼 쉰다. */

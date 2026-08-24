@@ -152,7 +152,16 @@ function sanitizeDiagnosticText(value: string) {
   return value
     .replace(/https?:\/\/[^\s'"]+/g, (url) => redactUrlForLog(url))
     .replace(/\/(?:tmp|var|app|home|Users|private)\/[^\s'"]+/g, '[local-path]')
+    .replace(/\b(?:cookie|set-cookie):[^\r\n]*/gi, redactCookieHeader)
     .replace(/([?&]?(?:token|key|secret|password)=)[^\s&'"]+/gi, '$1[redacted]')
     .replace(/\s+/g, ' ')
     .slice(0, DIAGNOSTIC_TEXT_LIMIT);
+}
+
+/** Cookie header의 여러 key/value를 하나의 redacted 값으로 바꾼다. */
+function redactCookieHeader(header: string) {
+  /** Cookie header 이름과 구분자를 포함하는 위치. */
+  const separatorIndex = header.indexOf(':');
+
+  return `${header.slice(0, separatorIndex + 1)} [redacted]`;
 }
