@@ -1,4 +1,4 @@
-Status: ready-for-agent
+Status: done (2026-08-25)
 
 # YouTube 추출 client fallback 개선
 
@@ -84,6 +84,34 @@ fallback은 client 전환 전용 오류 allowlist에만 적용한다. embed-disa
 - queued worker 검증은 별도 운영 smoke로 수행한다. 두 URL 각각에 대해 audio 320과 video 1080 job을 생성하고, job이 completed가 되는지, type과 quality가 요청과 일치하는지, downloadUrl이 유효한지, 최종 파일 응답이 non-empty인지 확인한다.
 - 운영 smoke에서는 API direct와 queued worker를 구분해 기록한다. direct 성공만으로 worker와 R2 전달 경로의 성공을 추정하지 않으며, worker 성공만으로 direct media adapter의 성공을 추정하지 않는다.
 - 기존 worker retry 테스트, media-downloader diagnostic redaction 테스트, API public error mapping 테스트의 패턴을 prior art로 활용한다. 실제 URL 성공 테스트와 fake runner 정책 테스트를 한 테스트로 섞지 않는다.
+
+## 완료 검증
+
+2026-08-25 기준 구현과 운영 smoke의 완료 조건을 모두 충족했다. 하위 티켓 01~04가 완료되었고, 이전 production 실패는 배포 서버에 뒤처진 commit이 적용된 상태에서 발생했으며 재배포 후 동일 target에서 direct·queued 경로를 다시 통과했다.
+
+하위 티켓 완료 상태:
+
+- [x] [01: 공통 YouTube client 시도 정책과 진단 seam 마련](issues/01-shared-youtube-client-policy.md)
+- [x] [02: API direct media에 기본 client 우선 fallback 연결](issues/02-api-direct-media-client-fallback.md)
+- [x] [03: worker queued job에 공통 fallback 연결](issues/03-worker-queued-client-fallback.md)
+- [x] [04: API direct·worker queued 운영 smoke 및 완료 증거](issues/04-operational-youtube-client-fallback-smoke.md)
+
+자동·통합 검증:
+
+- `pnpm run lint`, `pnpm run build`, `pnpm run test` 통과
+- `pnpm --filter api run test:e2e:real` 1 suite/6 tests 통과
+- API와 worker의 `yt-dlp 2026.08.19` 및 ffmpeg runtime 확인
+- fake runner 정책 테스트, API direct real integration, worker extraction seam에서 기본 client 우선·제한적 `web_embedded` fallback·artifact non-empty 계약 확인
+
+운영 smoke 검증:
+
+- production `GET /health` HTTP 200 및 `worker.available=true` 확인
+- API direct에서 두 URL의 audio 320/video 1080 네 조합 모두 HTTP 200, 기대 content type, attachment, non-empty 파일 응답 확인
+  - `dQw4w9WgXcQ`: audio 3,750,165 bytes, video 33,829,665 bytes
+  - `a0iBRRoDnDw`: audio 4,958,157 bytes, video 64,828,645 bytes
+- worker queued에서 두 URL의 네 조합 모두 `queued` → `processing` → `completed`, 요청 `type`·`quality`, `downloadUrl`, 실제 non-empty 파일 응답 확인
+- known-good URL은 cache를 삭제한 뒤 queued audio/video를 `cache_hit=no`로 재실행했고, DB asset과 R2 object 재생성 및 R2 `HeadObject`의 크기·content type을 확인
+- signed URL, cookie, token, API key 등 민감하거나 만료 가능한 값은 기록하지 않음
 
 ## 범위 제외
 

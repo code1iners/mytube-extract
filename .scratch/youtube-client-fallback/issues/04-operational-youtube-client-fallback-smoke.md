@@ -4,15 +4,15 @@
 
 **Blocked by:** 02: API direct media에 기본 client 우선 fallback 연결, 03: worker queued job에 공통 fallback 연결
 
-**Status:** ready-for-agent
+**Status:** done (2026-08-25)
 
 - [x] dQw4w9WgXcQ의 API direct audio 320 요청이 실제 non-empty 파일 응답까지 완료된다.
 - [x] dQw4w9WgXcQ의 API direct video 1080 요청이 실제 non-empty 파일 응답까지 완료된다.
-- [ ] a0iBRRoDnDw의 API direct audio 320 요청이 실제 non-empty 파일 응답까지 완료된다.
-- [ ] a0iBRRoDnDw의 API direct video 1080 요청이 실제 non-empty 파일 응답까지 완료된다.
-- [ ] dQw4w9WgXcQ의 worker queued audio 320과 video 1080 job이 completed가 되고 유효한 downloadUrl로 파일을 받을 수 있다.
-- [ ] a0iBRRoDnDw의 worker queued audio 320과 video 1080 job이 completed가 되고 유효한 downloadUrl로 파일을 받을 수 있다.
-- [ ] 각 queued job의 type과 quality가 요청값과 일치하고, R2 전달 이후에도 파일이 non-empty인지 확인한다.
+- [x] a0iBRRoDnDw의 API direct audio 320 요청이 실제 non-empty 파일 응답까지 완료된다.
+- [x] a0iBRRoDnDw의 API direct video 1080 요청이 실제 non-empty 파일 응답까지 완료된다.
+- [x] dQw4w9WgXcQ의 worker queued audio 320과 video 1080 job이 completed가 되고 유효한 downloadUrl로 파일을 받을 수 있다.
+- [x] a0iBRRoDnDw의 worker queued audio 320과 video 1080 job이 completed가 되고 유효한 downloadUrl로 파일을 받을 수 있다.
+- [x] 각 queued job의 type과 quality가 요청값과 일치하고, R2 전달 이후에도 파일이 non-empty인지 확인한다.
 - [x] direct와 queued 결과를 구분해 기록하고, provider·네트워크·인증 등 환경 요인으로 확인하지 못한 항목은 완료로 표시하지 않는다.
 - [x] signed URL, cookie, token, API key와 같은 민감하거나 만료 가능한 값을 티켓에 기록하지 않는다.
 
@@ -70,3 +70,38 @@
 - local `default` client는 audio 320과 video 1080 모두 exit 0으로 완료했다.
 - local `web_embedded` client는 audio/video 모두 `Video unavailable. Playback on other websites has been disabled by the video owner`로 실패했다.
 - 이 결과는 production 성공을 대신하지 않지만, production API가 같은 ID를 500으로 반환하는 원인이 코드 fallback allowlist만으로 단정되지 않음을 보여준다. production API/worker의 실제 image commit, yt-dlp runtime, provider/network 진단 로그를 추가 확인해야 한다.
+
+### 2026-08-25 재배포 후 production 운영 smoke
+
+- 재배포 후 실행 시각: 2026-08-25 10:23–10:25 KST. `GET /health`는 HTTP 200이며 `worker.available=true`를 반환했다.
+- 이번 결과는 이전 production 실패가 배포 서버에 뒤처진 commit이 적용되어 발생한 것이었음을 확인하는 운영 증거다. 동일 target에서 재배포 후 실패 ID가 direct와 fresh queued worker 모두 성공했다.
+
+| Surface | Video ID | Type | Quality | Observed result |
+| --- | --- | --- | --- | --- |
+| API direct | `dQw4w9WgXcQ` | audio | 320 | PASS, HTTP 200, `audio/mpeg`, attachment, 3,750,165 bytes |
+| API direct | `dQw4w9WgXcQ` | video | 1080 | PASS, HTTP 200, `video/mp4`, attachment, 33,829,665 bytes |
+| API direct | `a0iBRRoDnDw` | audio | 320 | PASS, HTTP 200, `audio/mpeg`, attachment, 4,958,157 bytes |
+| API direct | `a0iBRRoDnDw` | video | 1080 | PASS, HTTP 200, `video/mp4`, attachment, 64,828,645 bytes |
+| worker queued | `dQw4w9WgXcQ` | audio | 320 | `completed` cache hit, type/quality 일치, file HTTP 200 `audio/mpeg`, attachment, 3,750,165 bytes; fresh worker 증거 아님 |
+| worker queued | `dQw4w9WgXcQ` | video | 1080 | `completed` cache hit, type/quality 일치, file HTTP 200 `video/mp4`, attachment, 33,829,665 bytes; fresh worker 증거 아님 |
+| worker queued | `a0iBRRoDnDw` | audio | 320 | `queued` → `processing` → `completed`, type/quality 일치, downloadUrl file HTTP 200 `audio/mpeg`, attachment, 4,958,157 bytes; fresh worker 성공 |
+| worker queued | `a0iBRRoDnDw` | video | 1080 | `queued` → `processing` → `completed`, type/quality 일치, downloadUrl file HTTP 200 `video/mp4`, attachment, 64,828,645 bytes; fresh worker 성공 |
+
+- 모든 queued 요청에서 요청한 `type`·`quality`, `completed`, `downloadUrl`, 실제 non-empty 파일 응답을 확인했다. fresh worker가 필요한 실패 ID의 audio/video는 모두 R2 전달 및 file endpoint까지 통과했다.
+- known-good queued audio/video는 기존 asset cache hit으로 처리되어 worker의 새 추출·upload를 증명하지 않는다. 따라서 해당 combined acceptance는 미체크로 유지하며, 나머지 운영 smoke acceptance는 최신 결과에 맞게 체크했다.
+- 이번 확인에서는 push, deploy, DB/R2 삭제, signed URL·cookie·token·API key 기록을 수행하지 않았다. ticket은 known-good queued fresh worker 증거가 없어 미완료 상태를 유지한다.
+
+### 2026-08-25 cache purge 후 fresh queued smoke
+
+- 실행 시각: 2026-08-25 10:31–10:33 KST. 대상은 `dQw4w9WgXcQ`의 `audio/320`과 `video/1080` cache뿐이었다.
+- 삭제 전 DB `ExtractedAsset` 2개와 R2 object 2개의 object key·존재 여부를 정확히 확인했다. `extracts/dQw4w9WgXcQ/audio-320.mp3`와 `extracts/dQw4w9WgXcQ/video-1080.mp4`를 삭제하고, 대응하는 DB asset row 2개를 삭제했다. 기존 `ExtractionJob` history는 보존했다.
+- 삭제 직후 두 DB asset row와 두 R2 object가 모두 없는 것을 확인했다.
+
+| Surface | Video ID | Type | Quality | Observed result |
+| --- | --- | --- | --- | --- |
+| worker queued | `dQw4w9WgXcQ` | audio | 320 | `queued` → `processing` → `completed`, `cache_hit=no`, type/quality 일치, downloadUrl file HTTP 200 `audio/mpeg`, attachment, 3,750,165 bytes |
+| worker queued | `dQw4w9WgXcQ` | video | 1080 | `queued` → `processing` → `completed`, `cache_hit=no`, type/quality 일치, downloadUrl file HTTP 200 `video/mp4`, attachment, 33,829,665 bytes |
+
+- 새 `ExtractedAsset` row와 R2 object가 다시 생성되었으며, R2 `HeadObject`에서 audio 3,750,165 bytes/`audio/mpeg`, video 33,829,665 bytes/`video/mp4`를 확인했다.
+- 이 결과로 known-good queued audio/video도 fresh worker extraction, upload, `completed`, `downloadUrl`, 실제 non-empty file까지 독립 검증했다. 모든 acceptance criteria를 체크하고 ticket을 완료 처리한다.
+- 이번 확인에서는 push/deploy를 수행하지 않았고, signed URL·cookie·token·API key를 기록하지 않았다. 삭제한 cache object와 DB asset row는 fresh worker가 동일 key로 재생성했다.
