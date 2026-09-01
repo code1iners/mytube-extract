@@ -76,7 +76,7 @@ export function SubtitlesExtractPage() {
     <PanelTitle icon="failed" id="subtitle-error-title">요청을 완료하지 못했습니다</PanelTitle>
     <StatusHead icon="failed" tone="failed" title={statusTitle} message={statusMessage} isAlert />
     {workerHealthFailed ? <button className="secondary-button" disabled={workerHealthIsFetching} type="button" onClick={retryWorkerHealth}>다시 확인</button> : null}
-    {statusErrorDetail ? <ErrorDetailsDisclosure detail={statusErrorDetail} summary={SUBTITLE_ERROR_DETAIL_SUMMARY} /> : null}
+    <ErrorDetailsDisclosure detail={statusErrorDetail} summary={SUBTITLE_ERROR_DETAIL_SUMMARY} />
     <button className="primary-button" type="button" onClick={returnToRequest}>요청 설정으로 돌아가기</button>
   </section>;
 }

@@ -26,7 +26,9 @@ import { type AppIconName } from '../../../components/app-icon';
 import { getExtractViewPhase } from '../../../utils/extract-view-phase.util';
 import { acceptJobReceipt } from '../../../utils/job-receipt.util';
 import {
+  createJobStatusRequestErrorDetail,
   createJobStatusQueryOptions,
+  createTerminalJobErrorDetail,
   fetchJobStatus,
 } from '../../../utils/job-status-polling.util';
 import {
@@ -68,6 +70,12 @@ export function useVideoExtractLogic() {
   const [requestError, setRequestError] = useState('');
   /** 이 화면에서 상태를 확인할 직전 접수 job. */
   const [activeJob, setActiveJob] = useState<DownloadResponse | null>(null);
+  /** 현재 화면에서 조회할 영상 job 접수증. */
+  const activeJobReceipt = {
+    jobId: activeJob?.jobId ?? '',
+    kind: 'video' as const,
+    acceptedAt: activeJob?.createdAt ?? '',
+  };
 
   // Hooks.
 
@@ -121,21 +129,9 @@ export function useVideoExtractLogic() {
   const activeJobQuery = useQuery({
     enabled: activeJob !== null,
     ...createJobStatusQueryOptions({
-      receipt: {
-        jobId: activeJob?.jobId ?? '',
-        kind: 'video',
-        acceptedAt: activeJob?.createdAt ?? '',
-      },
+      receipt: activeJobReceipt,
       fetchStatus: (signal) =>
-        fetchJobStatus(
-          {
-            jobId: activeJob!.jobId,
-            kind: 'video',
-            acceptedAt: activeJob!.createdAt,
-          },
-          apiBaseUrl,
-          signal,
-        ),
+        fetchJobStatus(activeJobReceipt, apiBaseUrl, signal),
     }),
   });
   /** 추출 진행 중 route 이동 차단 상태를 갱신한다. */
@@ -150,8 +146,7 @@ export function useVideoExtractLogic() {
   /** 현재 품질 선택지. */
   const qualityOptions =
     draft.mode === 'audio' ? AUDIO_QUALITY_OPTIONS : VIDEO_QUALITY_OPTIONS;
-  /** terminal 상태가 아닌 job 진행 여부. */
-  /** route를 벗어나면 안 되는 추출 요청/진행 상태 여부. */
+  /** route를 벗어나면 안 되는 추출 요청 접수 상태 여부. */
   const extractionNavigationLocked = downloadJobMutation.isPending;
   /** worker가 미가용 상태인지 여부. */
   const workerUnavailable = workerHealthQuery.data?.worker?.available === false;
@@ -168,38 +163,66 @@ export function useVideoExtractLogic() {
   });
   /** API job 생성 전 요청 처리 중인지 여부. */
   const isSubmitting = downloadJobMutation.isPending;
+  /** 오른쪽 status panel에 표시할 최신 job. */
+  const statusJob = activeJobQuery.data ?? activeJob ?? createIdleJob(draft);
   /** worker health 오류 상세 원인. */
   const workerHealthErrorDetail = createWorkerHealthErrorDetail(
     workerHealthQuery.error,
   );
+  /** 영상 job 생성 요청 오류 상세 원인. */
+  const requestErrorDetail = requestError
+    ? createVideoRequestErrorDetail(downloadJobMutation.error, requestError)
+    : undefined;
+  /** 현재 영상 job 상태 조회 오류 상세 원인. */
+  const jobStatusRequestErrorDetail = activeJobQuery.isError
+    ? createJobStatusRequestErrorDetail(
+        activeJobQuery.error,
+        activeJobReceipt,
+      )
+    : undefined;
+  /** failed·expired 영상 job 상세 원인. */
+  const terminalJobErrorDetail = createTerminalJobErrorDetail(
+    statusJob,
+    activeJobReceipt,
+  );
+  /** 활성 job이 없어 worker health가 현재 화면을 결정하는지 여부. */
+  const workerHealthAffectsView = activeJob === null;
   /** 현재 상태 패널 상세 원인. */
-  const statusErrorDetail = workerUnavailable
-    ? WORKER_UNAVAILABLE_DETAIL
-    : workerHealthErrorDetail;
+  const statusErrorDetail =
+    jobStatusRequestErrorDetail ??
+    terminalJobErrorDetail ??
+    requestErrorDetail ??
+    (workerHealthAffectsView && workerUnavailable
+      ? WORKER_UNAVAILABLE_DETAIL
+      : undefined) ??
+    (workerHealthAffectsView ? workerHealthErrorDetail : undefined);
   /** 추출 요청 가능 여부. */
   const canSubmit =
     validation.kind === 'ready' &&
     isValid &&
     !downloadJobMutation.isPending &&
     workerHealthQuery.data?.worker?.available === true;
-  /** 오른쪽 status panel에 표시할 최신 job. */
-  const statusJob = activeJobQuery.data ?? activeJob ?? createIdleJob(draft);
   /** 10칸 진행률 bar 중 채울 칸 수. */
   const filledProgressCells =
     statusJob.progress === null ? 0 : Math.round(statusJob.progress / 10);
   /** 현재 상태 제목. */
   const statusTitle =
     (isSubmitting ? '추출 요청을 준비하고 있습니다' : '') ||
-    createWorkerHealthTitle({
-      failed: workerHealthFailed,
-      unavailable: workerUnavailable,
-    }) ||
+    (requestError ? '추출 요청에 실패했습니다' : '') ||
+    (jobStatusRequestErrorDetail ? '작업 상태를 확인할 수 없습니다' : '') ||
+    (workerHealthAffectsView
+      ? createWorkerHealthTitle({
+          failed: workerHealthFailed,
+          unavailable: workerUnavailable,
+        })
+      : '') ||
     createStatusTitle(statusJob);
   /** 현재 상태 문구. */
   const statusMessage =
     (isSubmitting ? '추출 서버 상태를 확인하고 작업을 생성 중입니다.' : '') ||
     requestError ||
-    requestAvailabilityNotice?.message ||
+    jobStatusRequestErrorDetail?.guidance ||
+    (workerHealthAffectsView ? requestAvailabilityNotice?.message : '') ||
     statusJob.message ||
     validation.message;
   /** 요청 시작 시각 표시값. */
@@ -208,14 +231,16 @@ export function useVideoExtractLogic() {
   const statusIconName =
     isSubmitting
       ? 'processing'
-      : workerHealthFailed || workerUnavailable
+      : jobStatusRequestErrorDetail ||
+          (workerHealthAffectsView && (workerHealthFailed || workerUnavailable))
         ? 'failed'
         : getStatusIconName(statusJob.displayStatus);
   /** 현재 상태 표시 tone. */
   const statusTone =
     isSubmitting
       ? 'processing'
-      : workerHealthFailed || workerUnavailable
+      : jobStatusRequestErrorDetail ||
+          (workerHealthAffectsView && (workerHealthFailed || workerUnavailable))
         ? 'failed'
         : statusJob.displayStatus;
   /** 현재 진행률 표시 문구. */
@@ -230,7 +255,7 @@ export function useVideoExtractLogic() {
     : '';
   /** 현재 화면에 단독으로 표시할 추출 단계. */
   const viewPhase = getExtractViewPhase({
-    hasRequestError: Boolean(requestError),
+    hasRequestError: Boolean(requestError || jobStatusRequestErrorDetail),
     isSubmitting,
     status: activeJobQuery.data?.displayStatus ?? activeJob?.displayStatus ?? null,
   });
@@ -381,7 +406,7 @@ export function useVideoExtractLogic() {
     returnToRequest,
     validation,
     viewPhase,
-    workerHealthFailed,
+    workerHealthFailed: workerHealthAffectsView && workerHealthFailed,
     workerHealthIsFetching: workerHealthQuery.isFetching,
   };
 }
@@ -474,6 +499,22 @@ export function createWorkerHealthTitle(input: {
   }
 
   return '';
+}
+
+/** 영상 job 생성 오류에서 사용자 열람용 상세 정보를 만든다. */
+export function createVideoRequestErrorDetail(
+  error: unknown,
+  guidance: string,
+): UserVisibleErrorDetail {
+  if (hasUserVisibleErrorDetail(error)) {
+    return error.detail;
+  }
+
+  return {
+    code: 'VIDEO_REQUEST_FAILED',
+    guidance,
+    location: '영상 추출 요청',
+  };
 }
 
 /** worker health 오류에서 사용자 열람용 상세 정보를 만든다. */

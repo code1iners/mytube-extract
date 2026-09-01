@@ -101,7 +101,14 @@ describe('subtitles extract page', () => {
     (displayStatus) => {
       subtitlesExtractLogic.mockReturnValue({
         returnToRequest: () => undefined,
-        statusErrorDetail: undefined,
+        statusErrorDetail: {
+          code:
+            displayStatus === 'failed'
+              ? 'TRANSCRIPTION_FAILED'
+              : 'JOB_ASSET_EXPIRED',
+          guidance: '다시 요청해 주세요.',
+          location: '자막 생성 상태',
+        },
         statusMessage: '다시 요청해 주세요.',
         statusTitle: '요청을 완료하지 못했습니다',
         viewPhase: 'error',
@@ -112,6 +119,8 @@ describe('subtitles extract page', () => {
       const markup = renderToStaticMarkup(<SubtitlesExtractPage />);
 
       expect(markup).toContain('요청 설정으로 돌아가기');
+      expect(markup).toContain('자막 생성 요청이 정상적으로 처리되지 않았습니다.');
+      expect(markup).toContain('aria-expanded="false"');
       expect(displayStatus).toMatch(/failed|expired/);
     },
   );

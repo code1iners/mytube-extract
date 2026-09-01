@@ -1,5 +1,8 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { JobStatusRequestError } from '../../src/api/mytube-extract.api';
 import {
+  createJobStatusRequestErrorDetail,
+  createTerminalJobErrorDetail,
   fetchJobStatus,
   getJobStatusRefetchInterval,
 } from '../../src/app/utils/job-status-polling.util';
@@ -33,6 +36,18 @@ describe('request history query contract', () => {
     expect(getJobStatusRefetchInterval('completed')).toBe(false);
     expect(getJobStatusRefetchInterval('failed')).toBe(false);
     expect(getJobStatusRefetchInterval('expired')).toBe(false);
+    expect(
+      getJobStatusRefetchInterval(
+        'queued',
+        new JobStatusRequestError(404),
+      ),
+    ).toBe(false);
+    expect(
+      getJobStatusRefetchInterval(
+        'queued',
+        new JobStatusRequestError(500),
+      ),
+    ).toBe(2500);
   });
 
   it('uses the existing endpoint for each receipt kind', async () => {
@@ -60,6 +75,54 @@ describe('request history query contract', () => {
       `https://mytube-extract.example/api/downloads/${VIDEO_ID}`,
       `https://mytube-extract.example/api/subtitles/jobs/${SUBTITLE_ID}`,
     ]);
+  });
+
+  it('turns a non-retryable status lookup failure into actionable detail', () => {
+    /** 상태 조회에 실패한 영상 접수증. */
+    const receipt = {
+      kind: 'video' as const,
+      jobId: VIDEO_ID,
+      acceptedAt: '2026-08-11T00:00:00.000Z',
+    };
+
+    expect(
+      createJobStatusRequestErrorDetail(
+        new JobStatusRequestError(404),
+        receipt,
+      ),
+    ).toEqual({
+      code: 'JOB_STATUS_NOT_FOUND',
+      guidance:
+        '접수한 작업을 더 이상 찾을 수 없습니다. 같은 종류의 요청을 다시 접수해 주세요.',
+      location: '작업 상태 확인',
+      requestPath: `/downloads/${VIDEO_ID}`,
+      responseStatus: 404,
+    });
+  });
+
+  it('preserves a terminal job error code in disclosure detail', () => {
+    /** 실패한 자막 job 접수증. */
+    const receipt = {
+      kind: 'subtitle' as const,
+      jobId: SUBTITLE_ID,
+      acceptedAt: '2026-08-11T00:01:00.000Z',
+    };
+
+    expect(
+      createTerminalJobErrorDetail(
+        {
+          displayStatus: 'failed',
+          errorCode: 'TRANSCRIPTION_FAILED',
+          message: '자막 생성에 실패했습니다.',
+        },
+        receipt,
+      ),
+    ).toEqual({
+      code: 'TRANSCRIPTION_FAILED',
+      guidance: '자막 생성에 실패했습니다.',
+      location: '자막 생성 상태',
+      requestPath: `/subtitles/jobs/${SUBTITLE_ID}`,
+    });
   });
 
   it('hides an exact cross-tab deletion and restores the same receipt when re-added', () => {

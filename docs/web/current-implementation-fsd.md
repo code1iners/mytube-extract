@@ -7,6 +7,8 @@
 - shared layout/header/bottom tabs: `apps/web/src/app/components/*`
 - API client: `apps/web/src/api/mytube-extract.api.ts`
 - receipt storage: `apps/web/src/app/utils/job-receipt.util.ts`
+- request preference storage: `apps/web/src/app/utils/request-preference.util.ts`
+- shared job polling: `apps/web/src/app/utils/job-status-polling.util.ts`
 - route 상세: `docs/web/routes/*`
 
 `QueryClientProvider`와 React Router `BrowserRouter`를 기존 앱 전역 경계로 사용한다. 별도 상태 관리 library, 서버 목록 endpoint, DB schema는 없다.
@@ -24,10 +26,25 @@
 - 자막은 upload session, R2 part PUT, complete 전체가 성공한 뒤 접수증을 추가한다.
 - 접수증 key는 `mytube-extract:job-receipt:v2:<kind>:<jobId>`다.
 - value는 JSON `{ "acceptedAt": "<ISO timestamp>" }`만 저장한다.
-- 접수 성공 뒤 `/history?kind=<kind>&jobId=<uuid>`로 이동한다.
-- storage 쓰기 실패는 navigation state로 전달해 history가 안내한다.
-- `/video`, `/subtitles` mount는 접수증이나 job status query를 시작하지 않는다.
+- 접수 성공 뒤 현재 `/video` 또는 `/subtitles` route에 남아 생성 응답의 job을 상태 조회한다.
+- 접수증 storage 쓰기 실패는 job 생성이나 현재 route의 상태 조회를 막지 않는다.
+- `/video`, `/subtitles` mount는 과거 접수증을 복원하지 않으며, 현재 화면에서 새로 접수한 job만 query한다.
 - navigation lock은 영상 POST 또는 자막 upload/complete 요청 중에만 유지하며 하단 route 탭과 상단 `요청 내역` 링크에 함께 적용한다.
+
+## Request route query
+
+- job 생성 응답을 받기 전에는 처리 단계나 가짜 진행률 대신 경량 `accepting` 상태를 표시한다.
+- 생성 응답의 `jobId`로 `/video`는 download job, `/subtitles`는 subtitle job 상태를 조회한다.
+- query key·재시도·2500ms polling·terminal 중단 정책은 history와 같은 공유 모듈을 사용한다.
+- completed는 현재 route에서 실제 `downloadUrl`을 제공하고, failed/expired는 오류 요약·접이식 기술 상세·기존 입력을 유지한 재요청 경로를 제공한다.
+- 상태 조회가 404·401처럼 재시도 불가 오류로 끝나면 생성 응답의 초기 상태를 계속 표시하지 않고 오류와 재요청 경로를 제공한다.
+- job 접수 뒤의 worker health 갱신은 현재 job의 API 상태·메시지를 덮어쓰지 않는다.
+
+## Request preference storage
+
+- key는 `mytube-extract-request-preferences`다.
+- 다운로드 형식·형식에 맞는 품질·Whisper 모델만 저장한다.
+- 서버 지원 선택지 밖의 값, 손상된 JSON, 차단된 localStorage는 제품 기본값으로 안전하게 폴백한다.
 
 ## History query
 
@@ -56,7 +73,7 @@
 - `pnpm --filter web run test`
 - `pnpm --filter web run build`
 - `pnpm run test:web:browser`
-- Browser: `/video`, `/subtitles`, `/history`, refresh, 두 endpoint, terminal polling, 오류별 보존/삭제, 실제 attachment, storage event/차단, mobile/desktop, keyboard, 200% zoom, screen reader, Console/Network
+- Browser: `/video`·`/subtitles` in-place 완료와 다운로드, 접수 중 navigation lock, 상태 조회 오류 복구, `/history`, refresh, 두 endpoint, terminal polling, 오류별 보존/삭제, 실제 attachment, storage event/차단, mobile/desktop, keyboard, 200% zoom, screen reader, Console/Network
 
 ## 후속 보류
 

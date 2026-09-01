@@ -120,7 +120,14 @@ describe('video extract page', () => {
     (displayStatus) => {
       videoExtractLogic.mockReturnValue({
         returnToRequest: () => undefined,
-        statusErrorDetail: undefined,
+        statusErrorDetail: {
+          code:
+            displayStatus === 'failed'
+              ? 'EXTRACTION_FAILED'
+              : 'JOB_ASSET_EXPIRED',
+          guidance: '다시 요청해 주세요.',
+          location: '영상 추출 상태',
+        },
         statusIconName: displayStatus,
         statusMessage: '다시 요청해 주세요.',
         statusTitle: '요청을 완료하지 못했습니다',
@@ -133,6 +140,8 @@ describe('video extract page', () => {
       const markup = renderToStaticMarkup(<VideoExtractPage />);
 
       expect(markup).toContain('요청 설정으로 돌아가기');
+      expect(markup).toContain('영상 추출 요청이 정상적으로 처리되지 않았습니다.');
+      expect(markup).toContain('aria-expanded="false"');
     },
   );
 });

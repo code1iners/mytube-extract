@@ -29,7 +29,9 @@ import { type AppIconName } from '../../../components/app-icon';
 import { getExtractViewPhase } from '../../../utils/extract-view-phase.util';
 import { acceptJobReceipt } from '../../../utils/job-receipt.util';
 import {
+  createJobStatusRequestErrorDetail,
   createJobStatusQueryOptions,
+  createTerminalJobErrorDetail,
   fetchJobStatus,
 } from '../../../utils/job-status-polling.util';
 import {
@@ -91,6 +93,12 @@ export function useSubtitlesExtractLogic() {
   const [uploadProgress, setUploadProgress] = useState<number | null>(null);
   /** 이 화면에서 상태를 확인할 직전 접수 자막 job. */
   const [activeJob, setActiveJob] = useState<SubtitleJobResponse | null>(null);
+  /** 현재 화면에서 조회할 자막 job 접수증. */
+  const activeJobReceipt = {
+    jobId: activeJob?.jobId ?? '',
+    kind: 'subtitle' as const,
+    acceptedAt: activeJob?.createdAt ?? '',
+  };
 
   // Hooks.
 
@@ -156,21 +164,9 @@ export function useSubtitlesExtractLogic() {
   const activeJobQuery = useQuery({
     enabled: activeJob !== null,
     ...createJobStatusQueryOptions({
-      receipt: {
-        jobId: activeJob?.jobId ?? '',
-        kind: 'subtitle',
-        acceptedAt: activeJob?.createdAt ?? '',
-      },
+      receipt: activeJobReceipt,
       fetchStatus: (signal) =>
-        fetchJobStatus(
-          {
-            jobId: activeJob!.jobId,
-            kind: 'subtitle',
-            acceptedAt: activeJob!.createdAt,
-          },
-          apiBaseUrl,
-          signal,
-        ),
+        fetchJobStatus(activeJobReceipt, apiBaseUrl, signal),
     }),
   });
   /** 추출 진행 중 route 이동 차단 상태를 갱신한다. */
@@ -197,20 +193,43 @@ export function useSubtitlesExtractLogic() {
   });
   /** R2 업로드 session 생성부터 자막 job 생성까지의 요청 처리 여부. */
   const isSubmitting = subtitleJobMutation.isPending;
+  /** 오른쪽 status panel에 표시할 job. */
+  const statusJob =
+    activeJobQuery.data ?? activeJob ?? createIdleSubtitleJob(selectedFile);
   /** worker health 오류 상세 원인. */
   const workerHealthErrorDetail = createWorkerHealthErrorDetail(
     workerHealthQuery.error,
   );
   /** 자막 생성 요청 오류 상세 원인. */
-  const requestErrorDetail =
-    subtitleJobMutation.error instanceof Error &&
-    hasUserVisibleErrorDetail(subtitleJobMutation.error)
-      ? subtitleJobMutation.error.detail
-      : undefined;
+  const requestErrorDetail = requestError
+    ? createSubtitleRequestErrorDetail(
+        subtitleJobMutation.error,
+        requestError,
+      )
+    : undefined;
+  /** 현재 자막 job 상태 조회 오류 상세 원인. */
+  const jobStatusRequestErrorDetail = activeJobQuery.isError
+    ? createJobStatusRequestErrorDetail(
+        activeJobQuery.error,
+        activeJobReceipt,
+      )
+    : undefined;
+  /** failed·expired 자막 job 상세 원인. */
+  const terminalJobErrorDetail = createTerminalJobErrorDetail(
+    statusJob,
+    activeJobReceipt,
+  );
+  /** 활성 job이 없어 worker health가 현재 화면을 결정하는지 여부. */
+  const workerHealthAffectsView = activeJob === null;
   /** 현재 상태 패널 상세 원인. */
-  const statusErrorDetail = workerUnavailable
-    ? WORKER_UNAVAILABLE_DETAIL
-    : (workerHealthErrorDetail ?? requestErrorDetail);
+  const statusErrorDetail =
+    jobStatusRequestErrorDetail ??
+    terminalJobErrorDetail ??
+    requestErrorDetail ??
+    (workerHealthAffectsView && workerUnavailable
+      ? WORKER_UNAVAILABLE_DETAIL
+      : undefined) ??
+    (workerHealthAffectsView ? workerHealthErrorDetail : undefined);
   /** 자막 생성 요청 가능 여부. */
   const canSubmit =
     validation.kind === 'ready' &&
@@ -219,9 +238,6 @@ export function useSubtitlesExtractLogic() {
   /** Whisper 모델 선택 가능 여부. */
   const canChangeWhisperModel =
     !subtitleJobMutation.isPending;
-  /** 오른쪽 status panel에 표시할 job. */
-  const statusJob =
-    activeJobQuery.data ?? activeJob ?? createIdleSubtitleJob(selectedFile);
   /** 화면에 선택 표시할 처리 단계. */
   const currentStepKey = createSubtitleStepKey({
     selectedFile,
@@ -239,10 +255,14 @@ export function useSubtitlesExtractLogic() {
   const statusTitle =
     (uploadProgress !== null ? '원본 영상을 업로드 중입니다' : '') ||
     (isSubmitting ? '자막 요청을 준비하고 있습니다' : '') ||
-    createWorkerHealthTitle({
-      failed: workerHealthFailed,
-      unavailable: workerUnavailable,
-    }) ||
+    (requestError ? '자막 생성 요청에 실패했습니다' : '') ||
+    (jobStatusRequestErrorDetail ? '작업 상태를 확인할 수 없습니다' : '') ||
+    (workerHealthAffectsView
+      ? createWorkerHealthTitle({
+          failed: workerHealthFailed,
+          unavailable: workerUnavailable,
+        })
+      : '') ||
     createStatusTitle(statusJob);
   /** 현재 상태 문구. */
   const statusMessage =
@@ -251,21 +271,24 @@ export function useSubtitlesExtractLogic() {
       : '') ||
     (isSubmitting ? '추출 서버 상태를 확인하고 업로드를 준비 중입니다.' : '') ||
     requestError ||
-    requestAvailabilityNotice?.message ||
+    jobStatusRequestErrorDetail?.guidance ||
+    (workerHealthAffectsView ? requestAvailabilityNotice?.message : '') ||
     statusJob.message ||
     validation.message;
   /** 현재 상태 아이콘 이름. */
   const statusIconName =
     uploadProgress !== null || isSubmitting
       ? 'processing'
-      : workerHealthFailed || workerUnavailable
+      : jobStatusRequestErrorDetail ||
+          (workerHealthAffectsView && (workerHealthFailed || workerUnavailable))
         ? 'failed'
         : getStatusIconName(statusJob.displayStatus);
   /** 현재 상태 표시 tone. */
   const statusTone =
     uploadProgress !== null || isSubmitting
       ? 'processing'
-      : workerHealthFailed || workerUnavailable
+      : jobStatusRequestErrorDetail ||
+          (workerHealthAffectsView && (workerHealthFailed || workerUnavailable))
         ? 'failed'
         : getStatusTone(statusJob.displayStatus);
   /** 완료 SRT 다운로드 href. */
@@ -283,7 +306,7 @@ export function useSubtitlesExtractLogic() {
   );
   /** 현재 화면에 단독으로 표시할 자막 추출 단계. */
   const viewPhase = getExtractViewPhase({
-    hasRequestError: Boolean(requestError),
+    hasRequestError: Boolean(requestError || jobStatusRequestErrorDetail),
     isSubmitting,
     status:
       activeJobQuery.data?.displayStatus ?? activeJob?.displayStatus ?? null,
@@ -504,7 +527,7 @@ export function useSubtitlesExtractLogic() {
     returnToRequest,
     validation,
     viewPhase,
-    workerHealthFailed,
+    workerHealthFailed: workerHealthAffectsView && workerHealthFailed,
     workerHealthIsFetching: workerHealthQuery.isFetching,
   };
 }
@@ -618,6 +641,22 @@ function createWorkerHealthTitle(input: {
   }
 
   return '';
+}
+
+/** 자막 job 생성 오류에서 사용자 열람용 상세 정보를 만든다. */
+export function createSubtitleRequestErrorDetail(
+  error: unknown,
+  guidance: string,
+): UserVisibleErrorDetail {
+  if (error instanceof Error && hasUserVisibleErrorDetail(error)) {
+    return error.detail;
+  }
+
+  return {
+    code: 'SUBTITLE_REQUEST_FAILED',
+    guidance,
+    location: '자막 생성 요청',
+  };
 }
 
 /** worker health 오류에서 사용자 열람용 상세 정보를 만든다. */

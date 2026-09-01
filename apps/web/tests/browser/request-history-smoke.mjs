@@ -29,7 +29,8 @@ const browser = await chromium.launch();
 try {
   await run('request routes do not restore stored jobs', verifyRequestRoutesDoNotRestore);
   await run('video in-place success, failure, navigation lock, and download', verifyVideoRequestFlows);
-  await run('subtitle upload navigation lock', verifySubtitleNavigationLock);
+  await run('subtitle in-place success and navigation lock', verifySubtitleRequestFlow);
+  await run('active request status errors stay actionable', verifyActiveRequestStatusErrors);
   await run('active polling stops at terminal status', verifyTerminalPolling);
   await run('network and 5xx retain receipts while 404 removes one', verifyReceiptErrorHandling);
   await run('cross-tab delete and re-add stay synchronized', verifyCrossTabStorage);
@@ -167,7 +168,7 @@ async function verifyVideoRequestFlows() {
   }
 }
 
-async function verifySubtitleNavigationLock() {
+async function verifySubtitleRequestFlow() {
   const context = await createContext({ viewport: { height: 780, width: 390 } });
   const { page, assertNoRuntimeErrors } = await createPage(context);
   let releaseUpload;
@@ -236,8 +237,56 @@ async function verifySubtitleNavigationLock() {
     assert.equal(new URL(page.url()).pathname, '/subtitles');
 
     releaseUpload();
-    await page.waitForURL(`**/history?kind=subtitle&jobId=${SUBTITLE_ID}`);
+    await page.getByRole('heading', { name: 'SRT 준비 완료' }).waitFor();
+    assert.equal(new URL(page.url()).pathname, '/subtitles');
     assert.equal(await receiptCount(page), 1);
+    assert.equal(
+      await page
+        .getByRole('link', { name: '영어 SRT 다운로드' })
+        .getAttribute('href'),
+      `${API_ORIGINS[0]}/subtitles/jobs/${SUBTITLE_ID}/file`,
+    );
+    assertNoRuntimeErrors();
+  } finally {
+    await context.close();
+  }
+}
+
+async function verifyActiveRequestStatusErrors() {
+  const context = await createContext();
+  const { page, assertNoRuntimeErrors } = await createPage(context, {
+    ignoreHttpErrors: true,
+  });
+
+  try {
+    await routeApi(page, async ({ request, route, url }) => {
+      if (url.pathname === '/health') return fulfillJson(route, healthResponse());
+      if (url.pathname === '/downloads' && request.method() === 'POST') {
+        return fulfillJson(route, videoJob(VIDEO_ID, 'queued'));
+      }
+      if (url.pathname === `/downloads/${VIDEO_ID}`) {
+        return fulfillJson(route, {}, 404);
+      }
+      return fulfillJson(route, {}, 404);
+    });
+
+    await page.goto(`${staticServer.origin}/video`);
+    await page
+      .getByLabel('YouTube URL')
+      .fill('https://www.youtube.com/watch?v=abc123_DEF0');
+    const submit = page.getByRole('button', { name: '추출 요청' });
+    await waitForEnabled(submit);
+    await submit.click();
+
+    await page
+      .getByText('접수한 작업을 더 이상 찾을 수 없습니다.')
+      .waitFor();
+    assert.equal(new URL(page.url()).pathname, '/video');
+    assert.equal(await receiptCount(page), 1);
+    assert.equal(
+      await page.getByText('영상 추출 요청이 정상적으로 처리되지 않았습니다.').count(),
+      1,
+    );
     assertNoRuntimeErrors();
   } finally {
     await context.close();

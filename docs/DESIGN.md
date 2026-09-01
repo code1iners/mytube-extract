@@ -269,7 +269,7 @@ Body line-height `1.6`은 Nintendo 원본에 없는 목표값이다. 한글 밀�
 | Border/Shadow | 2px 굵은 테두리 + 하드 드롭섀도(`0 3px 0`, `0 5px 0`) | hairline + whisper-soft shadow |
 | Radius | 2~4px 고정 | 2~12px + pill(48px/9999px) |
 | Dark mode | violet/teal 역전 | ink/surface 반전, red는 불변 |
-| 상태 화면 | 요청·처리 상태가 동시에 보임 | 요청 폼을 유지하면서 최근 요청 목록에서 각 job의 처리·결과·오류를 독립 표시 |
+| 상태 화면 | 요청·처리 상태가 동시에 보임 | 접수한 route에서 요청·처리·결과·오류를 단일 단계로 표시하고, 요청 내역은 별도 목록에서 확인 |
 
 ## 열린 결정
 
