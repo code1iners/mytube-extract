@@ -32,6 +32,10 @@ import {
   createJobStatusQueryOptions,
   fetchJobStatus,
 } from '../../../utils/job-status-polling.util';
+import {
+  getRequestPreferences,
+  setSubtitleWhisperModelPreference,
+} from '../../../utils/request-preference.util';
 import { getWorkerHealthNotice } from '../../../utils/worker-health-notice.util';
 
 /** worker 미가용 안내 문구. */
@@ -75,7 +79,9 @@ export function useSubtitlesExtractLogic() {
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   /** 사용자가 선택한 Whisper 모델. */
   const [selectedWhisperModel, setSelectedWhisperModel] =
-    useState<SubtitleWhisperModel>(DEFAULT_WHISPER_MODEL);
+    useState<SubtitleWhisperModel>(
+      () => getRequestPreferences().whisperModel,
+    );
   /** 선택한 영상의 길이. */
   const [selectedVideoDurationSeconds, setSelectedVideoDurationSeconds] =
     useState<number | null>(null);
@@ -388,6 +394,13 @@ export function useSubtitlesExtractLogic() {
       setNavigationLocked(subtitleNavigationLocked);
     },
     [setNavigationLocked, subtitleNavigationLocked],
+  );
+
+  useEffect(
+    function persistWhisperModelPreference() {
+      setSubtitleWhisperModelPreference(selectedWhisperModel);
+    },
+    [selectedWhisperModel],
   );
 
   // Handlers.

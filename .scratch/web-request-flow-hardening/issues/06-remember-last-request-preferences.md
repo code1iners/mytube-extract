@@ -4,7 +4,7 @@
 
 **Blocked by:** None (can start immediately)
 
-**Status:** ready-for-agent
+**Status:** done (2026-09-01)
 
 - [ ] `/video`에서 오디오/비디오, 비트레이트/해상도를 고르고 다시 방문하면 마지막 선택이 기본값으로 채워진다.
 - [ ] `/subtitles`에서 Whisper 모델(빠름/정확도)을 고르고 다시 방문하면 마지막 선택이 기본값으로 채워진다.

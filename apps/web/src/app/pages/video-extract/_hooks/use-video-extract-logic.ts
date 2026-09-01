@@ -29,6 +29,10 @@ import {
   createJobStatusQueryOptions,
   fetchJobStatus,
 } from '../../../utils/job-status-polling.util';
+import {
+  getRequestPreferences,
+  setDownloadPreferences,
+} from '../../../utils/request-preference.util';
 import { getWorkerHealthNotice } from '../../../utils/worker-health-notice.util';
 
 /** worker 미가용 안내 문구. */
@@ -76,7 +80,10 @@ export function useVideoExtractLogic() {
     watch,
     formState: { isValid },
   } = useForm<DownloadDraft>({
-    defaultValues: INITIAL_DOWNLOAD_DRAFT,
+    defaultValues: {
+      ...INITIAL_DOWNLOAD_DRAFT,
+      ...getRequestPreferences().download,
+    },
     mode: 'onChange',
     resolver: zodResolver(downloadDraftSchema),
   });
@@ -279,6 +286,13 @@ export function useVideoExtractLogic() {
       setNavigationLocked(extractionNavigationLocked);
     },
     [extractionNavigationLocked, setNavigationLocked],
+  );
+
+  useEffect(
+    function persistDownloadPreferences() {
+      setDownloadPreferences({ mode: draft.mode, quality: draft.quality });
+    },
+    [draft.mode, draft.quality],
   );
 
   // Handlers.
