@@ -88,6 +88,33 @@ describe('video extract page', () => {
     expect(markup).toContain('다운로드');
   });
 
+  it('shows a plain error summary before technical details are opened', () => {
+    videoExtractLogic.mockReturnValue({
+      returnToRequest: () => undefined,
+      statusErrorDetail: {
+        code: 'VIDEO_REQUEST_FAILED',
+        guidance: '영상 추출 요청을 다시 시도해 주세요.',
+        location: '영상 추출 요청',
+        responseBody: 'upstream failure',
+        responseStatus: 502,
+      },
+      statusMessage: '영상 추출 요청을 다시 시도해 주세요.',
+      statusTitle: '추출에 실패했습니다',
+      viewPhase: 'error',
+      workerHealthFailed: false,
+    });
+
+    /** 오류 화면을 정적 HTML로 렌더링한 결과. */
+    const markup = renderToStaticMarkup(<VideoExtractPage />);
+
+    expect(markup).toContain('class="error-details__summary"');
+    expect(markup).toContain('영상 추출 요청이 정상적으로 처리되지 않았습니다.');
+    expect(markup).toContain('aria-expanded="false"');
+    expect(markup).not.toContain('오류 코드: VIDEO_REQUEST_FAILED');
+    expect(markup).not.toContain('응답 상태: 502');
+    expect(markup).not.toContain('응답 내용: upstream failure');
+  });
+
   it.each(['failed', 'expired'])(
     'renders a retry path for a %s terminal job',
     (displayStatus) => {

@@ -10,6 +10,10 @@ const SUBTITLE_STEPS: Array<{ /** 단계 key. */ key: SubtitleStepKey; /** 화�
   { key: 'completed', label: '완료' },
 ];
 
+/** 자막 오류 상세 위에 표시할 평이한 요약. */
+const SUBTITLE_ERROR_DETAIL_SUMMARY =
+  '자막 생성 요청이 정상적으로 처리되지 않았습니다.';
+
 /** 자막 추출 route page. */
 export function SubtitlesExtractPage() {
   // Hooks.
@@ -72,7 +76,7 @@ export function SubtitlesExtractPage() {
     <PanelTitle icon="failed" id="subtitle-error-title">요청을 완료하지 못했습니다</PanelTitle>
     <StatusHead icon="failed" tone="failed" title={statusTitle} message={statusMessage} isAlert />
     {workerHealthFailed ? <button className="secondary-button" disabled={workerHealthIsFetching} type="button" onClick={retryWorkerHealth}>다시 확인</button> : null}
-    {statusErrorDetail ? <ErrorDetailsDisclosure detail={statusErrorDetail} /> : null}
+    {statusErrorDetail ? <ErrorDetailsDisclosure detail={statusErrorDetail} summary={SUBTITLE_ERROR_DETAIL_SUMMARY} /> : null}
     <button className="primary-button" type="button" onClick={returnToRequest}>요청 설정으로 돌아가기</button>
   </section>;
 }

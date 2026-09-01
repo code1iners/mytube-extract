@@ -17,6 +17,10 @@ const STATUS_ITEMS = [
   label: string;
 }>;
 
+/** 영상 오류 상세 위에 표시할 평이한 요약. */
+const VIDEO_ERROR_DETAIL_SUMMARY =
+  '영상 추출 요청이 정상적으로 처리되지 않았습니다.';
+
 /** 영상 추출 route page. */
 export function VideoExtractPage() {
   // Hooks.
@@ -193,7 +197,12 @@ export function VideoExtractPage() {
       {workerHealthFailed ? (
         <button className="secondary-button" disabled={workerHealthIsFetching} type="button" onClick={retryWorkerHealth}>다시 확인</button>
       ) : null}
-      {statusErrorDetail ? <ErrorDetailsDisclosure detail={statusErrorDetail} /> : null}
+      {statusErrorDetail ? (
+        <ErrorDetailsDisclosure
+          detail={statusErrorDetail}
+          summary={VIDEO_ERROR_DETAIL_SUMMARY}
+        />
+      ) : null}
       <button className="primary-button" type="button" onClick={returnToRequest}>요청 설정으로 돌아가기</button>
     </section>
   );

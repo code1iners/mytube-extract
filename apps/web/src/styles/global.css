@@ -747,6 +747,14 @@ input:focus-visible,
   gap: 10px;
 }
 
+.error-details__summary {
+  margin: 0;
+  color: var(--color-text-secondary);
+  font-size: 14px;
+  line-height: 1.4;
+  word-break: keep-all;
+}
+
 .error-details__panel {
   display: grid;
   gap: 10px;

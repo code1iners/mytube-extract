@@ -5,11 +5,14 @@ import type { UserVisibleErrorDetail } from '../../api/mytube-extract.api';
 type ErrorDetailsDisclosureProps = {
   /** 사용자에게 열람 가능한 오류 상세 정보. */
   detail?: UserVisibleErrorDetail;
+  /** 기술 상세를 열기 전에 보여줄 평이한 오류 요약. */
+  summary: string;
 };
 
 /** 클릭하면 열리는 상세 원인 패널. */
 export function ErrorDetailsDisclosure({
   detail,
+  summary,
 }: ErrorDetailsDisclosureProps) {
   // States.
 
@@ -44,6 +47,7 @@ export function ErrorDetailsDisclosure({
 
   return (
     <div className="error-details">
+      <p className="error-details__summary">{summary}</p>
       <button
         aria-controls={detailId}
         aria-expanded={isOpen}

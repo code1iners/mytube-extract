@@ -69,6 +69,33 @@ describe('subtitles extract page', () => {
     expect(markup).toContain('영어 SRT 다운로드');
   });
 
+  it('shows a plain error summary before technical details are opened', () => {
+    subtitlesExtractLogic.mockReturnValue({
+      returnToRequest: () => undefined,
+      statusErrorDetail: {
+        code: 'SUBTITLE_REQUEST_FAILED',
+        guidance: '자막 생성 요청을 다시 시도해 주세요.',
+        location: '자막 생성 요청',
+        responseBody: 'upstream failure',
+        responseStatus: 502,
+      },
+      statusMessage: '자막 생성 요청을 다시 시도해 주세요.',
+      statusTitle: '자막 생성에 실패했습니다',
+      viewPhase: 'error',
+      workerHealthFailed: false,
+    });
+
+    /** 오류 화면을 정적 HTML로 렌더링한 결과. */
+    const markup = renderToStaticMarkup(<SubtitlesExtractPage />);
+
+    expect(markup).toContain('class="error-details__summary"');
+    expect(markup).toContain('자막 생성 요청이 정상적으로 처리되지 않았습니다.');
+    expect(markup).toContain('aria-expanded="false"');
+    expect(markup).not.toContain('오류 코드: SUBTITLE_REQUEST_FAILED');
+    expect(markup).not.toContain('응답 상태: 502');
+    expect(markup).not.toContain('응답 내용: upstream failure');
+  });
+
   it.each(['failed', 'expired'])(
     'renders a retry path for a %s terminal job',
     (displayStatus) => {

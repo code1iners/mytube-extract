@@ -68,7 +68,10 @@ export class ErrorBoundary extends Component<
                 >
                   새로고침
                 </button>
-                <ErrorDetailsDisclosure detail={this.state.detail} />
+                <ErrorDetailsDisclosure
+                  detail={this.state.detail}
+                  summary="화면 표시에 문제가 발생했습니다."
+                />
               </div>
             </section>
           </section>
