@@ -6,7 +6,7 @@ describe('extract view phase', () => {
     expect(getExtractViewPhase({ status: null })).toBe('request');
   });
 
-  it('shows processing while a submitted job is non-terminal', () => {
+  it('shows processing while a received job is non-terminal', () => {
     expect(getExtractViewPhase({ status: 'queued' })).toBe('processing');
     expect(getExtractViewPhase({ status: 'transcribing' })).toBe('processing');
   });

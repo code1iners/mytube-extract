@@ -28,7 +28,7 @@ const browser = await chromium.launch();
 
 try {
   await run('request routes do not restore stored jobs', verifyRequestRoutesDoNotRestore);
-  await run('video success, failure, navigation lock, and download', verifyVideoRequestFlows);
+  await run('video in-place success, failure, navigation lock, and download', verifyVideoRequestFlows);
   await run('subtitle upload navigation lock', verifySubtitleNavigationLock);
   await run('active polling stops at terminal status', verifyTerminalPolling);
   await run('network and 5xx retain receipts while 404 removes one', verifyReceiptErrorHandling);
@@ -122,19 +122,19 @@ async function verifyVideoRequestFlows() {
     assert.equal(new URL(page.url()).pathname, '/video');
 
     releaseCreate();
-    await page.waitForURL(`**/history?kind=video&jobId=${VIDEO_ID}`);
+    assert.equal(new URL(page.url()).pathname, '/video');
+    await page.getByRole('heading', { name: '추출 완료' }).waitFor();
     const storedReceipt = await page.evaluate(
       (key) => JSON.parse(localStorage.getItem(key) ?? 'null'),
       receiptKey('video', VIDEO_ID),
     );
     assert.deepEqual(Object.keys(storedReceipt), ['acceptedAt']);
     assert.equal(typeof storedReceipt.acceptedAt, 'string');
-    await page.getByText('완료', { exact: true }).waitFor();
 
-    const downloadPromise = page.waitForEvent('download');
-    await page.getByRole('link', { name: '다운로드' }).click();
-    const download = await downloadPromise;
-    assert.equal(download.suggestedFilename(), 'video.mp3');
+    assert.equal(
+      await page.getByRole('link', { name: '다운로드' }).getAttribute('href'),
+      `${API_ORIGINS[0]}/downloads/${VIDEO_ID}/file`,
+    );
     assertNoRuntimeErrors();
   } finally {
     await context.close();

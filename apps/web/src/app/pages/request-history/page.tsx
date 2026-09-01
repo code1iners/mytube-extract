@@ -4,8 +4,6 @@ import { NavLink, useLocation } from 'react-router';
 import {
   JobStatusRequestError,
   buildApiUrl,
-  getJobStatusRetryDelay,
-  shouldRetryJobStatus,
 } from '../../../api/mytube-extract.api';
 import type { DownloadResponse } from '../../../domain/download-request/download-request';
 import type { SubtitleJobResponse } from '../../../domain/subtitle-request/subtitle-request';
@@ -18,8 +16,8 @@ import {
   removeJobReceipt,
 } from '../../utils/job-receipt.util';
 import {
+  createJobStatusQueryOptions,
   fetchJobStatus,
-  getJobStatusRefetchInterval,
 } from '../../utils/job-status-polling.util';
 import {
   parseHistoryDeepLink,
@@ -50,15 +48,10 @@ export function RequestHistoryPage() {
   );
   const queries = useQueries({
     queries: visibleReceipts.map((receipt) => ({
-      queryKey: ['job-status', receipt.kind, receipt.jobId],
-      queryFn: ({ signal }: { signal: AbortSignal }) =>
-        fetchJobStatus(receipt, apiBaseUrl, signal),
-      refetchInterval: (query: { state: { data?: JobStatus } }) =>
-        getJobStatusRefetchInterval(query.state.data?.displayStatus),
-      refetchOnReconnect: true,
-      refetchOnWindowFocus: true,
-      retry: shouldRetryJobStatus,
-      retryDelay: getJobStatusRetryDelay,
+      ...createJobStatusQueryOptions({
+        receipt,
+        fetchStatus: (signal) => fetchJobStatus(receipt, apiBaseUrl, signal),
+      }),
     })),
   });
   const notFoundKeys = queries

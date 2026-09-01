@@ -2,7 +2,6 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { type ChangeEvent, useEffect, useRef, useState } from 'react';
 import { useForm } from 'react-hook-form';
-import { useNavigate } from 'react-router';
 import {
   AUDIO_QUALITY_OPTIONS,
   type DownloadDraft,
@@ -18,6 +17,7 @@ import {
   type UserVisibleErrorDetail,
   WorkerUnavailableError,
   assertWorkerAvailable,
+  buildApiUrl,
   createDownloadJob,
   getWorkerHealth,
 } from '../../../../api/mytube-extract.api';
@@ -25,6 +25,10 @@ import { useNavigationLock } from '../../../components/navigation-lock-context';
 import { type AppIconName } from '../../../components/app-icon';
 import { getExtractViewPhase } from '../../../utils/extract-view-phase.util';
 import { acceptJobReceipt } from '../../../utils/job-receipt.util';
+import {
+  createJobStatusQueryOptions,
+  fetchJobStatus,
+} from '../../../utils/job-status-polling.util';
 import { getWorkerHealthNotice } from '../../../utils/worker-health-notice.util';
 
 /** worker 미가용 안내 문구. */
@@ -58,6 +62,8 @@ export function useVideoExtractLogic() {
 
   /** 요청 실패 메시지. */
   const [requestError, setRequestError] = useState('');
+  /** 이 화면에서 상태를 확인할 직전 접수 job. */
+  const [activeJob, setActiveJob] = useState<DownloadResponse | null>(null);
 
   // Hooks.
 
@@ -74,8 +80,6 @@ export function useVideoExtractLogic() {
     mode: 'onChange',
     resolver: zodResolver(downloadDraftSchema),
   });
-  /** 요청 접수 뒤 history route로 이동한다. */
-  const navigate = useNavigate();
   /** worker health query. */
   const workerHealthQuery = useQuery({
     queryKey: ['worker-health', apiBaseUrl],
@@ -105,6 +109,27 @@ export function useVideoExtractLogic() {
         signal: input.signal,
       });
     },
+  });
+  /** 현재 화면의 다운로드 job 상태 query. */
+  const activeJobQuery = useQuery({
+    enabled: activeJob !== null,
+    ...createJobStatusQueryOptions({
+      receipt: {
+        jobId: activeJob?.jobId ?? '',
+        kind: 'video',
+        acceptedAt: activeJob?.createdAt ?? '',
+      },
+      fetchStatus: (signal) =>
+        fetchJobStatus(
+          {
+            jobId: activeJob!.jobId,
+            kind: 'video',
+            acceptedAt: activeJob!.createdAt,
+          },
+          apiBaseUrl,
+          signal,
+        ),
+    }),
   });
   /** 추출 진행 중 route 이동 차단 상태를 갱신한다. */
   const { setNavigationLocked } = useNavigationLock();
@@ -150,8 +175,8 @@ export function useVideoExtractLogic() {
     isValid &&
     !downloadJobMutation.isPending &&
     workerHealthQuery.data?.worker?.available === true;
-  /** 오른쪽 status panel에 표시할 job. */
-  const statusJob = createIdleJob(draft);
+  /** 오른쪽 status panel에 표시할 최신 job. */
+  const statusJob = activeJobQuery.data ?? activeJob ?? createIdleJob(draft);
   /** 10칸 진행률 bar 중 채울 칸 수. */
   const filledProgressCells =
     statusJob.progress === null ? 0 : Math.round(statusJob.progress / 10);
@@ -193,12 +218,14 @@ export function useVideoExtractLogic() {
   /** 상태 패널 품질 표시값. */
   const statusQualityLabel = formatQuality(statusJob);
   /** 완료 asset 다운로드 href. */
-  const downloadHref = '';
+  const downloadHref = statusJob.downloadUrl
+    ? buildApiUrl(statusJob.downloadUrl, apiBaseUrl)
+    : '';
   /** 현재 화면에 단독으로 표시할 추출 단계. */
   const viewPhase = getExtractViewPhase({
     hasRequestError: Boolean(requestError),
     isSubmitting,
-    status: null,
+    status: activeJobQuery.data?.displayStatus ?? activeJob?.displayStatus ?? null,
   });
 
   // Functions.
@@ -231,6 +258,7 @@ export function useVideoExtractLogic() {
   function returnToRequest() {
     stopRequest();
     setRequestError('');
+    setActiveJob(null);
     downloadJobMutation.reset();
   }
 
@@ -295,8 +323,8 @@ export function useVideoExtractLogic() {
       });
 
       requestAbortControllerRef.current = null;
-      const destination = acceptJobReceipt('video', job.jobId);
-      navigate(destination.to, { state: { storageFailed: destination.storageFailed } });
+      acceptJobReceipt('video', job.jobId);
+      setActiveJob(job);
     } catch (error) {
       if (error instanceof DOMException && error.name === 'AbortError') {
         return;

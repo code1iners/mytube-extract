@@ -138,7 +138,11 @@ export function VideoExtractPage() {
         <StatusHead icon={statusIconName} tone={statusTone} title={statusTitle} message={statusMessage} />
         <div className="step-tabs" aria-label="작업 단계">
           {STATUS_ITEMS.map((item) => (
-            <span className={statusJob.displayStatus === item.key ? 'step-tab is-selected' : 'step-tab'} key={item.key}>
+            <span
+              aria-current={statusJob.displayStatus === item.key ? 'step' : undefined}
+              className={statusJob.displayStatus === item.key ? 'step-tab is-selected' : 'step-tab'}
+              key={item.key}
+            >
               <AppIcon name={item.icon} />
               {item.label}
             </span>
@@ -166,7 +170,7 @@ export function VideoExtractPage() {
           <div><dt>보관 기간</dt><dd>완료 후 {statusJob.retentionDays}일</dd></div>
         </dl>
         <div className="result-actions result-actions--video">
-          <a className="download-button" href={downloadHref}><AppIcon name="download" />다운로드</a>
+          <a className="download-button" download href={downloadHref}><AppIcon name="download" />다운로드</a>
           <button className="secondary-button secondary-button--new-request" type="button" onClick={returnToRequest}><AppIcon name="newRequest" />새 요청</button>
         </div>
       </section>
