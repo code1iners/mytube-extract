@@ -1,3 +1,116 @@
+---
+name: MyTube Extract
+description: Nintendo 미니멀 플랫 계열 self-hosted YouTube 추출 콘솔의 Web·Chrome popup 공통 Foundation.
+colors:
+  action-primary: "#e60012"
+  on-primary: "#ffffff"
+  canvas: "#ffffff"
+  surface: "#f8f8f8"
+  surface-alt: "#efefef"
+  text-primary: "#484848"
+  text-secondary: "#727272"
+  text-disabled: "#c8c8c8"
+  border: "#e0e0e0"
+  focus: "#4b5cce"
+  status-queued: "#727272"
+  status-processing: "#4b5cce"
+  status-completed: "#468254"
+  status-failed: "#c62828"
+  status-expired: "#c8c8c8"
+typography:
+  display:
+    fontFamily: "'Pretendard Variable', ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
+    fontSize: "28px"
+    fontWeight: 600
+    lineHeight: 1.35
+  subheading:
+    fontFamily: "{typography.display.fontFamily}"
+    fontSize: "21px"
+    fontWeight: 600
+    lineHeight: 1.4
+  label:
+    fontFamily: "{typography.display.fontFamily}"
+    fontSize: "16px"
+    fontWeight: 600
+    lineHeight: 1.4
+  body:
+    fontFamily: "{typography.display.fontFamily}"
+    fontSize: "16px"
+    fontWeight: 400
+    lineHeight: 1.6
+  button:
+    fontFamily: "{typography.display.fontFamily}"
+    fontSize: "18px"
+    fontWeight: 600
+    lineHeight: 1.0
+  nav:
+    fontFamily: "{typography.display.fontFamily}"
+    fontSize: "14px"
+    fontWeight: 600
+    lineHeight: 1.0
+  caption:
+    fontFamily: "{typography.display.fontFamily}"
+    fontSize: "14px"
+    fontWeight: 400
+    lineHeight: 1.4
+rounded:
+  xs: "2px"
+  sm: "4px"
+  md: "8px"
+  lg: "12px"
+  pill: "48px"
+  full: "9999px"
+spacing:
+  "4": "4px"
+  "8": "8px"
+  "12": "12px"
+  "16": "16px"
+  "24": "24px"
+  "32": "32px"
+  "48": "48px"
+components:
+  button-primary:
+    backgroundColor: "{colors.action-primary}"
+    textColor: "{colors.on-primary}"
+    typography: "{typography.button}"
+    rounded: "{rounded.md}"
+    height: "48px"
+  button-primary-disabled:
+    backgroundColor: "{colors.surface-alt}"
+    textColor: "{colors.text-disabled}"
+    typography: "{typography.button}"
+    rounded: "{rounded.md}"
+    height: "48px"
+  button-secondary:
+    backgroundColor: "{colors.surface}"
+    textColor: "{colors.text-primary}"
+    typography: "{typography.label}"
+    rounded: "{rounded.md}"
+    height: "44px"
+  card-panel:
+    backgroundColor: "{colors.surface}"
+    textColor: "{colors.text-primary}"
+    rounded: "{rounded.lg}"
+    padding: "20px"
+  input-url:
+    backgroundColor: "{colors.surface}"
+    textColor: "{colors.text-primary}"
+    rounded: "{rounded.md}"
+    height: "48px"
+  chip-quality:
+    backgroundColor: "{colors.surface}"
+    textColor: "{colors.text-secondary}"
+    typography: "{typography.label}"
+    rounded: "{rounded.md}"
+    height: "48px"
+  chip-quality-selected:
+    backgroundColor: "{colors.surface-alt}"
+    textColor: "{colors.action-primary}"
+    typography: "{typography.label}"
+    rounded: "{rounded.md}"
+    height: "48px"
+---
+
 # MyTube Extract Design System
 
 ## 1. 목적과 범위

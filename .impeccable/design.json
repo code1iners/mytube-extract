@@ -1,0 +1,128 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-08-31T00:00:00.000Z",
+  "title": "Design System: MyTube Extract",
+  "extensions": {
+    "colorMeta": {
+      "action-primary": { "role": "primary", "displayName": "Nintendo Red", "canonical": "#e60012", "tonalRamp": ["#4d0006", "#8f000b", "#d10010", "#ff1427", "#ff5764", "#ff8f98", "#ffc2c7", "#ffe5e7"] },
+      "on-primary": { "role": "primary", "displayName": "On-Primary White", "canonical": "#ffffff", "tonalRamp": ["#000000", "#242424", "#484848", "#6c6c6c", "#909090", "#b4b4b4", "#d8d8d8", "#ffffff"] },
+      "canvas": { "role": "neutral", "displayName": "Canvas", "canonical": "#ffffff", "tonalRamp": ["#262626", "#474747", "#696969", "#8a8a8a", "#ababab", "#c7c7c7", "#e0e0e0", "#f2f2f2"] },
+      "surface": { "role": "neutral", "displayName": "Surface", "canonical": "#f8f8f8", "tonalRamp": ["#262626", "#474747", "#696969", "#8a8a8a", "#ababab", "#c7c7c7", "#e0e0e0", "#f2f2f2"] },
+      "surface-alt": { "role": "neutral", "displayName": "Surface Alt", "canonical": "#efefef", "tonalRamp": ["#262626", "#474747", "#696969", "#8a8a8a", "#ababab", "#c7c7c7", "#e0e0e0", "#f2f2f2"] },
+      "text-primary": { "role": "neutral", "displayName": "Ink (Warm Dark Grey)", "canonical": "#484848", "tonalRamp": ["#262626", "#474747", "#696969", "#8a8a8a", "#ababab", "#c7c7c7", "#e0e0e0", "#f2f2f2"] },
+      "text-secondary": { "role": "neutral", "displayName": "Muted Ink", "canonical": "#727272", "tonalRamp": ["#262626", "#474747", "#696969", "#8a8a8a", "#ababab", "#c7c7c7", "#e0e0e0", "#f2f2f2"] },
+      "text-disabled": { "role": "neutral", "displayName": "Disabled Ink", "canonical": "#c8c8c8", "tonalRamp": ["#262626", "#474747", "#696969", "#8a8a8a", "#ababab", "#c7c7c7", "#e0e0e0", "#f2f2f2"] },
+      "border": { "role": "neutral", "displayName": "Hairline", "canonical": "#e0e0e0", "tonalRamp": ["#262626", "#474747", "#696969", "#8a8a8a", "#ababab", "#c7c7c7", "#e0e0e0", "#f2f2f2"] },
+      "focus": { "role": "secondary", "displayName": "Focus Blue (Accent)", "canonical": "#4b5cce", "tonalRamp": ["#10163c", "#1f2970", "#2d3ca4", "#4758cd", "#7b87db", "#a7afe7", "#cfd3f2", "#ebedfa"] },
+      "status-queued": { "role": "status", "displayName": "Queued Grey", "canonical": "#727272", "tonalRamp": ["#262626", "#474747", "#696969", "#8a8a8a", "#ababab", "#c7c7c7", "#e0e0e0", "#f2f2f2"] },
+      "status-processing": { "role": "status", "displayName": "Processing Blue", "canonical": "#4b5cce", "tonalRamp": ["#10163c", "#1f2970", "#2d3ca4", "#4758cd", "#7b87db", "#a7afe7", "#cfd3f2", "#ebedfa"] },
+      "status-completed": { "role": "status", "displayName": "Completed Green (eShop)", "canonical": "#468254", "tonalRamp": ["#1b3220", "#325d3c", "#498858", "#67ad77", "#92c49d", "#b6d8be", "#d7eadc", "#eef6f0"] },
+      "status-failed": { "role": "status", "displayName": "Failed Crimson", "canonical": "#c62828", "tonalRamp": ["#400d0d", "#771818", "#ae2323", "#d83c3c", "#e37373", "#eca2a2", "#f5cccc", "#fbeaea"] },
+      "status-expired": { "role": "status", "displayName": "Expired Grey", "canonical": "#c8c8c8", "tonalRamp": ["#262626", "#474747", "#696969", "#8a8a8a", "#ababab", "#c7c7c7", "#e0e0e0", "#f2f2f2"] }
+    },
+    "typographyMeta": {
+      "display": { "displayName": "Display", "purpose": "요청/history 페이지 타이틀(28px/600)." },
+      "subheading": { "displayName": "Subheading", "purpose": "console-panel 카드 헤드(21px/600)." },
+      "label": { "displayName": "Label", "purpose": "필드 라벨, 세그먼트/칩 텍스트, nav 항목(16px/600)." },
+      "body": { "displayName": "Body", "purpose": "표준 본문, 상태 메시지(16px/400, line-height 1.6 — 한글 밀도 절충값)." },
+      "button": { "displayName": "Button", "purpose": "primary-button/download-button 라벨(18px/600)." },
+      "nav": { "displayName": "Nav", "purpose": "bottom-tab-bar 항목(14px/600)." },
+      "caption": { "displayName": "Caption", "purpose": "field-feedback, history 메타 텍스트(14px/400)." }
+    },
+    "shadows": [
+      { "name": "shadow-soft", "value": "rgba(0, 0, 0, 0.07) 0px 2px 8px 0px", "purpose": "console-hero, console-panel, legend-bar, primary-button 등 표준 카드/CTA에 쓰는 근무영 그림자." },
+      { "name": "shadow-card", "value": "rgba(72, 72, 72, 0.15) 0px 4px 16px 0px", "purpose": "완료 결과 패널처럼 강조가 필요한 카드용 더 짙은 근무영 그림자." }
+    ],
+    "breakpoints": [
+      { "name": "compact-width", "value": "820px" },
+      { "name": "narrow-width", "value": "560px" },
+      { "name": "short-height", "value": "700px" }
+    ]
+  },
+  "components": [
+    {
+      "name": "Primary Button",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "요청 접수·다운로드처럼 화면당 하나만 두는 주 행동 버튼. Nintendo red 채움, 흰 라벨.",
+      "html": "<button class=\"ds-btn-primary\"><svg class=\"ds-btn-primary__icon\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.75\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><path d=\"M12 4v11\"/><path d=\"M7.5 11.5L12 16l4.5-4.5\"/><path d=\"M4 19h16\"/></svg>추출 요청</button>",
+      "css": ".ds-btn-primary { display: inline-flex; min-height: 48px; align-items: center; justify-content: center; gap: 8px; border: 1px solid #e60012; border-radius: 8px; background: #e60012; color: #ffffff; font-family: 'Pretendard Variable', ui-sans-serif, system-ui, sans-serif; font-size: 18px; font-weight: 600; cursor: pointer; box-shadow: rgba(0, 0, 0, 0.07) 0px 2px 8px 0px; } .ds-btn-primary__icon { width: 20px; height: 20px; flex: 0 0 auto; } .ds-btn-primary:focus-visible { outline: 2px solid #4b5cce; outline-offset: 2px; } .ds-btn-primary:disabled { border-color: #e0e0e0; background: #efefef; color: #c8c8c8; cursor: not-allowed; box-shadow: none; }"
+    },
+    {
+      "name": "Secondary Button",
+      "kind": "button",
+      "refersTo": "button-secondary",
+      "description": "새 요청, 재시도처럼 보조 행동에 쓰는 outline 버튼.",
+      "html": "<button class=\"ds-btn-secondary\">새 요청</button>",
+      "css": ".ds-btn-secondary { display: inline-flex; min-height: 44px; align-items: center; justify-content: center; border: 1px solid #e0e0e0; border-radius: 8px; background: #f8f8f8; color: #484848; font-family: 'Pretendard Variable', ui-sans-serif, system-ui, sans-serif; font-size: 16px; font-weight: 600; cursor: pointer; } .ds-btn-secondary:focus-visible { outline: 2px solid #4b5cce; outline-offset: 2px; } .ds-btn-secondary:disabled { color: #c8c8c8; cursor: not-allowed; }"
+    },
+    {
+      "name": "Card Panel",
+      "kind": "card",
+      "refersTo": "card-panel",
+      "description": "console-hero/console-panel/history-item이 공유하는 워크호스 카드. hairline + whisper-soft shadow로만 분리한다.",
+      "html": "<section class=\"ds-card\"><h3 class=\"ds-card__title\">추출 요청</h3><p class=\"ds-card__body\">YouTube URL을 입력하고 형식과 품질을 고르세요.</p></section>",
+      "css": ".ds-card { padding: 20px; border: 1px solid #e0e0e0; border-radius: 12px; background: #f8f8f8; box-shadow: rgba(0, 0, 0, 0.07) 0px 2px 8px 0px; } .ds-card__title { margin: 0 0 8px; color: #484848; font-family: 'Pretendard Variable', ui-sans-serif, system-ui, sans-serif; font-size: 21px; font-weight: 600; line-height: 1.4; } .ds-card__body { margin: 0; color: #727272; font-family: 'Pretendard Variable', ui-sans-serif, system-ui, sans-serif; font-size: 16px; line-height: 1.6; }"
+    },
+    {
+      "name": "URL Input",
+      "kind": "input",
+      "refersTo": "input-url",
+      "description": "YouTube URL 입력 필드. hairline 프레임, 포커스 시 blue accent 테두리.",
+      "html": "<div class=\"ds-input-frame\"><svg class=\"ds-input-frame__icon\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.75\" aria-hidden=\"true\"><circle cx=\"12\" cy=\"12\" r=\"9\"/></svg><input class=\"ds-input-frame__field\" type=\"text\" placeholder=\"https://youtube.com/watch?v=...\"/></div>",
+      "css": ".ds-input-frame { display: grid; min-height: 48px; align-items: center; grid-template-columns: 28px minmax(0, 1fr) auto; border: 1px solid #e0e0e0; border-radius: 8px; background: #f8f8f8; } .ds-input-frame:focus-within { border-color: #4b5cce; } .ds-input-frame__icon { justify-self: center; width: 18px; height: 18px; color: #727272; } .ds-input-frame__field { width: 100%; min-height: 44px; border: 0; background: transparent; color: #484848; font-family: 'Pretendard Variable', ui-sans-serif, system-ui, sans-serif; font-size: 16px; padding: 9px 13px 9px 0; outline: none; }"
+    },
+    {
+      "name": "Quality Chip",
+      "kind": "chip",
+      "refersTo": "chip-quality",
+      "description": "오디오 비트레이트·비디오 해상도 등 고정 선택지 chip. 선택 시 outline과 텍스트가 action-primary로 바뀐다.",
+      "html": "<label class=\"ds-chip is-selected\"><input type=\"radio\" name=\"quality\" checked/>1080p</label>",
+      "css": ".ds-chip { display: flex; min-height: 48px; align-items: center; justify-content: center; gap: 8px; border: 1px solid #e0e0e0; border-radius: 8px; background: #f8f8f8; color: #727272; font-family: 'Pretendard Variable', ui-sans-serif, system-ui, sans-serif; font-weight: 600; cursor: pointer; } .ds-chip input { position: absolute; width: 1px; height: 1px; opacity: 0; } .ds-chip.is-selected { border-color: #e60012; background: #efefef; color: #e60012; } .ds-chip:focus-within { outline: 2px solid #4b5cce; outline-offset: 2px; }"
+    },
+    {
+      "name": "Status Pill",
+      "kind": "custom",
+      "refersTo": "status-pill",
+      "description": "대기·처리중·완료·실패·만료 5개 상태를 색+텍스트+아이콘으로 함께 전달하는 원형 아이콘 + 라벨. brand red는 상태 표시에 쓰지 않는다.",
+      "html": "<span class=\"ds-status ds-status--processing\"><svg class=\"ds-status__icon\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.75\" aria-hidden=\"true\"><path d=\"M4 12a8 8 0 0 1 13.66-5.66L20 9\"/></svg>처리중</span>",
+      "css": ".ds-status { display: inline-flex; align-items: center; gap: 6px; font-family: 'Pretendard Variable', ui-sans-serif, system-ui, sans-serif; font-size: 14px; font-weight: 600; } .ds-status__icon { width: 16px; height: 16px; } .ds-status--queued { color: #727272; } .ds-status--processing { color: #4b5cce; } .ds-status--completed { color: #468254; } .ds-status--failed { color: #c62828; } .ds-status--expired { color: #c8c8c8; }"
+    },
+    {
+      "name": "Bottom Tab Nav",
+      "kind": "nav",
+      "refersTo": "nav-bottom-tab",
+      "description": "영상·자막 추출 전환용 하단 고정 2-tab bar. 요청 접수 중에는 route 이동이 잠긴다.",
+      "html": "<nav class=\"ds-tabbar\"><a class=\"ds-tabbar__link is-active\" href=\"#\">영상</a><a class=\"ds-tabbar__link\" href=\"#\">자막</a></nav>",
+      "css": ".ds-tabbar { position: fixed; right: 0; bottom: 0; left: 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); border-top: 1px solid #e0e0e0; background: #f8f8f8; } .ds-tabbar__link { display: inline-flex; min-height: 60px; align-items: center; justify-content: center; gap: 8px; color: #727272; font-family: 'Pretendard Variable', ui-sans-serif, system-ui, sans-serif; font-size: 16px; font-weight: 600; text-decoration: none; } .ds-tabbar__link.is-active { color: #e60012; background: #efefef; } .ds-tabbar__link:focus-visible { outline: 2px solid #4b5cce; outline-offset: -2px; }"
+    }
+  ],
+  "narrative": {
+    "overview": "MyTube Extract Web과 Chrome 확장 popup에 공통 적용하는 Foundation이다. Nintendo Design System을 브랜드 입력으로 삼아 Nintendo red를 유일 액션 색으로 쓰고, 순검정 대신 웜 다크그레이 잉크, 근무영(whisper-soft) shadow와 hairline으로 표면을 분리한다. 이미지·콘텐츠가 시각적 에너지를 담당하고 UI 크롬은 차분하게 유지한다.",
+    "keyCharacteristics": [
+      "Nintendo red(#e60012)는 primary CTA·인라인 링크·브랜드 포인트에만 쓰고 상태 표시에는 쓰지 않는다.",
+      "순검정 대신 웜 다크그레이 잉크(#484848 / dark #f2f0ee)를 쓴다.",
+      "두꺼운 테두리·하드 드롭섀도 없이 hairline + whisper-soft shadow로 표면을 분리한다.",
+      "12px 카드, 8px 버튼, 48px pill, 20px 유틸리티 pill의 둥근 기하를 쓴다.",
+      "Pretendard Variable 단일 패밀리(weight 600 heading / 400 body)를 쓴다."
+    ],
+    "rules": [
+      { "name": "The Brand Invariance Rule", "body": "Nintendo red는 light/dark 테마와 무관하게 동일 값(#e60012)을 유지한다. 그 외 surface·ink만 반전한다.", "section": "colors" },
+      { "name": "The No Color-Only Status Rule", "body": "상태(대기·처리중·완료·실패·만료)는 색과 함께 텍스트·아이콘으로 전달한다. 색만으로 상태를 전달하지 않는다.", "section": "colors" },
+      { "name": "The Semantic-Only Rule", "body": "화면·컴포넌트는 semantic token만 참조하고 primitive를 직접 참조하지 않는다.", "section": "colors" },
+      { "name": "The Flat-By-Default Rule", "body": "두꺼운 테두리(2px)와 픽셀 하드 드롭섀도는 쓰지 않는다. 대부분의 분리는 flat tint와 hairline으로 한다.", "section": "elevation" }
+    ],
+    "dos": [
+      "Do Nintendo red(#e60012)를 primary CTA·인라인 링크·브랜드 포인트에만 쓴다.",
+      "Do 상태는 색+텍스트+아이콘을 함께 표시한다.",
+      "Do 12px 카드, 8px 버튼, 48px pill, 20px 유틸리티 pill의 radius 스케일을 지킨다.",
+      "Do keyboard focus는 blue accent(#4b5cce) outline으로만 표시한다."
+    ],
+    "donts": [
+      "Don't brand red를 상태 표시(대기·처리중·완료·실패·만료)에 쓴다.",
+      "Don't 순검정을 텍스트·배경에 쓴다 — 웜 다크그레이 잉크를 쓴다.",
+      "Don't 2px 굵은 테두리나 하드 드롭섀도를 쓴다.",
+      "Don't red를 focus indicator에 쓴다 — 액션 신호와 분리되어야 한다."
+    ]
+  }
+}
