@@ -6,7 +6,6 @@ import {
   useRef,
   useState,
 } from 'react';
-import { useNavigate } from 'react-router';
 import {
   type SubtitleJobResponse,
   type SubtitleWhisperModel,
@@ -19,6 +18,7 @@ import {
   WorkerUnavailableError,
   abortSubtitleUpload,
   assertWorkerAvailable,
+  buildApiUrl,
   completeSubtitleUpload,
   createSubtitleUpload,
   getWorkerHealth,
@@ -28,6 +28,10 @@ import { useNavigationLock } from '../../../components/navigation-lock-context';
 import { type AppIconName } from '../../../components/app-icon';
 import { getExtractViewPhase } from '../../../utils/extract-view-phase.util';
 import { acceptJobReceipt } from '../../../utils/job-receipt.util';
+import {
+  createJobStatusQueryOptions,
+  fetchJobStatus,
+} from '../../../utils/job-status-polling.util';
 import { getWorkerHealthNotice } from '../../../utils/worker-health-notice.util';
 
 /** worker 미가용 안내 문구. */
@@ -79,11 +83,11 @@ export function useSubtitlesExtractLogic() {
   const [requestError, setRequestError] = useState('');
   /** R2 direct upload 진행률. */
   const [uploadProgress, setUploadProgress] = useState<number | null>(null);
+  /** 이 화면에서 상태를 확인할 직전 접수 자막 job. */
+  const [activeJob, setActiveJob] = useState<SubtitleJobResponse | null>(null);
 
   // Hooks.
 
-  /** 요청 접수 뒤 history route로 이동한다. */
-  const navigate = useNavigate();
   /** worker health query. */
   const workerHealthQuery = useQuery({
     queryKey: ['worker-health', apiBaseUrl],
@@ -142,6 +146,27 @@ export function useSubtitlesExtractLogic() {
       }
     },
   });
+  /** 현재 화면의 자막 job 상태 query. */
+  const activeJobQuery = useQuery({
+    enabled: activeJob !== null,
+    ...createJobStatusQueryOptions({
+      receipt: {
+        jobId: activeJob?.jobId ?? '',
+        kind: 'subtitle',
+        acceptedAt: activeJob?.createdAt ?? '',
+      },
+      fetchStatus: (signal) =>
+        fetchJobStatus(
+          {
+            jobId: activeJob!.jobId,
+            kind: 'subtitle',
+            acceptedAt: activeJob!.createdAt,
+          },
+          apiBaseUrl,
+          signal,
+        ),
+    }),
+  });
   /** 추출 진행 중 route 이동 차단 상태를 갱신한다. */
   const { setNavigationLocked } = useNavigationLock();
 
@@ -189,7 +214,8 @@ export function useSubtitlesExtractLogic() {
   const canChangeWhisperModel =
     !subtitleJobMutation.isPending;
   /** 오른쪽 status panel에 표시할 job. */
-  const statusJob = createIdleSubtitleJob(selectedFile);
+  const statusJob =
+    activeJobQuery.data ?? activeJob ?? createIdleSubtitleJob(selectedFile);
   /** 화면에 선택 표시할 처리 단계. */
   const currentStepKey = createSubtitleStepKey({
     selectedFile,
@@ -237,7 +263,9 @@ export function useSubtitlesExtractLogic() {
         ? 'failed'
         : getStatusTone(statusJob.displayStatus);
   /** 완료 SRT 다운로드 href. */
-  const downloadHref = '';
+  const downloadHref = statusJob.downloadUrl
+    ? buildApiUrl(statusJob.downloadUrl, apiBaseUrl)
+    : '';
   /** 선택 파일 메타 정보. */
   const selectedFileMeta = selectedFile
     ? `${formatFileSize(selectedFile.size)}`
@@ -251,7 +279,8 @@ export function useSubtitlesExtractLogic() {
   const viewPhase = getExtractViewPhase({
     hasRequestError: Boolean(requestError),
     isSubmitting,
-    status: null,
+    status:
+      activeJobQuery.data?.displayStatus ?? activeJob?.displayStatus ?? null,
   });
 
   // Functions.
@@ -276,6 +305,7 @@ export function useSubtitlesExtractLogic() {
     setSelectedVideoDurationSeconds(null);
     setRequestError('');
     setUploadProgress(null);
+    setActiveJob(null);
     subtitleJobMutation.reset();
 
     if (fileInputRef.current) {
@@ -289,6 +319,7 @@ export function useSubtitlesExtractLogic() {
     setSelectedVideoDurationSeconds(null);
     setRequestError('');
     setUploadProgress(null);
+    setActiveJob(null);
     subtitleJobMutation.reset();
   }
 
@@ -302,6 +333,7 @@ export function useSubtitlesExtractLogic() {
     stopRequest();
     setRequestError('');
     setUploadProgress(null);
+    setActiveJob(null);
     subtitleJobMutation.reset();
   }
 
@@ -403,8 +435,8 @@ export function useSubtitlesExtractLogic() {
       });
 
       requestAbortControllerRef.current = null;
-      const destination = acceptJobReceipt('subtitle', job.jobId);
-      navigate(destination.to, { state: { storageFailed: destination.storageFailed } });
+      acceptJobReceipt('subtitle', job.jobId);
+      setActiveJob(job);
     } catch (error) {
       if (error instanceof DOMException && error.name === 'AbortError') {
         return;

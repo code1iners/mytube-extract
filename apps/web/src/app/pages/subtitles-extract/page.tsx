@@ -48,7 +48,7 @@ export function SubtitlesExtractPage() {
     return <section className="console-panel phase-panel status-panel" aria-labelledby="subtitle-status-title">
       <PanelTitle icon="processing" id="subtitle-status-title">처리 상태</PanelTitle>
       <StatusHead icon={statusIconName} tone={statusTone} title={statusTitle} message={statusMessage} />
-      <div className="subtitle-step-tabs" aria-label="자막 처리 단계">{SUBTITLE_STEPS.map((step) => <span className={currentStepKey === step.key ? 'step-tab is-selected' : 'step-tab'} key={step.key}>{step.label}</span>)}</div>
+      <div className="subtitle-step-tabs" aria-label="자막 처리 단계">{SUBTITLE_STEPS.map((step) => <span aria-current={currentStepKey === step.key ? 'step' : undefined} className={currentStepKey === step.key ? 'step-tab is-selected' : 'step-tab'} key={step.key}>{step.label}</span>)}</div>
       <ProgressMeter filledCells={filledProgressCells} value={statusJob.progress} />
     </section>;
   }
@@ -57,7 +57,7 @@ export function SubtitlesExtractPage() {
     return <section className="console-panel phase-panel status-panel" aria-labelledby="subtitle-result-title">
       <PanelTitle icon="completed" id="subtitle-result-title">SRT 준비 완료</PanelTitle>
       <StatusHead icon="completed" tone="completed" title={statusTitle} message={statusMessage} />
-      <div className="result-actions"><a className="download-button" href={downloadHref}><AppIcon name="download" />영어 SRT 다운로드</a><button className="secondary-button" type="button" onClick={returnToRequest}>새 요청</button></div>
+      <div className="result-actions"><a className="download-button" download href={downloadHref}><AppIcon name="download" />영어 SRT 다운로드</a><button className="secondary-button" type="button" onClick={returnToRequest}>새 요청</button></div>
     </section>;
   }
 
