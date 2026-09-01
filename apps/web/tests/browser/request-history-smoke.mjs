@@ -43,6 +43,7 @@ try {
   await run('cross-tab delete and re-add stay synchronized', verifyCrossTabStorage);
   await run('blocked localStorage keeps the deep-link item', verifyBlockedStorageFallback);
   await run('failed and expired jobs expose matching retry routes', verifyRetryRoutes);
+  await run('empty history explains both request paths and retention', verifyEmptyHistoryProductModel);
   await run('responsive primary navigation stays aligned and unclipped', verifyResponsivePrimaryNavigation);
 
   console.log(JSON.stringify({ origin: staticServer.origin, status: 'ok' }, null, 2));
@@ -525,6 +526,82 @@ async function verifyRetryRoutes() {
     assertNoRuntimeErrors();
   } finally {
     await context.close();
+  }
+}
+
+/** 빈 요청 내역의 두 시작점과 보관 모델을 viewport별로 검증한다. */
+async function verifyEmptyHistoryProductModel() {
+  /** 빈 상태를 확인할 모바일·데스크톱 viewport 폭. */
+  for (const width of [390, 1280]) {
+    /** 빈 내역의 모바일·데스크톱 viewport. */
+    const context = await createContext({
+      viewport: { height: width <= 560 ? 780 : 900, width },
+    });
+    /** 빈 상태 browser page와 runtime error assertion. */
+    const { page, assertNoRuntimeErrors } = await createPage(context);
+
+    try {
+      await page.goto(`${staticServer.origin}/history`);
+      await page
+        .getByText('아직 이 브라우저에서 접수한 요청이 없습니다.')
+        .waitFor();
+
+      /** 빈 상태에서 제공하는 두 개의 요청 시작 링크. */
+      const emptyLinks = page.locator('.history-empty__link');
+      assert.equal(await emptyLinks.count(), 2);
+      assert.deepEqual(
+        await emptyLinks.evaluateAll((links) =>
+          links.map((link) => link.getAttribute('href')),
+        ),
+        ['/video', '/subtitles'],
+      );
+      /** 키보드 focus와 손가락 조작을 위한 링크 크기. */
+      for (const link of await emptyLinks.all()) {
+        /** 빈 상태 링크의 실제 viewport 영역. */
+        const linkBox = await link.boundingBox();
+        assert.ok(linkBox && linkBox.width > 0 && linkBox.height >= 44);
+        await link.focus();
+        assert.equal(
+          await link.evaluate((element) => document.activeElement === element),
+          true,
+        );
+      }
+      assert.equal(
+        await page
+          .getByText(
+            'YouTube URL을 입력해 영상(MP4) 또는 오디오(MP3)를 받습니다.',
+            { exact: true },
+          )
+          .count(),
+        1,
+      );
+      assert.equal(
+        await page
+          .getByText('로컬 영상을 올려 영어 SRT 자막을 만듭니다.', {
+            exact: true,
+          })
+          .count(),
+        1,
+      );
+      assert.equal(
+        await page
+          .getByText(
+            '이력은 이 브라우저에만 저장되며, 완료 파일은 7일 동안 보관됩니다.',
+            { exact: true },
+          )
+          .count(),
+        1,
+      );
+
+      /** viewport별 빈 상태 링크 열 배치. */
+      const linkColumns = await page
+        .locator('.history-empty__links')
+        .evaluate((element) => getComputedStyle(element).gridTemplateColumns);
+      assert.equal(linkColumns.trim().split(/\s+/).length, width <= 560 ? 1 : 2);
+      assertNoRuntimeErrors();
+    } finally {
+      await context.close();
+    }
   }
 }
 

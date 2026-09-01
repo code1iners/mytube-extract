@@ -1,5 +1,10 @@
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { createElement } from 'react';
+import { renderToStaticMarkup } from 'react-dom/server';
+import { MemoryRouter } from 'react-router';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { JobStatusRequestError } from '../../src/api/mytube-extract.api';
+import { RequestHistoryPage } from '../../src/app/pages/request-history/page';
 import {
   createJobStatusRequestErrorDetail,
   createTerminalJobErrorDetail,
@@ -19,6 +24,34 @@ afterEach(() => {
 });
 
 describe('request history query contract', () => {
+  it('shows both request paths and the browser retention model when history is empty', () => {
+    /** 빈 요청 내역 페이지의 query client. */
+    const queryClient = new QueryClient();
+    /** 빈 요청 내역에서 렌더링한 실제 페이지 마크업. */
+    const markup = renderToStaticMarkup(
+      createElement(
+        QueryClientProvider,
+        { client: queryClient },
+        createElement(
+          MemoryRouter,
+          { initialEntries: ['/history'] },
+          createElement(RequestHistoryPage),
+        ),
+      ),
+    );
+
+    expect(markup).toContain('class="history-empty__links"');
+    expect(markup).toContain('href="/video"');
+    expect(markup).toContain('href="/subtitles"');
+    expect(markup).toContain(
+      'YouTube URL을 입력해 영상(MP4) 또는 오디오(MP3)를 받습니다.',
+    );
+    expect(markup).toContain('로컬 영상을 올려 영어 SRT 자막을 만듭니다.');
+    expect(markup).toContain(
+      '이력은 이 브라우저에만 저장되며, 완료 파일은 7일 동안 보관됩니다.',
+    );
+  });
+
   it('validates deep links and stops polling only for terminal states', () => {
     expect(
       parseHistoryDeepLink(

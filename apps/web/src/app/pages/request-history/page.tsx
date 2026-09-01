@@ -183,10 +183,7 @@ export function RequestHistoryPage() {
         {announcement}
       </p>
       {visibleReceipts.length === 0 ? (
-        <div className="history-empty">
-          <p>아직 이 브라우저에서 접수한 요청이 없습니다.</p>
-          <NavLink className="primary-button" to={ROUTE_PATHS.video}>영상 요청하기</NavLink>
-        </div>
+        <HistoryEmptyState />
       ) : (
         <ul className="history-list">
           {visibleReceipts.map((receipt, index) => (
@@ -204,6 +201,39 @@ export function RequestHistoryPage() {
         </ul>
       )}
     </section>
+  );
+}
+
+/** 요청 내역이 비어 있을 때 두 작업의 시작점과 보관 모델을 안내한다. */
+function HistoryEmptyState() {
+  return (
+    <div className="history-empty">
+      <p>아직 이 브라우저에서 접수한 요청이 없습니다.</p>
+      <div className="history-empty__links">
+        <NavLink className="history-empty__link" to={ROUTE_PATHS.video}>
+          <AppIcon name="video" />
+          <span className="history-empty__link-copy">
+            <strong>영상 추출</strong>
+            <span>
+              YouTube URL을 입력해 영상(MP4) 또는 오디오(MP3)를 받습니다.
+            </span>
+          </span>
+        </NavLink>
+        <NavLink className="history-empty__link" to={ROUTE_PATHS.subtitles}>
+          <AppIcon name="subtitle" />
+          <span className="history-empty__link-copy">
+            <strong>자막 추출</strong>
+            <span>로컬 영상을 올려 영어 SRT 자막을 만듭니다.</span>
+          </span>
+        </NavLink>
+      </div>
+      <p className="history-empty__note">
+        <AppIcon name="info" />
+        <span>
+          이력은 이 브라우저에만 저장되며, 완료 파일은 7일 동안 보관됩니다.
+        </span>
+      </p>
+    </div>
   );
 }
 
