@@ -1,10 +1,5 @@
 import { z } from 'zod';
 import {
-  JOB_STATUS_REFETCH_INTERVAL_MS,
-  getDownloadJob,
-  getSubtitleJob,
-} from '../../../api/mytube-extract.api';
-import {
   type JobReceipt,
   parseJobReceiptStorageKey,
 } from '../../utils/job-receipt.util';
@@ -25,22 +20,6 @@ export function parseHistoryDeepLink(
   });
 
   return parsed.success ? { ...parsed.data, acceptedAt } : null;
-}
-
-export function getHistoryRefetchInterval(status?: string) {
-  return status === 'completed' || status === 'failed' || status === 'expired'
-    ? false
-    : JOB_STATUS_REFETCH_INTERVAL_MS;
-}
-
-export function fetchHistoryJobStatus(
-  receipt: JobReceipt,
-  apiBaseUrl: string | undefined,
-  signal: AbortSignal,
-) {
-  return receipt.kind === 'video'
-    ? getDownloadJob(receipt.jobId, { apiBaseUrl, signal })
-    : getSubtitleJob(receipt.jobId, { apiBaseUrl, signal });
 }
 
 /** 다른 탭의 접수증 삭제·재추가를 deep-link fallback보다 우선한다. */

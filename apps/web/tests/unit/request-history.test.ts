@@ -1,7 +1,9 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
-  fetchHistoryJobStatus,
-  getHistoryRefetchInterval,
+  fetchJobStatus,
+  getJobStatusRefetchInterval,
+} from '../../src/app/utils/job-status-polling.util';
+import {
   parseHistoryDeepLink,
   updateDismissedReceiptKeys,
 } from '../../src/app/pages/request-history/request-history.logic';
@@ -26,11 +28,11 @@ describe('request history query contract', () => {
       acceptedAt: '2026-08-11T00:00:00.000Z',
     });
     expect(parseHistoryDeepLink('?kind=video&jobId=bad')).toBeNull();
-    expect(getHistoryRefetchInterval('queued')).toBe(2500);
-    expect(getHistoryRefetchInterval('processing')).toBe(2500);
-    expect(getHistoryRefetchInterval('completed')).toBe(false);
-    expect(getHistoryRefetchInterval('failed')).toBe(false);
-    expect(getHistoryRefetchInterval('expired')).toBe(false);
+    expect(getJobStatusRefetchInterval('queued')).toBe(2500);
+    expect(getJobStatusRefetchInterval('processing')).toBe(2500);
+    expect(getJobStatusRefetchInterval('completed')).toBe(false);
+    expect(getJobStatusRefetchInterval('failed')).toBe(false);
+    expect(getJobStatusRefetchInterval('expired')).toBe(false);
   });
 
   it('uses the existing endpoint for each receipt kind', async () => {
@@ -43,12 +45,12 @@ describe('request history query contract', () => {
     vi.stubGlobal('fetch', fetcher);
     const signal = new AbortController().signal;
 
-    await fetchHistoryJobStatus(
+    await fetchJobStatus(
       { kind: 'video', jobId: VIDEO_ID, acceptedAt: '2026-08-11T00:00:00.000Z' },
       'https://mytube-extract.example/api',
       signal,
     );
-    await fetchHistoryJobStatus(
+    await fetchJobStatus(
       { kind: 'subtitle', jobId: SUBTITLE_ID, acceptedAt: '2026-08-11T00:01:00.000Z' },
       'https://mytube-extract.example/api',
       signal,

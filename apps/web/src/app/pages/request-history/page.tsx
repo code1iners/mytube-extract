@@ -18,8 +18,10 @@ import {
   removeJobReceipt,
 } from '../../utils/job-receipt.util';
 import {
-  fetchHistoryJobStatus,
-  getHistoryRefetchInterval,
+  fetchJobStatus,
+  getJobStatusRefetchInterval,
+} from '../../utils/job-status-polling.util';
+import {
   parseHistoryDeepLink,
   updateDismissedReceiptKeys,
 } from './request-history.logic';
@@ -50,9 +52,9 @@ export function RequestHistoryPage() {
     queries: visibleReceipts.map((receipt) => ({
       queryKey: ['job-status', receipt.kind, receipt.jobId],
       queryFn: ({ signal }: { signal: AbortSignal }) =>
-        fetchHistoryJobStatus(receipt, apiBaseUrl, signal),
+        fetchJobStatus(receipt, apiBaseUrl, signal),
       refetchInterval: (query: { state: { data?: JobStatus } }) =>
-        getHistoryRefetchInterval(query.state.data?.displayStatus),
+        getJobStatusRefetchInterval(query.state.data?.displayStatus),
       refetchOnReconnect: true,
       refetchOnWindowFocus: true,
       retry: shouldRetryJobStatus,
