@@ -10,11 +10,11 @@ colors:
   text-primary: "#484848"
   text-secondary: "#727272"
   text-disabled: "#c8c8c8"
-  border: "#e0e0e0"
+  border: "#8a8a8a"
   focus: "#4b5cce"
   status-queued: "#727272"
   status-processing: "#4b5cce"
-  status-completed: "#468254"
+  status-completed: "#356b43"
   status-failed: "#c62828"
   status-expired: "#c8c8c8"
 typography:
@@ -158,7 +158,7 @@ MyTube Extract의 Web과 Chrome 확장 popup에 공통 적용하는 Foundation�
 | Canvas | `#ffffff` | `#18191b` |
 | Surface | `#f8f8f8` | `#202124` |
 | Surface-alt | `#efefef` | `#292a2d` |
-| Hairline | `#e0e0e0` | `#3a3b3e` |
+| Hairline | `#8a8a8a` | `#767676` |
 | Green(eShop) | `#356b43` | `#8fd6a0` |
 | Blue(accent) | `#4b5cce` | `#a9b4f2` |
 | Danger(브랜드 red와 구분되는 별도 오류색) | `#c62828` | `#ff8a80` |
@@ -175,7 +175,7 @@ Dark 열의 값은 Nintendo 원본 문서에 없는 목표값이다. 웜그레�
 | Text primary | `#484848` | `#f2f0ee` |
 | Text secondary(muted) | `#727272` | `#b3b0ac` |
 | Text disabled | `#c8c8c8` | `#5c5955` |
-| Hairline / border | `#e0e0e0` | `#3a3b3e` |
+| Hairline / border | `#8a8a8a` | `#767676` |
 | Action-primary / on-primary | `#e60012` / `#ffffff` | `#e60012` / `#ffffff` |
 | Focus ring | `#4b5cce` | `#a9b4f2` |
 
