@@ -2,8 +2,16 @@
   font-display: swap;
   font-family: 'Pretendard Variable';
   font-style: normal;
-  font-weight: 45 920;
-  src: url('/fonts/PretendardVariable.woff2') format('woff2-variations');
+  font-weight: 400;
+  src: url('/fonts/Pretendard-Regular.subset.woff2') format('woff2');
+}
+
+@font-face {
+  font-display: swap;
+  font-family: 'Pretendard Variable';
+  font-style: normal;
+  font-weight: 600;
+  src: url('/fonts/Pretendard-SemiBold.subset.woff2') format('woff2');
 }
 
 /* Nintendo 스타일 design-system tokens. docs/DESIGN.md 5·9·10절 참조. */
