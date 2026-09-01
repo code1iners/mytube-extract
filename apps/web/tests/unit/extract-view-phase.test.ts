@@ -11,13 +11,13 @@ describe('extract view phase', () => {
     expect(getExtractViewPhase({ status: 'transcribing' })).toBe('processing');
   });
 
-  it('shows processing from submission until the API creates a job', () => {
+  it('shows an accepting state from submission until the API creates a job', () => {
     expect(
       getExtractViewPhase({
         isSubmitting: true,
         status: null,
       }),
-    ).toBe('processing');
+    ).toBe('accepting');
   });
 
   it('shows the result only for a completed job', () => {

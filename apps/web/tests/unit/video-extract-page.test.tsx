@@ -11,6 +11,23 @@ vi.mock('../../src/app/pages/video-extract/_hooks/use-video-extract-logic', () =
 import { VideoExtractPage } from '../../src/app/pages/video-extract/page';
 
 describe('video extract page', () => {
+  it('shows a lightweight acceptance status without a progress meter', () => {
+    videoExtractLogic.mockReturnValue({
+      statusIconName: 'processing',
+      statusMessage: '추출 요청을 접수하고 있습니다.',
+      statusTitle: '요청을 접수하고 있습니다',
+      statusTone: 'processing',
+      viewPhase: 'accepting',
+    });
+
+    /** 접수 중 화면을 정적 HTML로 렌더링한 결과. */
+    const markup = renderToStaticMarkup(<VideoExtractPage />);
+
+    expect(markup).toContain('요청을 접수하고 있습니다');
+    expect(markup).not.toContain('progress-meter');
+    expect(markup).not.toContain('step-tabs');
+  });
+
   it('marks the selected processing step as the current step', () => {
     videoExtractLogic.mockReturnValue({
       createdTime: '오전 10:00',

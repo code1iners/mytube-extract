@@ -1,5 +1,10 @@
 /** 추출 화면에서 한 번에 렌더링할 단일 단계. */
-export type ExtractViewPhase = 'request' | 'processing' | 'result' | 'error';
+export type ExtractViewPhase =
+  | 'request'
+  | 'accepting'
+  | 'processing'
+  | 'result'
+  | 'error';
 
 /** API job 상태를 화면 단계로 바꾸는 입력값. */
 type ExtractViewPhaseInput = {
@@ -30,8 +35,12 @@ export function getExtractViewPhase(
     return 'result';
   }
 
-  // mutation이 진행 중이면 job 응답 전에도 설정 화면을 다시 보여 주지 않는다.
-  if (input.isSubmitting || input.status) {
+  // API가 job을 생성하기 전에는 실제 처리 상태나 진행률을 표시하지 않는다.
+  if (input.isSubmitting) {
+    return 'accepting';
+  }
+
+  if (input.status) {
     return 'processing';
   }
 

@@ -159,6 +159,15 @@ export function VideoExtractPage() {
     );
   }
 
+  if (viewPhase === 'accepting') {
+    return (
+      <section className="console-panel phase-panel status-panel" aria-labelledby="accepting-title">
+        <PanelTitle icon="processing" id="accepting-title">요청 접수 중</PanelTitle>
+        <StatusHead icon={statusIconName} tone={statusTone} title={statusTitle} message={statusMessage} />
+      </section>
+    );
+  }
+
   if (viewPhase === 'result') {
     return (
       <section className="console-panel phase-panel status-panel" aria-labelledby="result-title">
