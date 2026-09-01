@@ -2,6 +2,7 @@
 export const ROUTE_PATHS = {
   history: '/history',
   root: '/',
+  settings: '/settings',
   subtitles: '/subtitles',
   video: '/video',
 } as const;
@@ -9,6 +10,7 @@ export const ROUTE_PATHS = {
 /** React Router route segment. */
 export const ROUTE_SEGMENTS = {
   history: 'history',
+  settings: 'settings',
   subtitles: 'subtitles',
   video: 'video',
 } as const;

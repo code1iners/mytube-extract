@@ -5,7 +5,7 @@
 - path: `/subtitles`
 - source: `apps/web/src/app/pages/subtitles-extract/page.tsx`
 - logic: `apps/web/src/app/pages/subtitles-extract/_hooks/use-subtitles-extract-logic.ts`
-- navigation: fixed bottom tab `자막 추출`
+- navigation: primary navigation `자막 추출` (desktop header tab / mobile bottom tab)
 
 ## 사용자 흐름
 
@@ -20,7 +20,7 @@
 ## 상태와 오류
 
 - mount 시 과거 접수증을 읽거나 상태 조회를 시작하지 않는다. 현재 화면에서 새로 접수한 job만 조회한다.
-- session 생성부터 part upload와 complete 응답까지 하단 route 탭과 상단 `요청 내역` 링크의 이동 및 중복 제출을 막는다. 링크는 계속 표시하며 `aria-disabled="true"`를 제공한다.
+- session 생성부터 part upload와 complete 응답까지 주요 navigation의 현재 목적지를 제외한 route와 상단 `설정` 링크의 이동 및 중복 제출을 막는다. 링크는 계속 표시하며 비활성 목적지에는 `aria-disabled="true"`와 잠금 사유를 제공한다.
 - complete 성공 뒤 navigation lock을 해제하고 현재 route에서 공유 정책으로 job을 polling한다.
 - 파일 검증, 413, direct upload, complete 실패 시 접수증을 저장하거나 history로 이동하지 않는다.
 - 접수 뒤 worker health 상태가 바뀌어도 현재 job의 API 상태와 메시지를 우선한다.

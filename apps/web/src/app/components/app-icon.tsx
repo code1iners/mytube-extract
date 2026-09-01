@@ -5,11 +5,13 @@ export type AppIconName =
   | 'download'
   | 'expired'
   | 'failed'
+  | 'history'
   | 'info'
   | 'link'
   | 'newRequest'
   | 'processing'
   | 'queued'
+  | 'settings'
   | 'subtitle'
   | 'video';
 
@@ -135,6 +137,25 @@ function renderAppIcon(name: AppIconName) {
         <circle cx="12" cy="12" r="9" />
         <path d="M12 11v5.5" />
         <circle cx="12" cy="7.75" fill="currentColor" r="0.75" stroke="none" />
+      </>
+    );
+  }
+
+  if (name === 'history') {
+    return (
+      <>
+        <path d="M4 12a8 8 0 1 0 2.34-5.66" />
+        <path d="M4 5v5h5" />
+        <path d="M12 8v4l3 2" />
+      </>
+    );
+  }
+
+  if (name === 'settings') {
+    return (
+      <>
+        <circle cx="12" cy="12" r="3" />
+        <path d="M12 3v2M12 19v2M3 12h2M19 12h2M5.64 5.64l1.41 1.41M16.95 16.95l1.41 1.41M18.36 5.64l-1.41 1.41M7.05 16.95l-1.41 1.41" />
       </>
     );
   }

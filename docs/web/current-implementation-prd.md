@@ -9,7 +9,8 @@
 - `/video`: YouTube URL, 오디오/비디오 형식, 품질을 검증해 `POST /downloads` job을 접수한다.
 - `/subtitles`: 로컬 `mp4`, `mov`, `webm`을 R2 multipart로 업로드해 영어 SRT job을 접수한다.
 - `/history`: 같은 브라우저가 접수한 영상·자막 요청을 최신순 최대 20건 조회한다.
-- 상단의 항상 보이는 `요청 내역` 링크와 하단의 영상·자막 전환 탭을 제공하며 요청 접수 중에는 두 navigation surface의 route 이동을 막는다.
+- `영상 추출`·`자막 추출`·`요청 내역`을 하나의 주요 navigation으로 제공한다. 데스크톱에서는 작업 영역 헤더 탭으로, 모바일에서는 안전 영역을 포함한 하단 3탭으로 표시하며 요청 접수 중에는 현재 목적지를 제외한 이동을 막는다.
+- 테마 선택은 보조 `설정` route에서 제공하고, 요청 접수 중에는 설정 route 이동도 막는다.
 - 요청 전 `GET /health`로 worker 가능 여부를 확인한다.
 - 요청 성공 시 최소 접수 정보를 localStorage에 저장하고 현재 요청 route에서 해당 job을 polling한다. `/history` 이동은 사용자가 `요청 내역` 링크를 선택할 때만 일어난다.
 - `/video`·`/subtitles`·`/history`는 같은 API 응답을 상태·진행률·메시지·다운로드의 source of truth로 사용한다.
@@ -40,3 +41,4 @@
 - `docs/web/routes/video.md`
 - `docs/web/routes/subtitles.md`
 - `docs/web/routes/history.md`
+- `docs/web/routes/settings.md`

@@ -5,7 +5,7 @@
 - path: `/video`
 - source: `apps/web/src/app/pages/video-extract/page.tsx`
 - logic: `apps/web/src/app/pages/video-extract/_hooks/use-video-extract-logic.ts`
-- navigation: fixed bottom tab `영상 추출`
+- navigation: primary navigation `영상 추출` (desktop header tab / mobile bottom tab)
 
 ## 사용자 흐름
 
@@ -21,7 +21,7 @@
 - mount 시 과거 접수증을 읽거나 상태 조회를 시작하지 않는다. 현재 화면에서 새로 접수한 job만 조회한다.
 - 요청 전 health 확인 중·실패·worker unavailable 상태는 form 안에 텍스트로 표시한다.
 - URL 검증 또는 POST 실패 시 route를 유지하며 접수증을 저장하지 않는다.
-- POST가 진행되는 동안 하단 route 탭과 상단 `요청 내역` 링크의 이동을 막는다. 링크는 계속 표시하며 `aria-disabled="true"`를 제공한다.
+- POST가 진행되는 동안 주요 navigation의 현재 목적지를 제외한 route와 상단 `설정` 링크의 이동을 막는다. 링크는 계속 표시하며 비활성 목적지에는 `aria-disabled="true"`와 잠금 사유를 제공한다.
 - 접수 이후에는 공유 polling 정책으로 현재 job을 조회하고, terminal 상태나 재시도 불가 조회 오류에서 polling을 멈춘다.
 - 접수 뒤 worker health 상태가 바뀌어도 현재 job의 API 상태와 메시지를 우선한다.
 

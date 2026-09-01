@@ -4,7 +4,7 @@
 
 - entry: `apps/web/src/main.tsx`
 - router: `apps/web/src/app/app.tsx`
-- shared layout/header/bottom tabs: `apps/web/src/app/components/*`
+- shared layout/header/primary navigation/bottom tabs: `apps/web/src/app/components/*`
 - API client: `apps/web/src/api/mytube-extract.api.ts`
 - receipt storage: `apps/web/src/app/utils/job-receipt.util.ts`
 - request preference storage: `apps/web/src/app/utils/request-preference.util.ts`
@@ -16,9 +16,10 @@
 ## Route와 navigation
 
 - `/`와 unknown route는 `/video`로 redirect한다.
-- `/video`, `/subtitles`, `/history`를 제공한다.
-- 하단 탭은 `/video`, `/subtitles` 두 개를 유지한다.
-- 상단 `요청 내역`은 모든 route에서 보이며 `/history`에서 `aria-current="page"`를 가진다.
+- `/video`, `/subtitles`, `/history`, `/settings`를 제공한다.
+- `영상 추출`·`자막 추출`·`요청 내역`은 하나의 주요 navigation으로 공유한다. 데스크톱은 작업 영역 헤더 탭, 모바일은 하단 3탭이다.
+- 주요 navigation의 현재 목적지는 `aria-current="page"`와 active 시각 상태로 함께 전달한다.
+- 상단 `설정`은 보조 route 링크이며, 테마 radio 선택은 `/settings`에서 layout의 기존 테마 state와 storage 콜백을 사용한다.
 
 ## 요청 접수
 
@@ -29,7 +30,7 @@
 - 접수 성공 뒤 현재 `/video` 또는 `/subtitles` route에 남아 생성 응답의 job을 상태 조회한다.
 - 접수증 storage 쓰기 실패는 job 생성이나 현재 route의 상태 조회를 막지 않는다.
 - `/video`, `/subtitles` mount는 과거 접수증을 복원하지 않으며, 현재 화면에서 새로 접수한 job만 query한다.
-- navigation lock은 영상 POST 또는 자막 upload/complete 요청 중에만 유지하며 하단 route 탭과 상단 `요청 내역` 링크에 함께 적용한다.
+- navigation lock은 영상 POST 또는 자막 upload/complete 요청 중에만 유지하며 데스크톱 헤더·모바일 하단의 주요 navigation과 상단 `설정` 링크에 함께 적용한다. 현재 목적지는 활성 상태로 남긴다.
 
 ## Request route query
 

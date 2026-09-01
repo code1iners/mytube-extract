@@ -4,7 +4,7 @@
 
 - path: `/history`
 - source: `apps/web/src/app/pages/request-history/page.tsx`
-- navigation: 모든 route의 상단 `요청 내역` 텍스트 링크
+- navigation: primary navigation `요청 내역` (desktop header tab / mobile bottom tab)
 - data source: browser `localStorage` 접수증과 job status API
 
 ## 사용자 흐름
@@ -35,6 +35,7 @@
 - 동일 polling 결과는 live region에 반복 알리지 않고 실제 상태 전이와 삭제만 polite status로 알린다.
 - 항목 삭제 뒤 다음 삭제 버튼, 이전 삭제 버튼, 빈 목록 제목 순으로 focus를 돌린다.
 - layout은 `docs/DESIGN.md`의 색·간격·radius·760px content token을 재사용한다.
+- 보조 `설정` 링크는 헤더에 제공하며 테마 선택은 `/settings`에서 관리한다.
 
 ## 검증
 

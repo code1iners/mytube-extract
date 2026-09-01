@@ -127,7 +127,7 @@ a {
 .app-shell {
   min-height: 100vh;
   padding: 28px var(--layout-content-gutter)
-    calc(76px + env(safe-area-inset-bottom));
+    32px;
 }
 
 .workspace {
@@ -153,10 +153,14 @@ a {
   align-items: center;
   gap: 16px;
   padding: 20px 24px;
+  grid-template-areas:
+    'brand utilities'
+    'primary primary';
   grid-template-columns: minmax(0, 1fr) auto;
 }
 
 .brand-lockup {
+  grid-area: brand;
   position: relative;
   display: flex;
   min-width: 0;
@@ -225,13 +229,18 @@ a {
 }
 
 .hero-utilities {
+  grid-area: utilities;
   display: flex;
   align-items: center;
   justify-content: flex-end;
   gap: 12px;
 }
 
-.history-link {
+.settings-link {
+  display: inline-flex;
+  min-height: 44px;
+  align-items: center;
+  padding: 0 8px;
   color: var(--color-text-primary);
   font-size: 14px;
   font-weight: 600;
@@ -239,29 +248,103 @@ a {
   white-space: nowrap;
 }
 
-.history-link[aria-current='page'] {
+.settings-link[aria-current='page'] {
   color: var(--color-action-primary);
   text-decoration: underline;
   text-underline-offset: 4px;
 }
 
-.history-link.is-disabled {
+.settings-link.is-disabled {
   color: var(--color-text-disabled);
   cursor: not-allowed;
 }
 
-.history-link:focus-visible {
+.settings-link:focus-visible {
   outline: 2px solid var(--color-focus);
   outline-offset: 4px;
 }
 
-/* pill 자체가 시스템/라이트/다크를 그대로 보여주므로 legend는 스크린리더용으로만 남긴다. */
+/* 헤더의 설정 링크는 주요 작업 목적지와 시각적으로 분리한다. */
+.primary-navigation--desktop {
+  grid-area: primary;
+  display: grid;
+  min-width: 0;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  border-top: 1px solid var(--color-border);
+}
+
+.primary-navigation--mobile {
+  display: none;
+}
+
+.primary-navigation__link {
+  display: inline-flex;
+  min-width: 0;
+  min-height: 48px;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  border-bottom: 1px solid transparent;
+  color: var(--color-text-secondary);
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.primary-navigation__link.is-active {
+  border-bottom-color: var(--color-action-primary);
+  background: var(--color-surface-alt);
+  color: var(--color-action-primary);
+}
+
+.primary-navigation__link.is-disabled {
+  color: var(--color-text-disabled);
+  cursor: not-allowed;
+}
+
+.primary-navigation__link:focus-visible {
+  outline: 2px solid var(--color-focus);
+  outline-offset: -2px;
+}
+
+/* 설정 화면에서는 legend를 실제 섹션 제목으로 보여준다. */
 .theme-control legend {
   position: absolute;
   width: 1px;
   height: 1px;
   overflow: hidden;
   clip: rect(0 0 0 0);
+}
+
+.theme-control--settings {
+  display: grid;
+  gap: 12px;
+}
+
+.theme-control--settings legend {
+  position: static;
+  width: auto;
+  height: auto;
+  overflow: visible;
+  clip: auto;
+  color: var(--color-text-primary);
+  font-size: 16px;
+  font-weight: 600;
+  line-height: 1.4;
+}
+
+.theme-control--settings .theme-toggle {
+  width: 100%;
+}
+
+.theme-control--settings .theme-toggle__option {
+  flex: 1 1 0;
+}
+
+.theme-control--settings .theme-toggle__option span {
+  width: 100%;
 }
 
 .theme-toggle {
@@ -558,7 +641,6 @@ a {
 .primary-button:focus-visible,
 .secondary-button:focus-visible,
 .download-button:focus-visible,
-.theme-control select:focus-visible,
 .theme-toggle__option input:focus-visible + span,
 input:focus-visible,
 .segment:focus-within,
@@ -1054,42 +1136,26 @@ input:focus-visible,
   right: 0;
   bottom: 0;
   left: 0;
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  display: none;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   border: 0;
   border-top: 1px solid var(--color-border);
   background: var(--color-surface);
   padding-bottom: env(safe-area-inset-bottom);
 }
 
-.bottom-tab-link {
-  display: inline-flex;
-  min-width: 0;
+.bottom-tab-bar .primary-navigation__link {
   min-height: 60px;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  border: 0;
+  border-bottom: 0;
   background: transparent;
-  color: var(--color-text-secondary);
-  font-size: 16px;
-  font-weight: 600;
-  text-decoration: none;
 }
 
-.bottom-tab-link.is-active {
-  color: var(--color-action-primary);
+.bottom-tab-bar .primary-navigation__link.is-active {
   background: var(--color-surface-alt);
 }
 
-.bottom-tab-link.is-disabled {
-  cursor: not-allowed;
+.bottom-tab-bar .primary-navigation__link.is-disabled {
   opacity: 0.6;
-}
-
-.bottom-tab-link:focus-visible {
-  outline: 2px solid var(--color-focus);
-  outline-offset: -2px;
 }
 
 @media (max-width: 820px) {
@@ -1110,6 +1176,14 @@ input:focus-visible,
     min-height: 84px;
     padding: 14px;
     grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .primary-navigation--desktop {
+    display: none;
+  }
+
+  .primary-navigation--mobile.bottom-tab-bar {
+    display: grid;
   }
 
   .hero-utilities {
@@ -1200,18 +1274,5 @@ input:focus-visible,
 
   .secondary-button--new-request {
     width: 100%;
-  }
-}
-
-@media (max-height: 700px) {
-  /* 짧은 viewport에서는 결과 행동을 가리지 않도록 탭을 문서 흐름으로 내린다.
-     화면 하단에 도킹되지 않으므로 이때만 카드 형태(hairline+radius)로 되돌린다. */
-  .bottom-tab-bar {
-    position: static;
-    width: min(100%, var(--layout-content-max-width));
-    margin: 16px auto 0;
-    border: 1px solid var(--color-border);
-    border-radius: var(--radius-lg);
-    padding-bottom: 0;
   }
 }

@@ -39,11 +39,13 @@ export function AppLayout() {
     <NavigationLockProvider>
       <main className="app-shell">
         <section className="workspace" aria-labelledby="page-title">
-          <AppHero
-            themePreference={themePreference}
-            onThemePreferenceChange={handleThemePreferenceChange}
+          <AppHero />
+          <Outlet
+            context={{
+              onThemePreferenceChange: handleThemePreferenceChange,
+              themePreference,
+            }}
           />
-          <Outlet />
         </section>
         <BottomTabBar />
       </main>

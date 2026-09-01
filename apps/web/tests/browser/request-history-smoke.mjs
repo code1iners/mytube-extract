@@ -14,6 +14,13 @@ const VIDEO_OTHER_ID = '11111111-1111-4111-8111-111111111111';
 const SUBTITLE_ID = '067b084b-c84a-4574-952f-950cb8fa2157';
 const SUBTITLE_OTHER_ID = '22222222-2222-4222-8222-222222222222';
 const RECEIPT_PREFIX = 'mytube-extract:job-receipt:v2:';
+/** 공통 내비게이션을 실제 route surface마다 확인할 경로. */
+const RESPONSIVE_NAVIGATION_ROUTES = [
+  '/video',
+  '/subtitles',
+  '/history',
+  '/settings',
+];
 const outputRoot = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
   '../../dist',
@@ -36,6 +43,7 @@ try {
   await run('cross-tab delete and re-add stay synchronized', verifyCrossTabStorage);
   await run('blocked localStorage keeps the deep-link item', verifyBlockedStorageFallback);
   await run('failed and expired jobs expose matching retry routes', verifyRetryRoutes);
+  await run('responsive primary navigation stays aligned and unclipped', verifyResponsivePrimaryNavigation);
 
   console.log(JSON.stringify({ origin: staticServer.origin, status: 'ok' }, null, 2));
 } finally {
@@ -117,7 +125,17 @@ async function verifyVideoRequestFlows() {
     await createStartedPromise;
 
     const historyLink = page.getByRole('link', { name: '요청 내역' });
+    const videoLink = page.getByRole('link', { name: '영상 추출' });
+    const settingsLink = page.getByRole('link', { name: '설정' });
     assert.equal(await historyLink.getAttribute('aria-disabled'), 'true');
+    assert.equal(await videoLink.getAttribute('aria-disabled'), null);
+    assert.equal(await settingsLink.getAttribute('aria-disabled'), 'true');
+    const navigationDescriptionId = await historyLink.getAttribute('aria-describedby');
+    assert.ok(navigationDescriptionId);
+    assert.match(
+      await page.locator('[id="' + navigationDescriptionId + '"]').textContent(),
+      /요청 접수 중에는 현재 작업을 마칠 때까지 다른 주요 메뉴로 이동할 수 없습니다/,
+    );
     await historyLink.focus();
     await page.keyboard.press('Enter');
     assert.equal(new URL(page.url()).pathname, '/video');
@@ -228,8 +246,12 @@ async function verifySubtitleRequestFlow() {
 
     const historyLink = page.getByRole('link', { name: '요청 내역' });
     const videoTab = page.getByRole('link', { name: '영상 추출' });
+    const subtitleTab = page.getByRole('link', { name: '자막 추출' });
+    const settingsLink = page.getByRole('link', { name: '설정' });
     assert.equal(await historyLink.getAttribute('aria-disabled'), 'true');
     assert.equal(await videoTab.getAttribute('aria-disabled'), 'true');
+    assert.equal(await subtitleTab.getAttribute('aria-disabled'), null);
+    assert.equal(await settingsLink.getAttribute('aria-disabled'), 'true');
     await assertAccessibilityDisabled(context, page, '요청 내역');
     await historyLink.dispatchEvent('click');
     await videoTab.focus();
@@ -503,6 +525,180 @@ async function verifyRetryRoutes() {
     assertNoRuntimeErrors();
   } finally {
     await context.close();
+  }
+}
+
+async function verifyResponsivePrimaryNavigation() {
+  for (const width of [320, 390, 1280]) {
+    for (const theme of ['light', 'dark']) {
+      /** 모바일 하단 내비게이션의 짧은 viewport 계약도 함께 확인한다. */
+      const height = width <= 820 ? 640 : 900;
+      const context = await createContext({ viewport: { height, width } });
+      const { page, assertNoRuntimeErrors } = await createPage(context);
+
+      try {
+        await page.addInitScript(
+          (preference) => {
+            if (!localStorage.getItem('mytube-extract-theme-preference')) {
+              localStorage.setItem(
+                'mytube-extract-theme-preference',
+                preference,
+              );
+            }
+          },
+          theme,
+        );
+        await routeApi(page, async ({ route, url }) => {
+          if (url.pathname === '/health') {
+            return fulfillJson(route, healthResponse());
+          }
+
+          return fulfillJson(route, {}, 404);
+        });
+        for (const routePath of RESPONSIVE_NAVIGATION_ROUTES) {
+          await page.goto(staticServer.origin + routePath);
+          await page.locator('nav[aria-label="주요 메뉴"]:visible').waitFor();
+          if (routePath === '/settings') {
+            await page.getByRole('heading', { name: '설정' }).waitFor();
+            await verifyThemePreference(page, theme);
+          }
+          await verifyResponsiveNavigationLayout(page, width);
+        }
+        assertNoRuntimeErrors();
+      } finally {
+        await context.close();
+      }
+    }
+  }
+}
+
+/** 설정 화면에서 테마 변경과 reload 복원을 검증한다. */
+async function verifyThemePreference(page, theme) {
+  assert.equal(
+    await page.evaluate(() => document.documentElement.dataset.theme),
+    theme,
+  );
+  const alternateTheme = theme === 'dark' ? 'light' : 'dark';
+  await page
+    .getByText(alternateTheme === 'dark' ? '다크' : '라이트', { exact: true })
+    .click();
+  assert.equal(
+    await page.evaluate(() => document.documentElement.dataset.theme),
+    alternateTheme,
+  );
+  await page.reload();
+  assert.equal(
+    await page.evaluate(() => document.documentElement.dataset.theme),
+    alternateTheme,
+  );
+}
+
+/** 주요 navigation surface의 overflow·touch target·position을 검증한다. */
+async function verifyResponsiveNavigationLayout(page, width) {
+  const visibleNavigation = page.locator(
+    'nav[aria-label="주요 메뉴"]:visible',
+  );
+  assert.equal(await visibleNavigation.count(), 1);
+  assert.equal(await visibleNavigation.locator('a').count(), 3);
+  assert.deepEqual(
+    await page.evaluate(() => ({
+      clientWidth: document.documentElement.clientWidth,
+      scrollWidth: document.documentElement.scrollWidth,
+    })),
+    {
+      clientWidth: width,
+      scrollWidth: width,
+    },
+  );
+
+  const navigationMetrics = await visibleNavigation.evaluate((element) => {
+    const rect = element.getBoundingClientRect();
+    const links = [...element.querySelectorAll('a')].map((link) => {
+      const linkRect = link.getBoundingClientRect();
+      return {
+        bottom: linkRect.bottom,
+        height: linkRect.height,
+        left: linkRect.left,
+        right: linkRect.right,
+        top: linkRect.top,
+        width: linkRect.width,
+      };
+    });
+
+    return {
+      links,
+      navigation: {
+        bottom: rect.bottom,
+        left: rect.left,
+        position: getComputedStyle(element).position,
+        right: rect.right,
+        top: rect.top,
+        width: rect.width,
+      },
+    };
+  });
+  assert.ok(
+    navigationMetrics.links.every(
+      (link) =>
+        link.height >= 44 &&
+        link.width > 0 &&
+        link.left >= navigationMetrics.navigation.left &&
+        link.right <= navigationMetrics.navigation.right &&
+        link.top >= navigationMetrics.navigation.top &&
+        link.bottom <= navigationMetrics.navigation.bottom,
+    ),
+  );
+
+  if (width <= 820) {
+    assert.equal(
+      await visibleNavigation.evaluate((element) =>
+        element.classList.contains('bottom-tab-bar'),
+      ),
+      true,
+    );
+    assert.equal(navigationMetrics.navigation.position, 'fixed');
+    assert.equal(
+      await visibleNavigation.evaluate(() =>
+        [...document.styleSheets].some((styleSheet) => {
+          try {
+            return [...styleSheet.cssRules].some(
+              (rule) =>
+                rule.selectorText
+                  ?.split(',')
+                  .some((selector) => selector.trim() === '.bottom-tab-bar') &&
+                rule.style.paddingBottom.includes('safe-area-inset-bottom'),
+            );
+          } catch {
+            return false;
+          }
+        }),
+      ),
+      true,
+    );
+    await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
+    const scrolledMetrics = await page.evaluate(() => {
+      const navigation = [...document.querySelectorAll('nav[aria-label="주요 메뉴"]')]
+        .find((element) => getComputedStyle(element).display !== 'none');
+      const workspace = document.querySelector('.workspace');
+      const navigationRect = navigation.getBoundingClientRect();
+      const workspaceRect = workspace.getBoundingClientRect();
+
+      return {
+        navigationTop: navigationRect.top,
+        workspaceBottom: workspaceRect.bottom,
+      };
+    });
+    assert.ok(
+      scrolledMetrics.workspaceBottom <= scrolledMetrics.navigationTop,
+    );
+  } else {
+    assert.equal(
+      await visibleNavigation.evaluate((element) =>
+        element.classList.contains('primary-navigation--desktop'),
+      ),
+      true,
+    );
+    assert.equal(navigationMetrics.navigation.position, 'static');
   }
 }
 
