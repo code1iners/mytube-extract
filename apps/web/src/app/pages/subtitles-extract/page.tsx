@@ -53,6 +53,13 @@ export function SubtitlesExtractPage() {
     </section>;
   }
 
+  if (viewPhase === 'accepting') {
+    return <section className="console-panel phase-panel status-panel" aria-labelledby="subtitle-accepting-title">
+      <PanelTitle icon="processing" id="subtitle-accepting-title">요청 접수 중</PanelTitle>
+      <StatusHead icon={statusIconName} tone={statusTone} title={statusTitle} message={statusMessage} />
+    </section>;
+  }
+
   if (viewPhase === 'result') {
     return <section className="console-panel phase-panel status-panel" aria-labelledby="subtitle-result-title">
       <PanelTitle icon="completed" id="subtitle-result-title">SRT 준비 완료</PanelTitle>

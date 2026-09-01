@@ -14,6 +14,24 @@ vi.mock(
 import { SubtitlesExtractPage } from '../../src/app/pages/subtitles-extract/page';
 
 describe('subtitles extract page', () => {
+  it('shows a lightweight acceptance status without processing stages or a progress meter', () => {
+    subtitlesExtractLogic.mockReturnValue({
+      statusIconName: 'processing',
+      statusMessage: '자막 요청을 접수하고 있습니다.',
+      statusTitle: '자막 요청을 접수하고 있습니다',
+      statusTone: 'processing',
+      viewPhase: 'accepting',
+    });
+
+    /** 접수 중 화면을 정적 HTML로 렌더링한 결과. */
+    const markup = renderToStaticMarkup(<SubtitlesExtractPage />);
+
+    expect(markup).toContain('요청 접수 중');
+    expect(markup).toContain('자막 요청을 접수하고 있습니다');
+    expect(markup).not.toContain('progress-meter');
+    expect(markup).not.toContain('subtitle-step-tabs');
+  });
+
   it('marks the selected processing step as the current step', () => {
     subtitlesExtractLogic.mockReturnValue({
       currentStepKey: 'transcribing',
