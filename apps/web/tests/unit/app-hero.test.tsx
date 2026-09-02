@@ -2,16 +2,16 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { MemoryRouter } from 'react-router';
 import { describe, expect, it } from 'vitest';
 import { AppHero } from '../../src/app/components/app-hero';
-import { NavigationLockProvider } from '../../src/app/components/navigation-lock-context';
+import { NavigationProvider } from '../../src/app/components/navigation-context';
 
 describe('app hero theme control', () => {
   it('moves theme choices out of the header and links to secondary settings', () => {
     /** 실제 route context를 포함해 만든 header HTML. */
     const markup = renderToStaticMarkup(
       <MemoryRouter initialEntries={['/video']}>
-        <NavigationLockProvider>
+        <NavigationProvider>
           <AppHero />
-        </NavigationLockProvider>
+        </NavigationProvider>
       </MemoryRouter>,
     );
 
@@ -23,9 +23,9 @@ describe('app hero theme control', () => {
   it('always exposes the request history link', () => {
     const markup = renderToStaticMarkup(
       <MemoryRouter initialEntries={['/history']}>
-        <NavigationLockProvider>
+        <NavigationProvider>
           <AppHero />
-        </NavigationLockProvider>
+        </NavigationProvider>
       </MemoryRouter>,
     );
 

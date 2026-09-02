@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { Outlet } from 'react-router';
 import { AppHero } from './app-hero';
 import { BottomTabBar } from './bottom-tab-bar';
-import { NavigationLockProvider } from './navigation-lock-context';
+import { NavigationProvider } from './navigation-context';
 import {
   applyTheme,
   getThemePreference,
@@ -36,7 +36,7 @@ export function AppLayout() {
   }
 
   return (
-    <NavigationLockProvider>
+    <NavigationProvider>
       <main className="app-shell">
         <section className="workspace" aria-labelledby="page-title">
           <AppHero />
@@ -49,6 +49,6 @@ export function AppLayout() {
         </section>
         <BottomTabBar />
       </main>
-    </NavigationLockProvider>
+    </NavigationProvider>
   );
 }

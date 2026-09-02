@@ -1,7 +1,7 @@
 import { type MouseEvent, useId } from 'react';
 import { matchPath, NavLink, useLocation } from 'react-router';
 import { ROUTE_PATHS } from '../constants/route-paths.constant';
-import { useNavigationLock } from './navigation-lock-context';
+import { useNavigation } from './navigation-context';
 import { AppIcon, type AppIconName } from './app-icon';
 
 /** 앱의 주요 작업 목적지. */
@@ -48,7 +48,7 @@ export function PrimaryNavigation({
   /** 현재 브라우저 route 위치. */
   const location = useLocation();
   /** 추출 요청 중 route 이동 차단 상태. */
-  const { navigationLocked } = useNavigationLock();
+  const { historyDestination, navigationLocked } = useNavigation();
 
   // Identifiers.
 
@@ -79,6 +79,9 @@ export function PrimaryNavigation({
           matchPath({ end: true, path: item.path }, location.pathname) !== null;
         /** 추출 진행 중 다른 목적지로 이동하려는지 여부. */
         const blocksNavigation = navigationLocked && !isActive;
+        /** 요청 내역은 최근 접수 job deep link를 보존한 목적지를 사용한다. */
+        const destination =
+          item.path === ROUTE_PATHS.history ? historyDestination : item.path;
 
         /** 추출 진행 중 다른 주요 목적지로 이동하지 않는다. */
         function handleClick(event: MouseEvent<HTMLAnchorElement>) {
@@ -106,7 +109,7 @@ export function PrimaryNavigation({
             className={navigationLinkClassName}
             end
             key={item.path}
-            to={item.path}
+            to={destination}
             onClick={handleClick}
           >
             <AppIcon name={item.icon} />

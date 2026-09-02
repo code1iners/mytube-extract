@@ -1,4 +1,4 @@
-import { useMutation, useQuery } from '@tanstack/react-query';
+import { useMutation } from '@tanstack/react-query';
 import {
   type ChangeEvent,
   type DragEvent,
@@ -20,16 +20,17 @@ import {
   buildApiUrl,
   completeSubtitleUpload,
   createSubtitleUpload,
-  getWorkerHealth,
   uploadSubtitleFileParts,
 } from '../../../../api/mytube-extract.api';
-import { useNavigationLock } from '../../../components/navigation-lock-context';
+import { useNavigation } from '../../../components/navigation-context';
 import { type AppIconName } from '../../../components/app-icon';
+import { ROUTE_PATHS } from '../../../constants/route-paths.constant';
+import { useActiveJobStatus } from '../../../hooks/use-active-job-status';
+import { useWorkerReadiness } from '../../../hooks/use-worker-readiness';
 import { getExtractViewPhase } from '../../../utils/extract-view-phase.util';
 import { acceptJobReceipt } from '../../../utils/job-receipt.util';
 import {
   createJobStatusRequestErrorDetail,
-  createJobStatusQueryOptions,
   createTerminalJobErrorDetail,
   fetchJobStatus,
 } from '../../../utils/job-status-polling.util';
@@ -38,7 +39,6 @@ import {
   setSubtitleWhisperModelPreference,
 } from '../../../utils/request-preference.util';
 import {
-  getWorkerHealthStatus,
   getWorkerHealthSubmitReason,
 } from '../../../utils/worker-health-notice.util';
 
@@ -53,9 +53,6 @@ const WORKER_UNAVAILABLE_DETAIL: UserVisibleErrorDetail = {
   location: '서비스 상태 확인',
   requestPath: '/health',
 };
-
-/** worker health query polling 간격. */
-const WORKER_HEALTH_REFETCH_INTERVAL_MS = 15_000;
 
 /** 기본 Whisper 모델. */
 const DEFAULT_WHISPER_MODEL: SubtitleWhisperModel = 'base_en';
@@ -90,27 +87,24 @@ export function useSubtitlesExtractLogic() {
     );
   /** 요청 실패 메시지. */
   const [requestError, setRequestError] = useState('');
-  /** 마지막 worker health 확인 시작 시각(epoch milliseconds). */
-  const [workerHealthCheckedAt, setWorkerHealthCheckedAt] = useState(0);
   /** R2 direct upload 진행률. */
   const [uploadProgress, setUploadProgress] = useState<number | null>(null);
   /** 이 화면에서 상태를 확인할 직전 접수 자막 job. */
   const [activeJob, setActiveJob] = useState<SubtitleJobResponse | null>(null);
-  /** 현재 화면에서 조회할 자막 job 접수증. */
-  const activeJobReceipt = {
-    jobId: activeJob?.jobId ?? '',
-    kind: 'subtitle' as const,
-    acceptedAt: activeJob?.createdAt ?? '',
-  };
 
   // Hooks.
 
-  /** worker health query. */
-  const workerHealthQuery = useQuery({
-    queryKey: ['worker-health', apiBaseUrl],
-    queryFn: () => getWorkerHealth({ apiBaseUrl }),
-    refetchInterval: WORKER_HEALTH_REFETCH_INTERVAL_MS,
-    retry: false,
+  /** 요청 전 API·worker readiness 상태. */
+  const {
+    retryWorkerHealth,
+    workerHealthCheckedAt,
+    workerHealthFailed,
+    workerHealthQuery,
+    workerHealthStatus,
+    workerUnavailable,
+  } = useWorkerReadiness({
+    apiBaseUrl,
+    unavailableMessage: WORKER_UNAVAILABLE_MESSAGE,
   });
   /** 자막 job 생성 mutation. */
   const subtitleJobMutation = useMutation({
@@ -165,17 +159,16 @@ export function useSubtitlesExtractLogic() {
       }
     },
   });
-  /** 현재 화면의 자막 job 상태 query. */
-  const activeJobQuery = useQuery({
-    enabled: activeJob !== null,
-    ...createJobStatusQueryOptions({
-      receipt: activeJobReceipt,
-      fetchStatus: (signal) =>
-        fetchJobStatus(activeJobReceipt, apiBaseUrl, signal),
-    }),
+  /** 현재 화면의 자막 job 접수증과 상태 query. */
+  const { activeJobQuery, activeJobReceipt } = useActiveJobStatus({
+    activeJob,
+    apiBaseUrl,
+    fetchStatus: (receipt, signal) =>
+      fetchJobStatus(receipt, apiBaseUrl, signal),
+    kind: 'subtitle',
   });
   /** 추출 진행 중 route 이동 차단 상태를 갱신한다. */
-  const { setNavigationLocked } = useNavigationLock();
+  const { setHistoryDestination, setNavigationLocked } = useNavigation();
 
   // Computed.
 
@@ -183,18 +176,6 @@ export function useSubtitlesExtractLogic() {
   const validation = validateSubtitleFile(selectedFile);
   /** route를 벗어나면 안 되는 자막 요청/진행 상태 여부. */
   const subtitleNavigationLocked = subtitleJobMutation.isPending;
-  /** worker가 미가용 상태인지 여부. */
-  const workerUnavailable = workerHealthQuery.data?.worker?.available === false;
-  /** worker health 확인에 실패했는지 여부. */
-  const workerHealthFailed = workerHealthQuery.isError;
-  /** 요청 설정 화면에 표시할 worker health 상태. */
-  const workerHealthStatus = getWorkerHealthStatus({
-    apiReady: workerHealthQuery.data?.ok,
-    hasError: workerHealthFailed,
-    isFetching: workerHealthQuery.isFetching,
-    unavailableMessage: WORKER_UNAVAILABLE_MESSAGE,
-    workerAvailable: workerHealthQuery.data?.worker?.available,
-  });
   /** R2 업로드 session 생성부터 자막 job 생성까지의 요청 처리 여부. */
   const isSubmitting = subtitleJobMutation.isPending;
   /** 오른쪽 status panel에 표시할 job. */
@@ -379,15 +360,6 @@ export function useSubtitlesExtractLogic() {
     subtitleJobMutation.reset();
   }
 
-  /** worker health를 다시 확인한다. */
-  function retryWorkerHealth() {
-    if (workerHealthQuery.isFetching) {
-      return;
-    }
-
-    void workerHealthQuery.refetch({ cancelRefetch: false });
-  }
-
   /** 요청 오류에서 선택 파일을 유지한 채 요청 화면으로 돌아간다. */
   function returnToRequest() {
     stopRequest();
@@ -407,15 +379,6 @@ export function useSubtitlesExtractLogic() {
       };
     },
     [setNavigationLocked],
-  );
-
-  useEffect(
-    function recordWorkerHealthCheckTimestamp() {
-      if (workerHealthQuery.isFetching) {
-        setWorkerHealthCheckedAt(Date.now());
-      }
-    },
-    [workerHealthQuery.isFetching],
   );
 
   useEffect(
@@ -477,7 +440,13 @@ export function useSubtitlesExtractLogic() {
       });
 
       requestAbortControllerRef.current = null;
-      acceptJobReceipt('subtitle', job.jobId);
+      /** 접수증 저장 결과와 해당 job의 요청 내역 deep link. */
+      const receiptDestination = acceptJobReceipt('subtitle', job.jobId);
+      setHistoryDestination(
+        receiptDestination.storageFailed
+          ? receiptDestination.to
+          : ROUTE_PATHS.history,
+      );
       setActiveJob(job);
     } catch (error) {
       if (error instanceof DOMException && error.name === 'AbortError') {

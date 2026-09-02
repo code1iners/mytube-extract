@@ -37,6 +37,7 @@ try {
   await run('request routes do not restore stored jobs', verifyRequestRoutesDoNotRestore);
   await run('request routes expose worker readiness and guarded refresh', verifyRequestReadinessStatus);
   await run('video in-place success, failure, navigation lock, and download', verifyVideoRequestFlows);
+  await run('receipt storage failure keeps the accepted job history destination', verifyAcceptedJobStorageFallback);
   await run('subtitle in-place success and navigation lock', verifySubtitleRequestFlow);
   await run('subtitle processing choice copy and responsive steps', verifySubtitleProcessingChoice);
   await run('accessible subtitle file picker keeps one control and all input paths', verifySubtitleFilePicker);
@@ -253,6 +254,10 @@ async function verifyVideoRequestFlows() {
     );
     assert.deepEqual(Object.keys(storedReceipt), ['acceptedAt']);
     assert.equal(typeof storedReceipt.acceptedAt, 'string');
+    assert.equal(
+      await page.getByRole('link', { name: '요청 내역' }).first().getAttribute('href'),
+      '/history',
+    );
 
     assert.equal(
       await page.getByRole('link', { name: '다운로드' }).getAttribute('href'),
@@ -287,6 +292,61 @@ async function verifyVideoRequestFlows() {
     assertFailureNoErrors();
   } finally {
     await failureContext.close();
+  }
+}
+
+/** 접수증 저장이 실패해도 현재 session의 요청 내역 deep link를 보존하는지 검증한다. */
+async function verifyAcceptedJobStorageFallback() {
+  /** 접수증 저장 실패를 재현할 독립 browser context. */
+  const context = await createContext();
+  /** 저장 실패 복구 흐름을 확인할 page. */
+  const { page, assertNoRuntimeErrors } = await createPage(context);
+
+  try {
+    await page.addInitScript((receiptPrefix) => {
+      /** browser storage의 원래 setItem 구현. */
+      const setItem = Storage.prototype.setItem;
+
+      Storage.prototype.setItem = function blockReceiptWrite(key, value) {
+        if (key.startsWith(receiptPrefix)) {
+          throw new DOMException('Receipt storage is disabled.', 'SecurityError');
+        }
+
+        return setItem.call(this, key, value);
+      };
+    }, RECEIPT_PREFIX);
+    await routeApi(page, async ({ request, route, url }) => {
+      if (url.pathname === '/health') return fulfillJson(route, healthResponse());
+      if (url.pathname === '/downloads' && request.method() === 'POST') {
+        return fulfillJson(route, videoJob(VIDEO_OTHER_ID, 'queued'));
+      }
+      if (url.pathname === `/downloads/${VIDEO_OTHER_ID}`) {
+        return fulfillJson(route, videoJob(VIDEO_OTHER_ID, 'completed'));
+      }
+      return fulfillJson(route, {}, 404);
+    });
+
+    await page.goto(`${staticServer.origin}/video`);
+    await page.getByLabel('YouTube URL').fill('https://youtu.be/abc123_DEF0');
+    /** 저장 실패 흐름에서 사용할 영상 추출 버튼. */
+    const submit = page.getByRole('button', { name: '추출 요청' });
+    await waitForEnabled(submit);
+    await submit.click();
+    await page.getByRole('heading', { name: '추출 완료' }).waitFor();
+
+    /** 최근 접수 job을 보존해야 하는 요청 내역 링크. */
+    const historyLink = page.getByRole('link', { name: '요청 내역' }).first();
+    assert.equal(
+      await historyLink.getAttribute('href'),
+      `/history?kind=video&jobId=${VIDEO_OTHER_ID}`,
+    );
+    await historyLink.click();
+    await page.getByRole('heading', { name: '이 브라우저의 요청 내역' }).waitFor();
+    assert.equal(await page.locator('.history-item').count(), 1);
+    assert.equal(new URL(page.url()).searchParams.get('jobId'), VIDEO_OTHER_ID);
+    assertNoRuntimeErrors();
+  } finally {
+    await context.close();
   }
 }
 

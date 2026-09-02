@@ -2,16 +2,16 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { MemoryRouter } from 'react-router';
 import { describe, expect, it } from 'vitest';
 import { PrimaryNavigation } from '../../src/app/components/primary-navigation';
-import { NavigationLockProvider } from '../../src/app/components/navigation-lock-context';
+import { NavigationProvider } from '../../src/app/components/navigation-context';
 
 describe('primary navigation', () => {
   it('exposes video, subtitles, and history as one navigation level', () => {
     /** 요청 내역 route에서 렌더링한 주요 navigation HTML. */
     const markup = renderToStaticMarkup(
       <MemoryRouter initialEntries={['/history']}>
-        <NavigationLockProvider>
+        <NavigationProvider>
           <PrimaryNavigation />
-        </NavigationLockProvider>
+        </NavigationProvider>
       </MemoryRouter>,
     );
 

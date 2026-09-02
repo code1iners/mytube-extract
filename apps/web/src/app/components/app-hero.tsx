@@ -8,7 +8,7 @@ import {
 import { NavLink } from 'react-router';
 import { ROUTE_PATHS } from '../constants/route-paths.constant';
 import { AppMark } from './app-icon';
-import { useNavigationLock } from './navigation-lock-context';
+import { useNavigation } from './navigation-context';
 import { PrimaryNavigation } from './primary-navigation';
 
 /** 타이틀과 아이콘 사이 여백(px). CSS `.brand-lockup { gap }`과 값을 맞춘다. */
@@ -19,7 +19,7 @@ export function AppHero() {
   // Hooks.
 
   /** 추출 요청 중 route 이동 차단 상태. */
-  const { navigationLocked } = useNavigationLock();
+  const { navigationLocked } = useNavigation();
 
   // States.
 
