@@ -236,6 +236,8 @@ Body line-height `1.6`은 Nintendo 원본에 없는 목표값이다. 한글 밀�
 
 두꺼운 테두리(2px)와 픽셀 하드 드롭섀도는 쓰지 않는다. 대부분의 분리는 flat tint와 hairline으로 한다.
 
+Web의 요청 설정 화면은 app shell과 workspace가 정렬을 담당하고, 주 작업 영역을 다시 카드로 감싸지 않는다. 입력·선택 control처럼 실제 조작 경계에는 surface와 hairline을 사용하며, readiness·오류·완료 결과처럼 별도 안내가 필요한 표면만 필요한 범위에서 tint 또는 shadow를 사용한다. 영상 추출 요청의 기본 읽기 순서는 `YouTube URL → 추출 형식 → 품질 → 추출 요청`이며, API·worker readiness는 이 흐름을 보조하는 별도 영역으로 둔다.
+
 ## 10. Theme과 Mode
 
 - light와 dark를 모두 제공한다.
@@ -251,6 +253,7 @@ Body line-height `1.6`은 Nintendo 원본에 없는 목표값이다. 한글 밀�
 - 상태는 색과 함께 텍스트·아이콘으로 전달한다.
 - 선택형 control은 선택 경계·형식 아이콘에만 Nintendo red를 사용하고, 라벨과 밑줄은 테마별 본문 색을 사용한다. 밑줄을 함께 두어 선택 여부를 색상만으로 전달하지 않는다.
 - keyboard focus는 blue accent outline으로 명확히 표시한다. red는 focus에 쓰지 않아 액션 신호와 분리한다.
+- 설정 링크와 URL 입력값이 있을 때 나타나는 리셋 control은 실제 클릭 영역을 가로·세로 44px 이상으로 확보한다.
 - 200% text resize와 키보드 조작을 Web·popup 모두에서 검증한다.
 
 ## 12. 플랫폼 Mapping

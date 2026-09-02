@@ -11,7 +11,7 @@ vi.mock('../../src/app/pages/video-extract/_hooks/use-video-extract-logic', () =
 import { VideoExtractPage } from '../../src/app/pages/video-extract/page';
 
 describe('video extract page', () => {
-  it('puts readiness status before the request fields and links the disabled reason', () => {
+  it('keeps the request fields in task order and places readiness after the form', () => {
     videoExtractLogic.mockReturnValue({
       canSubmit: false,
       draft: { mode: 'audio', quality: '320', sourceUrl: '' },
@@ -46,9 +46,52 @@ describe('video extract page', () => {
     expect(markup).toContain(
       '서버 연결과 worker 준비 상태를 확인하는 동안 요청할 수 없습니다.',
     );
-    expect(markup.indexOf('data-health-status="ready"')).toBeLessThan(
-      markup.indexOf('YouTube URL'),
+    expect(markup.indexOf('YouTube URL')).toBeLessThan(
+      markup.indexOf('<legend>추출 형식</legend>'),
     );
+    expect(markup.indexOf('<legend>추출 형식</legend>')).toBeLessThan(
+      markup.indexOf('<legend>품질</legend>'),
+    );
+    expect(markup.indexOf('<legend>품질</legend>')).toBeLessThan(
+      markup.indexOf('추출 요청</button>'),
+    );
+    expect(markup.indexOf('</form>')).toBeLessThan(
+      markup.indexOf('data-health-status="ready"'),
+    );
+    expect(markup).not.toContain('url-reset-button');
+  });
+
+  it('shows the URL reset control only when a URL has been entered', () => {
+    videoExtractLogic.mockReturnValue({
+      canSubmit: false,
+      draft: {
+        mode: 'audio',
+        quality: '320',
+        sourceUrl: 'https://youtu.be/abc123_DEF0',
+      },
+      handleDownloadFormSubmit: () => undefined,
+      handleModeChange: () => undefined,
+      handleSourceUrlReset: () => undefined,
+      qualityOptions: [],
+      register: () => ({ onChange: () => undefined }),
+      retryWorkerHealth: () => undefined,
+      submitDisabledReason: '입력값을 확인해 주세요.',
+      validation: { kind: 'ready', message: '' },
+      viewPhase: 'request',
+      workerHealthCheckedAt: 0,
+      workerHealthIsFetching: false,
+      workerHealthStatus: {
+        kind: 'ready',
+        label: '준비됨',
+        message: '서버 연결됨 · worker가 작업을 받을 준비가 되었습니다.',
+        role: 'status',
+      },
+    });
+
+    /** URL이 입력된 요청 화면의 정적 HTML. */
+    const markup = renderToStaticMarkup(<VideoExtractPage />);
+
+    expect(markup).toContain('class="url-reset-button"');
   });
 
   it('shows a lightweight acceptance status without a progress meter', () => {

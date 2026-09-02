@@ -30,7 +30,7 @@ type WorkerHealthStatusNoticeProps = {
   onRetry: () => void;
 };
 
-/** 요청 폼 앞에서 API 연결과 worker 준비 상태를 알린다. */
+/** 요청 설정 흐름에서 API 연결과 worker 준비 상태를 알린다. */
 export function WorkerHealthStatusNotice({
   id,
   isFetching,

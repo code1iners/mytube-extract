@@ -36,6 +36,7 @@ const browser = await chromium.launch();
 try {
   await run('request routes do not restore stored jobs', verifyRequestRoutesDoNotRestore);
   await run('request routes expose worker readiness and guarded refresh', verifyRequestReadinessStatus);
+  await run('video request keeps the task flow first across viewports', verifyVideoTaskFirstLayout);
   await run('video in-place success, failure, navigation lock, and download', verifyVideoRequestFlows);
   await run('receipt storage failure keeps the accepted job history destination', verifyAcceptedJobStorageFallback);
   await run('subtitle in-place success and navigation lock', verifySubtitleRequestFlow);
@@ -292,6 +293,155 @@ async function verifyVideoRequestFlows() {
     assertFailureNoErrors();
   } finally {
     await failureContext.close();
+  }
+}
+
+/** 영상 요청의 작업 순서와 반응형 표면 계층을 viewport·theme별로 검증한다. */
+async function verifyVideoTaskFirstLayout() {
+  /** 작업 흐름을 확인할 responsive viewport 폭. */
+  for (const width of [320, 390, 1280]) {
+    /** 각 viewport에서 확인할 theme preference. */
+    for (const theme of ['light', 'dark']) {
+      /** 영상 요청 레이아웃을 확인할 독립 browser context. */
+      const context = await createContext({
+        viewport: { height: width <= 820 ? 844 : 900, width },
+      });
+      /** 영상 요청 레이아웃을 확인할 browser page. */
+      const { page, assertNoRuntimeErrors } = await createPage(context);
+
+      try {
+        await page.addInitScript((preference) => {
+          localStorage.setItem('mytube-extract-theme-preference', preference);
+        }, theme);
+        await routeApi(page, async ({ route, url }) => {
+          if (url.pathname === '/health') {
+            return fulfillJson(route, healthResponse());
+          }
+
+          return fulfillJson(route, {}, 404);
+        });
+
+        await page.goto(`${staticServer.origin}/video`);
+        await page.getByRole('heading', { name: '추출 요청' }).waitFor();
+        await page.getByLabel('YouTube URL').waitFor();
+
+        /** 작업 입력과 보조 readiness의 DOM 위치. */
+        const documentOrder = await page.evaluate(() => {
+          /** 영상 요청 form. */
+          const form = document.querySelector('form');
+          /** URL 입력을 포함한 작업 시작 field. */
+          const urlField = form?.querySelector('input[type="url"]')?.closest('label');
+          /** 요청 form 안의 선택 fieldset 목록. */
+          const fieldsets = [...(form?.querySelectorAll('fieldset') ?? [])];
+          /** 추출 형식 선택 fieldset. */
+          const formatFieldset = fieldsets.find(
+            (fieldset) => fieldset.querySelector('legend')?.textContent === '추출 형식',
+          );
+          /** 품질 선택 fieldset. */
+          const qualityFieldset = fieldsets.find(
+            (fieldset) => fieldset.querySelector('legend')?.textContent === '품질',
+          );
+          /** 주요 요청 동작 button. */
+          const submit = form?.querySelector('button[type="submit"]');
+          /** form 뒤에 표시하는 readiness 안내. */
+          const readiness = document.querySelector('.worker-health-status');
+
+          return {
+            formContainsReadiness: Boolean(form && readiness && form.contains(readiness)),
+            indexes: [urlField, formatFieldset, qualityFieldset, submit, readiness].map(
+              (element) => (element ? [...document.querySelectorAll('*')].indexOf(element) : -1),
+            ),
+          };
+        });
+        assert.equal(documentOrder.formContainsReadiness, false);
+        assert.ok(documentOrder.indexes.every((index) => index >= 0));
+        assert.ok(
+          documentOrder.indexes.every(
+            (index, position, indexes) => position === 0 || indexes[position - 1] < index,
+          ),
+        );
+
+        /** 현재 영상 요청의 viewport·표면·하단 내비게이션 측정값. */
+        const layoutMetrics = await page.evaluate(() => {
+          /** 영상 요청 주 작업 영역. */
+          const requestPanel = document.querySelector('section[aria-labelledby="request-title"]');
+          /** 작업 시작 URL input. */
+          const urlInput = document.querySelector('input[type="url"]');
+          /** 주요 요청 동작 button. */
+          const submit = document.querySelector('button[type="submit"]');
+          /** form 뒤의 readiness 안내. */
+          const readiness = document.querySelector('.worker-health-status');
+          /** 현재 viewport에서 보이는 주요 navigation. */
+          const visibleNavigation = [...document.querySelectorAll('nav[aria-label="주요 메뉴"]')]
+            .find((element) => getComputedStyle(element).display !== 'none');
+          /** 주 작업 영역의 computed surface 값. */
+          const panelStyle = requestPanel ? getComputedStyle(requestPanel) : null;
+          /** 요소의 viewport 영역을 직렬화한다. */
+          const toBox = (element) => {
+            /** 요소의 viewport 사각형. */
+            const rect = element?.getBoundingClientRect();
+            return rect
+              ? { bottom: rect.bottom, height: rect.height, left: rect.left, right: rect.right, top: rect.top, width: rect.width }
+              : null;
+          };
+
+          return {
+            document: {
+              clientWidth: document.documentElement.clientWidth,
+              scrollWidth: document.documentElement.scrollWidth,
+            },
+            navigation: toBox(visibleNavigation),
+            panel: {
+              backgroundColor: panelStyle?.backgroundColor,
+              borderTopWidth: panelStyle?.borderTopWidth,
+              boxShadow: panelStyle?.boxShadow,
+              box: toBox(requestPanel),
+            },
+            readiness: toBox(readiness),
+            submit: toBox(submit),
+            url: toBox(urlInput),
+          };
+        });
+
+        assert.deepEqual(layoutMetrics.document, {
+          clientWidth: width,
+          scrollWidth: width,
+        });
+        assert.equal(layoutMetrics.panel.borderTopWidth, '0px');
+        assert.equal(layoutMetrics.panel.boxShadow, 'none');
+        assert.equal(layoutMetrics.panel.backgroundColor, 'rgba(0, 0, 0, 0)');
+        assert.ok(layoutMetrics.url);
+        assert.ok(layoutMetrics.readiness);
+        assert.ok(layoutMetrics.url.top < layoutMetrics.readiness.top);
+        assert.ok(layoutMetrics.url.left >= 0);
+        assert.ok(layoutMetrics.url.right <= width);
+        assert.ok(layoutMetrics.submit);
+
+        if (width <= 820) {
+          assert.ok(layoutMetrics.navigation);
+          assert.ok(layoutMetrics.submit.bottom <= layoutMetrics.navigation.top);
+        }
+
+        assert.equal(await page.getByRole('button', { name: '리셋' }).count(), 0);
+        await page.getByLabel('YouTube URL').fill('https://youtu.be/abc123_DEF0');
+        /** 입력값이 있을 때 표시되는 URL 리셋 button. */
+        const resetButton = page.getByRole('button', { name: '리셋' });
+        /** 상단 설정 navigation link. */
+        const settingsLink = page.getByRole('link', { name: '설정' });
+        /** URL 리셋 button의 viewport 영역. */
+        const resetBox = await resetButton.boundingBox();
+        /** 설정 link의 viewport 영역. */
+        const settingsBox = await settingsLink.boundingBox();
+        assert.ok(resetBox && resetBox.width >= 44 && resetBox.height >= 44);
+        assert.ok(settingsBox && settingsBox.width >= 44 && settingsBox.height >= 44);
+        await resetButton.click();
+        assert.equal(await page.getByLabel('YouTube URL').inputValue(), '');
+        assert.equal(await page.getByRole('button', { name: '리셋' }).count(), 0);
+        assertNoRuntimeErrors();
+      } finally {
+        await context.close();
+      }
+    }
   }
 }
 

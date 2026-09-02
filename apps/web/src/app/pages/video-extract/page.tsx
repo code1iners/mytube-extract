@@ -62,17 +62,10 @@ export function VideoExtractPage() {
 
   if (viewPhase === 'request') {
     return (
-      <section className="console-panel phase-panel" aria-labelledby="request-title">
+      <section className="phase-panel video-request-panel" aria-labelledby="request-title">
         <PanelTitle icon="download" id="request-title">추출 요청</PanelTitle>
 
         <form className="download-form" onSubmit={handleDownloadFormSubmit}>
-          <WorkerHealthStatusNotice
-            id="video-worker-health-title"
-            isFetching={workerHealthIsFetching}
-            lastCheckedAt={workerHealthCheckedAt}
-            status={workerHealthStatus}
-            onRetry={retryWorkerHealth}
-          />
           <label className={validation.kind === 'invalid' ? 'field field--wide has-error' : 'field field--wide'}>
             <span className="field-label">YouTube URL</span>
             <span className="url-input-frame">
@@ -85,14 +78,15 @@ export function VideoExtractPage() {
                 type="url"
                 {...register('sourceUrl', { onChange: clearRequestError })}
               />
-              <button
-                className="url-reset-button"
-                disabled={!draft.sourceUrl}
-                type="button"
-                onClick={handleSourceUrlReset}
-              >
-                리셋
-              </button>
+              {draft.sourceUrl ? (
+                <button
+                  className="url-reset-button"
+                  type="button"
+                  onClick={handleSourceUrlReset}
+                >
+                  리셋
+                </button>
+              ) : null}
             </span>
             {validation.kind !== 'ready' ? <p className={validation.kind === 'invalid' ? 'field-feedback field-feedback--error' : 'field-feedback'} id="video-source-url-feedback" role={validation.kind === 'invalid' ? 'alert' : undefined}>{validation.message}</p> : null}
           </label>
@@ -140,6 +134,13 @@ export function VideoExtractPage() {
             </p>
           ) : null}
         </form>
+        <WorkerHealthStatusNotice
+          id="video-worker-health-title"
+          isFetching={workerHealthIsFetching}
+          lastCheckedAt={workerHealthCheckedAt}
+          status={workerHealthStatus}
+          onRetry={retryWorkerHealth}
+        />
       </section>
     );
   }

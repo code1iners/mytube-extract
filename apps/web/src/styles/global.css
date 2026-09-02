@@ -239,7 +239,9 @@ a {
 .settings-link {
   display: inline-flex;
   min-height: 44px;
+  min-width: 44px;
   align-items: center;
+  justify-content: center;
   padding: 0 8px;
   color: var(--color-text-primary);
   font-size: 14px;
@@ -424,6 +426,25 @@ a {
   margin: 0;
 }
 
+/* 영상 요청은 입력 흐름을 먼저 읽도록 외곽 카드 표면을 사용하지 않는다. */
+.video-request-panel {
+  display: grid;
+  gap: 24px;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.video-request-panel .panel-title-row {
+  margin-bottom: 0;
+}
+
+.video-request-panel .download-form {
+  gap: 24px;
+}
+
 .console-panel {
   min-width: 0;
   padding: 20px;
@@ -523,8 +544,10 @@ a {
 }
 
 .url-reset-button {
+  min-width: 44px;
   min-height: 44px;
   margin-right: 8px;
+  padding: 0 8px;
   border: 1px solid var(--color-border);
   border-radius: var(--radius-sm);
   background: var(--color-surface-alt);
@@ -532,11 +555,6 @@ a {
   cursor: pointer;
   font-size: 14px;
   font-weight: 600;
-}
-
-.url-reset-button:disabled {
-  color: var(--color-text-disabled);
-  cursor: not-allowed;
 }
 
 .segmented-control,
