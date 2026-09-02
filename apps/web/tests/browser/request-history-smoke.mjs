@@ -45,6 +45,8 @@ try {
   await run('active request status errors stay actionable', verifyActiveRequestStatusErrors);
   await run('active polling stops at terminal status', verifyTerminalPolling);
   await run('network and 5xx retain receipts while 404 removes one', verifyReceiptErrorHandling);
+  await run('history deletion offers one eight-second undo', verifyHistoryDeleteUndo);
+  await run('blocked storage reports undo restoration failure', verifyHistoryUndoStorageFailure);
   await run('cross-tab delete and re-add stay synchronized', verifyCrossTabStorage);
   await run('blocked localStorage keeps the deep-link item', verifyBlockedStorageFallback);
   await run('failed and expired jobs expose matching retry routes', verifyRetryRoutes);
@@ -1378,6 +1380,233 @@ async function verifyReceiptErrorHandling() {
       ),
       null,
     );
+    assertNoRuntimeErrors();
+  } finally {
+    await context.close();
+  }
+}
+
+/** 요청 내역 삭제·undo의 삭제, 복원, 연속 삭제, 만료, focus 경로를 검증한다. */
+async function verifyHistoryDeleteUndo() {
+  /** 삭제·복원 여정을 확인할 독립 browser context. */
+  const context = await createContext({ viewport: { height: 844, width: 390 } });
+  /** history 삭제·복원 여정을 확인할 page. */
+  const { page, assertNoRuntimeErrors } = await createPage(context);
+
+  try {
+    await seedReceipts(page, [
+      ['subtitle', SUBTITLE_ID, '2026-08-11T00:02:00.000Z'],
+      ['video', VIDEO_ID, '2026-08-11T00:01:00.000Z'],
+      ['video', VIDEO_OTHER_ID, '2026-08-11T00:00:00.000Z'],
+    ]);
+    await routeApi(page, async ({ route, url }) => {
+      if (url.pathname === '/health') {
+        return fulfillJson(route, healthResponse());
+      }
+      if (url.pathname === `/downloads/${VIDEO_ID}`) {
+        return fulfillJson(route, videoJob(VIDEO_ID, 'completed'));
+      }
+      if (url.pathname === `/downloads/${VIDEO_OTHER_ID}`) {
+        return fulfillJson(route, videoJob(VIDEO_OTHER_ID, 'completed'));
+      }
+      if (url.pathname === `/subtitles/jobs/${SUBTITLE_ID}`) {
+        return fulfillJson(route, subtitleJob(SUBTITLE_ID, 'completed'));
+      }
+      return fulfillJson(route, {}, 404);
+    });
+
+    await page.goto(`${staticServer.origin}/history`);
+    await waitForHistoryCount(page, 3);
+
+    /** 중간 항목을 삭제해 다음 삭제 버튼 focus를 확인한다. */
+    const deleteButtons = page.locator('.history-remove-button');
+    await deleteButtons.nth(1).click();
+    await waitForHistoryCount(page, 2);
+    assert.equal(
+      await page.evaluate((key) => localStorage.getItem(key), receiptKey('video', VIDEO_ID)),
+      null,
+    );
+    assert.notEqual(
+      await page.evaluate((key) => localStorage.getItem(key), receiptKey('subtitle', SUBTITLE_ID)),
+      null,
+    );
+    assert.notEqual(
+      await page.evaluate((key) => localStorage.getItem(key), receiptKey('video', VIDEO_OTHER_ID)),
+      null,
+    );
+    await page
+      .getByRole('button', { name: '삭제한 영상 요청 되돌리기' })
+      .waitFor();
+    assert.match(await page.locator('.history-undo').textContent(), /8초/);
+    await waitForCondition(
+      async () =>
+        await deleteButtons.nth(1).evaluate(
+          (element) => document.activeElement === element,
+        ),
+    );
+    assert.equal(await page.locator('[role="status"]').count(), 1);
+    assert.equal(await page.locator('[role="alert"]').count(), 0);
+
+    /** 삭제한 항목을 undo해 원래 위치와 접수 시각을 복원한다. */
+    await page.getByRole('button', { name: '삭제한 영상 요청 되돌리기' }).click();
+    await waitForHistoryCount(page, 3);
+    assert.deepEqual(
+      await page.evaluate((key) => JSON.parse(localStorage.getItem(key) ?? 'null'), receiptKey('video', VIDEO_ID)),
+      { acceptedAt: '2026-08-11T00:01:00.000Z' },
+    );
+    assert.deepEqual(
+      await page.locator('.history-item h3').allTextContents(),
+      ['자막 요청', '영상 요청', '영상 요청'],
+    );
+    await waitForCondition(
+      async () =>
+        await page.locator('.history-item').nth(1).getByRole('heading').evaluate(
+          (element) => document.activeElement === element,
+        ),
+    );
+    assert.equal(await page.locator('[role="status"]').count(), 1);
+    assert.equal(await page.locator('[role="alert"]').count(), 0);
+
+    /** 마지막 항목 삭제 후에는 이전 삭제 button으로 focus를 되돌린다. */
+    await page.locator('.history-remove-button').last().click();
+    await waitForHistoryCount(page, 2);
+    await waitForCondition(
+      async () =>
+        await page.locator('.history-remove-button').last().evaluate(
+          (element) => document.activeElement === element,
+        ),
+    );
+    await page.getByRole('button', { name: '삭제한 영상 요청 되돌리기' }).click();
+    await waitForHistoryCount(page, 3);
+
+    /** 첫 삭제를 두 번째 삭제로 교체해 가장 최근 undo만 남는지 확인한다. */
+    await page.locator('.history-remove-button').first().click();
+    await waitForHistoryCount(page, 2);
+    assert.equal(
+      await page.getByRole('button', { name: '삭제한 자막 요청 되돌리기' }).count(),
+      1,
+    );
+    await page.locator('.history-remove-button').first().click();
+    await waitForHistoryCount(page, 1);
+    assert.equal(
+      await page.getByRole('button', { name: '삭제한 자막 요청 되돌리기' }).count(),
+      0,
+    );
+    assert.equal(
+      await page.getByRole('button', { name: '삭제한 영상 요청 되돌리기' }).count(),
+      1,
+    );
+    assert.equal(
+      await page.evaluate((key) => localStorage.getItem(key), receiptKey('subtitle', SUBTITLE_ID)),
+      null,
+    );
+    assert.equal(
+      await page.evaluate((key) => localStorage.getItem(key), receiptKey('video', VIDEO_ID)),
+      null,
+    );
+
+    /** 가장 최근 삭제만 복원하고 이전 삭제는 확정한다. */
+    await page.getByRole('button', { name: '삭제한 영상 요청 되돌리기' }).click();
+    await waitForHistoryCount(page, 2);
+    assert.equal(
+      await page.evaluate((key) => localStorage.getItem(key), receiptKey('subtitle', SUBTITLE_ID)),
+      null,
+    );
+    assert.deepEqual(
+      await page.evaluate((key) => JSON.parse(localStorage.getItem(key) ?? 'null'), receiptKey('video', VIDEO_ID)),
+      { acceptedAt: '2026-08-11T00:01:00.000Z' },
+    );
+
+    /** undo 시간이 지나면 동작이 닫히고 삭제가 유지되는지 확인한다. */
+    await page.locator('.history-remove-button').first().click();
+    await waitForHistoryCount(page, 1);
+    await page.getByRole('button', { name: '삭제한 영상 요청 되돌리기' }).waitFor();
+    await page.waitForTimeout(8_200);
+    assert.equal(await page.getByRole('button', { name: /되돌리기/ }).count(), 0);
+    assert.equal(
+      await page.evaluate((key) => localStorage.getItem(key), receiptKey('video', VIDEO_ID)),
+      null,
+    );
+
+    /** 마지막 항목 삭제 후에는 목록 제목으로 focus를 옮긴다. */
+    await page.locator('.history-remove-button').first().click();
+    await waitForHistoryCount(page, 0);
+    await waitForCondition(
+      async () =>
+        await page.locator('#history-title').evaluate(
+          (element) => document.activeElement === element,
+        ),
+    );
+    assert.equal(
+      await page.evaluate((key) => localStorage.getItem(key), receiptKey('video', VIDEO_OTHER_ID)),
+      null,
+    );
+    await page.getByRole('link', { name: '영상 추출', exact: true }).click();
+    await page.getByRole('heading', { name: '추출 요청' }).waitFor();
+    await page.getByRole('link', { name: '요청 내역', exact: true }).click();
+    await page
+      .getByRole('heading', { name: '이 브라우저의 요청 내역' })
+      .waitFor();
+    await waitForHistoryCount(page, 0);
+    assert.equal(await page.getByRole('button', { name: /되돌리기/ }).count(), 0);
+    assertNoRuntimeErrors();
+  } finally {
+    await context.close();
+  }
+}
+
+/** 복원 시 localStorage 접근이 막히면 삭제 상태와 alert를 유지하는지 검증한다. */
+async function verifyHistoryUndoStorageFailure() {
+  /** 복원 storage 실패를 확인할 독립 browser context. */
+  const context = await createContext();
+  /** 복원 storage 실패를 확인할 page. */
+  const { page, assertNoRuntimeErrors } = await createPage(context);
+
+  try {
+    await page.addInitScript(({ key, prefix }) => {
+      localStorage.setItem(key, JSON.stringify({ acceptedAt: '2026-08-11T00:00:00.000Z' }));
+
+      /** 원래 receipt 저장 함수. */
+      const setItem = Storage.prototype.setItem;
+
+      Storage.prototype.setItem = function blockReceiptRestore(storageKey, value) {
+        if (storageKey.startsWith(prefix)) {
+          throw new DOMException('Receipt storage is disabled.', 'SecurityError');
+        }
+
+        return setItem.call(this, storageKey, value);
+      };
+    }, { key: receiptKey('video', VIDEO_ID), prefix: RECEIPT_PREFIX });
+    await routeApi(page, async ({ route, url }) => {
+      if (url.pathname === `/downloads/${VIDEO_ID}`) {
+        return fulfillJson(route, videoJob(VIDEO_ID, 'completed'));
+      }
+      return fulfillJson(route, {}, 404);
+    });
+
+    await page.goto(`${staticServer.origin}/history`);
+    await waitForHistoryCount(page, 1);
+    await page.locator('.history-remove-button').click();
+    await waitForHistoryCount(page, 0);
+    await page.getByRole('button', { name: '삭제한 영상 요청 되돌리기' }).click();
+
+    await page.getByRole('alert').waitFor();
+    assert.match(
+      await page.getByRole('alert').textContent(),
+      /복원하지 못했습니다/,
+    );
+    assert.doesNotMatch(
+      await page.getByRole('alert').textContent(),
+      /복원했습니다/,
+    );
+    assert.equal(await page.getByRole('button', { name: /되돌리기/ }).count(), 0);
+    assert.equal(await page.locator('.history-item').count(), 0);
+    assert.equal(
+      await page.evaluate((key) => localStorage.getItem(key), receiptKey('video', VIDEO_ID)),
+      null,
+    );
+    assert.equal(await page.locator('[role="alert"]').count(), 1);
+    assert.equal(await page.locator('[role="status"]').count(), 0);
     assertNoRuntimeErrors();
   } finally {
     await context.close();

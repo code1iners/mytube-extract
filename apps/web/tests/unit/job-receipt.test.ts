@@ -5,6 +5,8 @@ import {
   listJobReceipts,
   parseJobReceiptStorageKey,
   removeJobReceipt,
+  restoreJobReceipt,
+  type JobReceipt,
 } from '../../src/app/utils/job-receipt.util';
 
 const VIDEO_ID = '4f8f82b3-cf37-4e31-9d56-d27eb526a922';
@@ -64,6 +66,56 @@ describe('job receipt', () => {
     expect(listJobReceipts().receipts).toEqual([
       { kind: 'subtitle', jobId: SUBTITLE_ID, acceptedAt: '2026-08-11T01:00:00.000Z' },
     ]);
+  });
+
+  it('restores the same receipt identity and acceptedAt in newest-first order', () => {
+    const storage = createStorage();
+    vi.stubGlobal('localStorage', storage);
+    addJobReceipt('video', VIDEO_ID, '2026-08-11T00:00:00.000Z');
+    addJobReceipt('subtitle', SUBTITLE_ID, '2026-08-11T01:00:00.000Z');
+    removeJobReceipt('video', VIDEO_ID);
+
+    expect(
+      restoreJobReceipt({
+        kind: 'video',
+        jobId: VIDEO_ID,
+        acceptedAt: '2026-08-11T00:00:00.000Z',
+      }),
+    ).toBe(true);
+    expect(listJobReceipts().receipts).toEqual([
+      {
+        kind: 'subtitle',
+        jobId: SUBTITLE_ID,
+        acceptedAt: '2026-08-11T01:00:00.000Z',
+      },
+      {
+        kind: 'video',
+        jobId: VIDEO_ID,
+        acceptedAt: '2026-08-11T00:00:00.000Z',
+      },
+    ]);
+  });
+
+  it('rejects invalid restore values and storage access failures', () => {
+    const storage = createStorage();
+    vi.stubGlobal('localStorage', storage);
+
+    expect(
+      restoreJobReceipt({
+        kind: 'video',
+        jobId: VIDEO_ID,
+        acceptedAt: 'not-a-date',
+      } as JobReceipt),
+    ).toBe(false);
+
+    vi.stubGlobal('localStorage', createThrowingStorage());
+    expect(
+      restoreJobReceipt({
+        kind: 'subtitle',
+        jobId: SUBTITLE_ID,
+        acceptedAt: '2026-08-11T01:00:00.000Z',
+      }),
+    ).toBe(false);
   });
 
   it('stores an accepted job and creates its exact history deep link', () => {

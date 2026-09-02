@@ -16,7 +16,9 @@
 5. `completed`, `failed`, `expired`에서는 polling을 중단한다.
 6. completed와 API `downloadUrl`이 함께 있으면 attachment 다운로드 링크를 제공한다.
 7. failed와 expired는 같은 종류의 요청 route로 이동하는 `다시 요청` 링크를 제공한다.
-8. 사용자는 접수증 하나를 정확히 삭제할 수 있다.
+8. 사용자는 접수증 하나를 정확히 삭제할 수 있으며, 삭제 즉시 목록과 해당 localStorage key에서 제거된다.
+9. 가장 최근 삭제 하나만 8초 동안 `되돌리기`로 같은 접수증을 복원할 수 있다. 복원은
+   원래 `kind`, `jobId`, `acceptedAt`을 유지하고 최신순 위치로 다시 표시한다.
 
 접수증이 하나도 없을 때는 빈 상태에서 `영상 추출`과 `자막 추출`을 동등한 시작점으로
 제공한다. 영상 추출은 YouTube URL에서 영상·오디오 파일을 받고, 자막 추출은 로컬
@@ -33,12 +35,18 @@
 - 다른 탭에서 삭제한 현재 deep link 접수증은 저장 목록 fallback으로 되살리지 않는다.
 - 유효한 `kind`와 UUID query가 있으면 저장 목록에 없어도 deep link 항목을 조회한다.
 - localStorage 실패 시 deep link 조회를 유지하고 저장 실패 안내를 표시한다.
+- 삭제한 접수증의 복원은 저장 직후 재조회로 성공 여부를 확인한다. 접근·유효성 검증에
+  실패하면 삭제 상태를 유지하고 성공 공지를 보내지 않는다.
+- 삭제·복원은 receipt key와 서버 job을 제외한 다른 receipt, 원본 URL·파일명, 다운로드
+  자산을 변경하지 않는다. route 이동이나 unmount에서 삭제를 다시 commit하지 않는다.
 
 ## 접근성
 
 - 상태는 텍스트와 아이콘을 함께 사용하고 색만으로 전달하지 않는다.
 - 동일 polling 결과는 live region에 반복 알리지 않고 실제 상태 전이와 삭제만 polite status로 알린다.
 - 항목 삭제 뒤 다음 삭제 버튼, 이전 삭제 버튼, 빈 목록 제목 순으로 focus를 돌린다.
+- 삭제 뒤에는 단일 undo 안내와 동작을 표시하고, 복원 성공 시 복원된 항목 제목으로
+  focus를 이동한다. 복원 실패는 하나의 `alert`로 알리고 삭제된 목록 상태를 유지한다.
 - layout은 `docs/DESIGN.md`의 색·간격·radius·760px content token을 재사용한다.
 - 보조 `설정` 링크는 헤더에 제공하며 테마 선택은 `/settings`에서 관리한다.
 
@@ -48,4 +56,6 @@
 - `pnpm --filter web run lint`
 - `pnpm --filter web run build`
 - `pnpm run test:web:browser`
-- Browser: 두 종류 endpoint, refresh, terminal polling 중단, download, 오류별 보존/삭제, 두 탭, storage 차단, keyboard, 200% zoom, screen reader
+- Browser: 두 종류 endpoint, refresh, terminal polling 중단, download, 오류별 보존/삭제,
+  삭제·8초 내 복원·만료·연속 삭제·blocked storage·focus, 두 탭, storage 차단, keyboard,
+  200% zoom, screen reader
