@@ -20,6 +20,9 @@ describe('subtitles extract page', () => {
       canSubmit: false,
       clearSelectedFile: () => undefined,
       fileInputRef: { current: null },
+      fileFeedbackIsError: false,
+      fileFeedbackMessage: '영상 파일을 선택해 주세요.',
+      filePickerButtonRef: { current: null },
       handleDropzoneDragOver: () => undefined,
       handleDropzoneDrop: () => undefined,
       handleFileInputChange: () => undefined,
@@ -56,6 +59,63 @@ describe('subtitles extract page', () => {
     expect(markup.indexOf('data-health-status="unavailable"')).toBeLessThan(
       markup.indexOf('로컬 영상 파일'),
     );
+  });
+
+  it('exposes one named file picker and keeps file validation beside it', () => {
+    subtitlesExtractLogic.mockReturnValue({
+      canChangeWhisperModel: true,
+      canSubmit: false,
+      clearSelectedFile: () => undefined,
+      fileInputRef: { current: null },
+      fileFeedbackIsError: true,
+      fileFeedbackMessage: 'mp4, mov, webm 영상 파일만 사용할 수 있습니다.',
+      filePickerButtonRef: { current: null },
+      handleDropzoneDragOver: () => undefined,
+      handleDropzoneDrop: () => undefined,
+      handleFileInputChange: () => undefined,
+      handleFilePickerOpen: () => undefined,
+      handleSubtitleSubmit: () => undefined,
+      handleWhisperModelChange: () => undefined,
+      processingEstimateMessage: '예상 시간은 영상 분석 후 표시됩니다.',
+      retryWorkerHealth: () => undefined,
+      selectedFile: new File(['video'], 'sample.txt', { type: 'text/plain' }),
+      selectedFileMeta: '1KB',
+      selectedWhisperModel: 'base_en',
+      submitDisabledReason: '지원하지 않는 영상 형식입니다.',
+      validation: {
+        kind: 'invalid',
+        message: 'mp4, mov, webm 영상 파일만 사용할 수 있습니다.',
+      },
+      viewPhase: 'request',
+      workerHealthCheckedAt: 0,
+      workerHealthIsFetching: false,
+      workerHealthStatus: {
+        kind: 'ready',
+        label: '준비됨',
+        message: '서버와 worker가 요청을 받을 준비가 되었습니다.',
+        role: 'status',
+      },
+    });
+
+    /** 파일 선택 오류 상태의 접근성 마크업. */
+    const markup = renderToStaticMarkup(<SubtitlesExtractPage />);
+
+    expect(markup).toContain(
+      'aria-label="영상 선택 또는 드래그 (로컬 영상 파일)"',
+    );
+    expect(markup).toContain('aria-describedby="subtitle-file-feedback"');
+    expect(markup).toContain('class="field has-error"');
+    expect(markup).not.toContain('aria-invalid="true"');
+    expect(markup).toContain('aria-hidden="true"');
+    expect(markup).toContain('hidden=""');
+    expect(markup).toContain('tabindex="-1"');
+    expect(markup).toContain('id="subtitle-file-feedback"');
+    expect(markup).toContain('role="alert"');
+    expect(markup).toContain('mp4, mov, webm 영상 파일만 사용할 수 있습니다.');
+    expect(markup).toContain('sample.txt');
+    expect(markup).toContain('1KB');
+    expect(markup).toContain('지우기');
+    expect(markup.match(/class="subtitle-dropzone"/g)).toHaveLength(1);
   });
 
   it('shows a lightweight acceptance status without processing stages or a progress meter', () => {

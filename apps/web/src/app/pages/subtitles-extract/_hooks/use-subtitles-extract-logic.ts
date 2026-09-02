@@ -75,6 +75,8 @@ export function useSubtitlesExtractLogic() {
 
   /** 파일 input DOM 참조. */
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  /** 접근 가능한 파일 선택 버튼 DOM 참조. */
+  const filePickerButtonRef = useRef<HTMLButtonElement | null>(null);
   /** 현재 upload/job 생성 요청을 중단하기 위한 컨트롤러. */
   const requestAbortControllerRef = useRef<AbortController | null>(null);
 
@@ -213,6 +215,19 @@ export function useSubtitlesExtractLogic() {
         requestError,
       )
     : undefined;
+  /** 업로드 용량 오류를 파일 선택 오류로 유지할지 여부. */
+  const hasSubtitleUploadTooLargeError =
+    subtitleJobMutation.error instanceof SubtitleUploadTooLargeError;
+  /** 파일 선택 control 옆에 표시할 안내 문구. */
+  // 형식 오류와 업로드 용량 오류를 같은 파일 feedback 위치로 정규화한다.
+  const fileFeedbackMessage = hasSubtitleUploadTooLargeError
+    ? requestError
+    : validation.kind !== 'ready'
+      ? validation.message
+      : '';
+  /** 파일 선택 control이 오류 상태인지 여부. */
+  const fileFeedbackIsError =
+    validation.kind === 'invalid' || hasSubtitleUploadTooLargeError;
   /** 현재 자막 job 상태 조회 오류 상세 원인. */
   const jobStatusRequestErrorDetail = activeJobQuery.isError
     ? createJobStatusRequestErrorDetail(
@@ -321,8 +336,12 @@ export function useSubtitlesExtractLogic() {
     selectedWhisperModel,
   );
   /** 현재 화면에 단독으로 표시할 자막 추출 단계. */
+  // 업로드 용량 오류는 파일 선택 feedback에서 복구하게 요청 화면을 유지한다.
   const viewPhase = getExtractViewPhase({
-    hasRequestError: Boolean(requestError || jobStatusRequestErrorDetail),
+    hasRequestError: Boolean(
+      (requestError && !hasSubtitleUploadTooLargeError) ||
+        jobStatusRequestErrorDetail,
+    ),
     isSubmitting,
     status:
       activeJobQuery.data?.displayStatus ?? activeJob?.displayStatus ?? null,
@@ -356,6 +375,9 @@ export function useSubtitlesExtractLogic() {
     if (fileInputRef.current) {
       fileInputRef.current.value = '';
     }
+
+    // 파일을 지운 뒤 다시 파일 선택 control에 포커스를 돌린다.
+    filePickerButtonRef.current?.focus();
   }
 
   /** 파일 선택을 상태에 반영한다. */
@@ -390,7 +412,8 @@ export function useSubtitlesExtractLogic() {
 
   useEffect(
     function readSelectedVideoDuration() {
-      if (!selectedFile) {
+      // 지원하지 않는 파일은 영상 metadata를 읽지 않는다.
+      if (!selectedFile || validation.kind !== 'ready') {
         setSelectedVideoDurationSeconds(null);
         return;
       }
@@ -419,7 +442,7 @@ export function useSubtitlesExtractLogic() {
         URL.revokeObjectURL(objectUrl);
       };
     },
-    [selectedFile],
+    [selectedFile, validation.kind],
   );
 
   useEffect(
@@ -533,6 +556,9 @@ export function useSubtitlesExtractLogic() {
     currentStepKey,
     downloadHref,
     fileInputRef,
+    filePickerButtonRef,
+    fileFeedbackIsError,
+    fileFeedbackMessage,
     filledProgressCells,
     handleDropzoneDragOver,
     handleDropzoneDrop,

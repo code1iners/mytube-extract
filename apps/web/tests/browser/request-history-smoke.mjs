@@ -38,6 +38,7 @@ try {
   await run('request routes expose worker readiness and guarded refresh', verifyRequestReadinessStatus);
   await run('video in-place success, failure, navigation lock, and download', verifyVideoRequestFlows);
   await run('subtitle in-place success and navigation lock', verifySubtitleRequestFlow);
+  await run('accessible subtitle file picker keeps one control and all input paths', verifySubtitleFilePicker);
   await run('active request status errors stay actionable', verifyActiveRequestStatusErrors);
   await run('active polling stops at terminal status', verifyTerminalPolling);
   await run('network and 5xx retain receipts while 404 removes one', verifyReceiptErrorHandling);
@@ -375,6 +376,256 @@ async function verifySubtitleRequestFlow() {
   } finally {
     await context.close();
   }
+}
+
+/** 자막 파일 선택 control의 접근성·클릭·키보드·drag-and-drop 경로를 검증한다. */
+async function verifySubtitleFilePicker() {
+  /** 파일 선택 route의 독립 browser context. */
+  const context = await createContext({ viewport: { height: 780, width: 390 } });
+  /** 합성 파일의 media metadata resource 경고만 제외하고 JS 오류는 계속 검사한다. */
+  const { page, assertNoRuntimeErrors } = await createPage(context, {
+    ignoreConsoleError: (message) =>
+      message === 'Failed to load resource: net::ERR_FILE_NOT_FOUND' ||
+      message ===
+        'Failed to load resource: the server responded with a status of 413 (Payload Too Large)',
+  });
+  /** 브라우저에서 선택할 파일의 accessible name. */
+  const pickerLabel = '영상 선택 또는 드래그 (로컬 영상 파일)';
+  /** 지원하지 않는 파일을 선택했을 때의 안내 문구. */
+  const invalidFileMessage = 'mp4, mov, webm 영상 파일만 사용할 수 있습니다.';
+
+  try {
+    await routeApi(page, async ({ route, url }) => {
+      if (url.pathname === '/health') return fulfillJson(route, healthResponse());
+      if (url.pathname === '/subtitles/uploads') {
+        return fulfillJson(route, { message: 'too large' }, 413);
+      }
+      return fulfillJson(route, {}, 404);
+    });
+
+    await page.goto(`${staticServer.origin}/subtitles`);
+    await page.getByRole('heading', { name: '영어 SRT 생성' }).waitFor();
+    await page.getByText('준비됨', { exact: true }).waitFor();
+
+    /** 접근성 트리와 tab 순서에 남아야 하는 유일한 파일 선택 control. */
+    const picker = page.getByRole('button', { name: pickerLabel });
+    /** 프로그램matic file input. */
+    const fileInput = page.locator('input[type="file"]');
+    /** 파일 선택 후 화면에 유지되는 파일 메타정보. */
+    const selectedFileMeta = page.getByText('1KB', { exact: true });
+
+    assert.equal(await picker.count(), 1);
+    assert.equal(await fileInput.count(), 1);
+    assert.equal(await fileInput.isVisible(), false);
+    assert.equal(await fileInput.getAttribute('aria-hidden'), 'true');
+    assert.equal(await fileInput.getAttribute('tabindex'), '-1');
+    assert.equal(
+      await fileInput.evaluate((element) => element.tabIndex),
+      -1,
+    );
+    await page.evaluate(() => {
+      /** 탭 순회 검증용 파일 input focus marker. */
+      const input = document.querySelector('input[type="file"]');
+      input?.addEventListener('focus', () => {
+        input.dataset.focusedByKeyboard = 'true';
+      });
+      input?.removeAttribute('data-focused-by-keyboard');
+      (document.activeElement instanceof HTMLElement
+        ? document.activeElement
+        : null)?.blur();
+    });
+    /** 파일 picker 앞에 있는 worker health 재확인 control. */
+    const retryButton = page.getByRole('button', {
+      name: '서버와 worker 상태 다시 확인',
+    });
+    /** 파일 picker 다음에 오는 첫 Whisper 모델 radio. */
+    const firstModelRadio = page.getByRole('radio', { name: '빠름' });
+    await retryButton.focus();
+    // 재확인 control 다음에는 유일한 파일 picker가, 그 다음에는 첫 모델 radio가 온다.
+    await page.keyboard.press('Tab');
+    assert.equal(
+      await picker.evaluate((element) => document.activeElement === element),
+      true,
+    );
+    await page.keyboard.press('Tab');
+    assert.equal(
+      await firstModelRadio.evaluate(
+        (element) => document.activeElement === element,
+      ),
+      true,
+    );
+
+    await page.evaluate(() => {
+      (document.activeElement instanceof HTMLElement
+        ? document.activeElement
+        : null)?.blur();
+    });
+    // 전체 tab 순회에서도 프로그램matic input이 focus target으로 노출되지 않는다.
+    /** 현재 tab 순회 횟수. */
+    for (let index = 0; index < 32; index += 1) {
+      await page.keyboard.press('Tab');
+    }
+    assert.equal(
+      await fileInput.getAttribute('data-focused-by-keyboard'),
+      null,
+    );
+
+    await chooseSubtitleFileThroughPicker(page, picker, 'click', {
+      buffer: Buffer.from('mp4-video'),
+      mimeType: 'video/mp4',
+      name: 'click-video.mp4',
+    });
+    await page.getByText('click-video.mp4', { exact: true }).waitFor();
+
+    await chooseSubtitleFileThroughPicker(page, picker, 'Enter', {
+      buffer: Buffer.from('webm-video'),
+      mimeType: 'video/webm',
+      name: 'keyboard-video.webm',
+    });
+    await page.getByText('keyboard-video.webm', { exact: true }).waitFor();
+
+    await chooseSubtitleFileThroughPicker(page, picker, 'Space', {
+      buffer: Buffer.from('mov-video'),
+      mimeType: 'video/quicktime',
+      name: 'space-video.mov',
+    });
+    await page.getByText('space-video.mov', { exact: true }).waitFor();
+    await selectedFileMeta.waitFor();
+    assert.equal(
+      await picker.evaluate((element) => element.matches(':focus-visible')),
+      true,
+    );
+
+    /** drop 이벤트를 허용하는 dragover 동작. */
+    const dragOverPrevented = await picker.evaluate((element) => {
+      /** 테스트용 dragover 이벤트. */
+      const event = new DragEvent('dragover', {
+        bubbles: true,
+        cancelable: true,
+        dataTransfer: new DataTransfer(),
+      });
+      element.dispatchEvent(event);
+      return event.defaultPrevented;
+    });
+    assert.equal(dragOverPrevented, true);
+
+    /** drag-and-drop으로 선택할 세 가지 지원 영상 형식. */
+    const droppedFiles = [
+      { mimeType: 'video/mp4', name: 'dropped-video.mp4' },
+      { mimeType: 'video/quicktime', name: 'dropped-video.mov' },
+      { mimeType: 'video/webm', name: 'dropped-video.webm' },
+    ];
+    // 각 지원 형식을 같은 dropzone 경로로 차례로 선택한다.
+    /** 현재 drop할 지원 영상 형식. */
+    for (const droppedFile of droppedFiles) {
+      await dispatchSubtitleFileDrop(page, picker, droppedFile);
+      await page.getByText(droppedFile.name, { exact: true }).waitFor();
+    }
+    assert.equal(
+      await page.getByRole('button', { name: '영어 SRT 생성' }).isDisabled(),
+      false,
+    );
+
+    await dispatchSubtitleFileDrop(page, picker, {
+      mimeType: 'text/plain',
+      name: 'invalid-video.txt',
+    });
+    await page
+      .locator('#subtitle-file-feedback')
+      .getByText(invalidFileMessage, { exact: true })
+      .waitFor();
+    assert.equal(await page.locator('.field.has-error').count(), 1);
+    assert.equal(
+      await page.getByRole('button', { name: pickerLabel }).getAttribute('aria-describedby'),
+      'subtitle-file-feedback',
+    );
+    assert.equal(
+      await page.getByRole('button', { name: '영어 SRT 생성' }).isDisabled(),
+      true,
+    );
+
+    await page.getByRole('button', { name: '지우기' }).click();
+    assert.equal(await page.getByText('invalid-video.txt', { exact: true }).count(), 0);
+    assert.equal(
+      await picker.evaluate((element) => document.activeElement === element),
+      true,
+    );
+    assert.equal(await page.locator('.field.has-error').count(), 0);
+    assert.equal(
+      await picker.getAttribute('aria-describedby'),
+      'subtitle-file-feedback',
+    );
+
+    await chooseSubtitleFileThroughPicker(page, picker, 'click', {
+      buffer: Buffer.from('too-large-video'),
+      mimeType: 'video/mp4',
+      name: 'size-error.mp4',
+    });
+    await page.getByText('size-error.mp4', { exact: true }).waitFor();
+    await page.getByRole('button', { name: '영어 SRT 생성' }).click();
+    await page
+      .locator('#subtitle-file-feedback')
+      .getByText(/파일이 너무 큽니다\./, { exact: false })
+      .waitFor();
+    assert.equal(
+      await page.getByRole('heading', { name: '영어 SRT 생성' }).count(),
+      1,
+    );
+    assert.equal(await page.locator('.field.has-error').count(), 1);
+    assert.equal(
+      await page.getByRole('button', { name: '영어 SRT 생성' }).isDisabled(),
+      false,
+    );
+    await page.getByRole('button', { name: '지우기' }).click();
+    assert.equal(
+      await picker.evaluate((element) => document.activeElement === element),
+      true,
+    );
+    assertNoRuntimeErrors();
+  } finally {
+    await context.close();
+  }
+}
+
+/** native file picker를 열고 파일 선택 결과를 전달한다. */
+async function chooseSubtitleFileThroughPicker(page, picker, trigger, file) {
+  /** native file picker 이벤트 대기. */
+  const fileChooserPromise = page.waitForEvent('filechooser');
+
+  // 클릭은 pointer activation으로, Enter와 Space는 keyboard activation으로 picker를 연다.
+  if (trigger === 'click') {
+    await picker.click();
+  } else {
+    await picker.focus();
+    await page.keyboard.press(trigger);
+  }
+
+  /** 열린 native file picker. */
+  const fileChooser = await fileChooserPromise;
+  await fileChooser.setFiles(file);
+}
+
+/** 브라우저 DataTransfer로 자막 파일 drop을 발생시킨다. */
+async function dispatchSubtitleFileDrop(page, picker, file) {
+  await picker.evaluate(
+    (element, droppedFile) => {
+      /** 브라우저가 전달할 파일 묶음. */
+      const dataTransfer = new DataTransfer();
+      dataTransfer.items.add(
+        new File(['subtitle-picker-test'], droppedFile.name, {
+          type: droppedFile.mimeType,
+        }),
+      );
+      element.dispatchEvent(
+        new DragEvent('drop', {
+          bubbles: true,
+          cancelable: true,
+          dataTransfer,
+        }),
+      );
+    },
+    file,
+  );
 }
 
 async function verifyActiveRequestStatusErrors() {
@@ -900,7 +1151,8 @@ async function createPage(context, options = {}) {
       !(
         options.ignoreHttpErrors &&
         message.text().startsWith('Failed to load resource:')
-      )
+      ) &&
+      !options.ignoreConsoleError?.(message.text())
     ) {
       runtimeErrors.push(`console: ${message.text()}`);
     }

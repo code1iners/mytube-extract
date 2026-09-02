@@ -1005,14 +1005,13 @@ input:focus-visible,
   width: 100%;
 }
 
-/* .field input(0,1,1)보다 특이도가 낮아 덮어써지지 않도록 .field로 한 번 더 감싼다. */
+/* 프로그램matic file input은 유일한 visible picker 버튼을 중복해서 노출하지 않는다. */
 .field .subtitle-file-input {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  min-height: 0;
-  opacity: 0;
-  pointer-events: none;
+  display: none;
+}
+
+.field.has-error .subtitle-dropzone {
+  border-color: var(--color-status-failed);
 }
 
 .subtitle-dropzone {
@@ -1083,7 +1082,7 @@ input:focus-visible,
 }
 
 .selected-file-row button {
-  min-height: 32px;
+  min-height: 44px;
   border: 1px solid var(--color-border);
   border-radius: var(--radius-sm);
   background: var(--color-surface);

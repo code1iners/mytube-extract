@@ -14,6 +14,10 @@ const SUBTITLE_STEPS: Array<{ /** 단계 key. */ key: SubtitleStepKey; /** 화�
 /** 자막 오류 상세 위에 표시할 평이한 요약. */
 const SUBTITLE_ERROR_DETAIL_SUMMARY =
   '자막 생성 요청이 정상적으로 처리되지 않았습니다.';
+/** 자막 원본 파일 선택 control의 accessible name. */
+const SUBTITLE_FILE_PICKER_LABEL = '영상 선택 또는 드래그 (로컬 영상 파일)';
+/** 자막 파일 검증 안내를 연결할 id. */
+const SUBTITLE_FILE_FEEDBACK_ID = 'subtitle-file-feedback';
 
 /** 자막 추출 route page. */
 export function SubtitlesExtractPage() {
@@ -22,6 +26,7 @@ export function SubtitlesExtractPage() {
   /** 자막 업로드 form, job 상태, 사용자 동작. */
   const {
     canSubmit, canChangeWhisperModel, clearSelectedFile, currentStepKey, downloadHref, fileInputRef,
+    fileFeedbackIsError, fileFeedbackMessage, filePickerButtonRef,
     filledProgressCells, handleDropzoneDragOver, handleDropzoneDrop, handleFileInputChange,
     handleFilePickerOpen, handleSubtitleSubmit, handleWhisperModelChange, isSubtitlePending,
     processingEstimateMessage, retryWorkerHealth, returnToRequest, selectedFile, selectedFileMeta,
@@ -41,9 +46,41 @@ export function SubtitlesExtractPage() {
           status={workerHealthStatus}
           onRetry={retryWorkerHealth}
         />
-        <div className="field"><span className="field-label">로컬 영상 파일</span>
-          <input accept="video/mp4,video/quicktime,video/webm,.mp4,.mov,.webm" className="subtitle-file-input" ref={fileInputRef} type="file" onChange={handleFileInputChange} />
-          <button className="subtitle-dropzone" type="button" onClick={handleFilePickerOpen} onDragOver={handleDropzoneDragOver} onDrop={handleDropzoneDrop}><AppIcon name="subtitle" /><strong>영상 선택 또는 드래그</strong><span>mp4, mov, webm</span></button>
+        <div className={fileFeedbackIsError ? 'field has-error' : 'field'}>
+          <span className="field-label">로컬 영상 파일</span>
+          <input
+            accept="video/mp4,video/quicktime,video/webm,.mp4,.mov,.webm"
+            aria-hidden="true"
+            className="subtitle-file-input"
+            hidden
+            ref={fileInputRef}
+            tabIndex={-1}
+            type="file"
+            onChange={handleFileInputChange}
+          />
+          <button
+            aria-describedby={fileFeedbackMessage ? SUBTITLE_FILE_FEEDBACK_ID : undefined}
+            aria-label={SUBTITLE_FILE_PICKER_LABEL}
+            className="subtitle-dropzone"
+            ref={filePickerButtonRef}
+            type="button"
+            onClick={handleFilePickerOpen}
+            onDragOver={handleDropzoneDragOver}
+            onDrop={handleDropzoneDrop}
+          >
+            <AppIcon name="subtitle" />
+            <strong>영상 선택 또는 드래그</strong>
+            <span>mp4, mov, webm</span>
+          </button>
+          {fileFeedbackMessage ? (
+            <p
+              className={fileFeedbackIsError ? 'field-feedback field-feedback--error' : 'field-feedback'}
+              id={SUBTITLE_FILE_FEEDBACK_ID}
+              role={fileFeedbackIsError ? 'alert' : undefined}
+            >
+              {fileFeedbackMessage}
+            </p>
+          ) : null}
         </div>
         {selectedFile ? <div className="selected-file-row"><AppIcon name="video" /><div><strong>{selectedFile.name}</strong><span>{selectedFileMeta}</span></div><button type="button" onClick={clearSelectedFile}>지우기</button></div> : null}
         <fieldset className="segmented-control"><legend>Whisper 모델</legend>
