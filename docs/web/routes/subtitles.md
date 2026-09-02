@@ -9,18 +9,19 @@
 
 ## 사용자 흐름
 
-1. 사용자는 `mp4`, `mov`, `webm` 파일과 속도 우선(`base_en`) 또는 정확도 우선(`small_en`) 처리 방식을 선택한다.
-2. 앱은 처리 방식과 영어 전용·로컬 Whisper 처리 정책을 안내하고 `GET /health`로 worker를 확인한다.
-3. `POST /subtitles/uploads`로 multipart session을 만들고 presigned URL로 파일 part를 직접 업로드한다.
-4. `POST /subtitles/uploads/complete` 성공 응답의 UUID와 접수 시각을 자막 접수증으로 저장한다.
-5. 현재 route에서 `GET /subtitles/jobs/:jobId`를 polling해 처리·완료·실패·만료 상태를 표시한다.
-6. 완료되면 실제 SRT `downloadUrl`을 표시하고, 실패·만료·상태 조회 오류에는 상세와 기존 파일을 유지한 재요청 동작을 제공한다.
-7. 업로드 실패 시 `POST /subtitles/uploads/abort` 정리를 best-effort로 요청한다.
+1. 사용자는 `mp4`, `mov`, `webm` 로컬 영상 파일을 선택한다.
+2. 사용자는 속도 우선(`base_en`) 또는 정확도 우선(`small_en`) 처리 방식을 비교한 뒤 영어 SRT 생성을 요청한다. 사용자 중심 결과 설명을 먼저 읽고 모델 식별자와 로컬 Whisper 정보는 보조 정보로 확인한다.
+3. 앱은 요청 설정 흐름 뒤의 보조 영역에서 `GET /health`로 worker를 확인한다.
+4. `POST /subtitles/uploads`로 multipart session을 만들고 presigned URL로 파일 part를 직접 업로드한다.
+5. `POST /subtitles/uploads/complete` 성공 응답의 UUID와 접수 시각을 자막 접수증으로 저장한다.
+6. 현재 route에서 `GET /subtitles/jobs/:jobId`를 polling해 처리·완료·실패·만료 상태를 표시한다.
+7. 완료되면 실제 SRT `downloadUrl`을 표시하고, 실패·만료·상태 조회 오류에는 상세와 기존 파일을 유지한 재요청 동작을 제공한다.
+8. 업로드 실패 시 `POST /subtitles/uploads/abort` 정리를 best-effort로 요청한다.
 
 ## 상태와 오류
 
 - mount 시 과거 접수증을 읽거나 상태 조회를 시작하지 않는다. 현재 화면에서 새로 접수한 job만 조회한다.
-- 요청 form 상단에서 API 연결과 worker 준비 상태를 확인 중·준비됨·worker 중단·확인 실패의 텍스트와 아이콘으로 표시한다. 마지막 확인 시각과 `다시 확인` 동작을 함께 제공하며, 확인 중에는 재확인 요청을 중복 전송하지 않는다.
+- 요청 설정 흐름 다음 보조 영역에서 API 연결과 worker 준비 상태를 확인 중·준비됨·worker 중단·확인 실패의 텍스트와 아이콘으로 표시한다. 마지막 확인 시각과 `다시 확인` 동작을 함께 제공하며, 확인 중에는 재확인 요청을 중복 전송하지 않는다.
 - health가 준비되지 않았을 때 제출 버튼 가까이에 비활성화 이유를 표시하고 aria-describedby로 연결한다.
 - session 생성부터 part upload와 complete 응답까지 주요 navigation의 현재 목적지를 제외한 route와 상단 `설정` 링크의 이동 및 중복 제출을 막는다. 링크는 계속 표시하며 비활성 목적지에는 `aria-disabled="true"`와 잠금 사유를 제공한다.
 - complete 성공 뒤 navigation lock을 해제하고 현재 route에서 공유 정책으로 job을 polling한다.

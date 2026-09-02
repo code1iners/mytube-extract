@@ -426,8 +426,9 @@ a {
   margin: 0;
 }
 
-/* 영상 요청은 입력 흐름을 먼저 읽도록 외곽 카드 표면을 사용하지 않는다. */
-.video-request-panel {
+/* 영상·자막 요청은 입력 흐름을 먼저 읽도록 외곽 카드 표면을 사용하지 않는다. */
+.video-request-panel,
+.subtitle-request-panel {
   display: grid;
   gap: 24px;
   padding: 0;
@@ -437,12 +438,17 @@ a {
   box-shadow: none;
 }
 
-.video-request-panel .panel-title-row {
+.video-request-panel .panel-title-row,
+.subtitle-request-panel .panel-title-row {
   margin-bottom: 0;
 }
 
 .video-request-panel .download-form {
   gap: 24px;
+}
+
+.subtitle-request-panel .subtitle-form {
+  gap: 16px;
 }
 
 .console-panel {
@@ -570,12 +576,21 @@ a {
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
+.subtitle-processing-method {
+  grid-template-columns: minmax(0, 1fr);
+  gap: 8px;
+}
+
 .segmented-control legend,
 .quality-grid legend {
   grid-column: 1 / -1;
   /* legend는 grid row-gap이 적용되지 않아 margin으로 직접 여백을 준다. */
   margin: 0 0 12px;
   padding: 0;
+}
+
+.subtitle-processing-method legend {
+  margin-bottom: 0;
 }
 
 .segment,
@@ -595,7 +610,15 @@ a {
 
 .subtitle-processing-method__description {
   grid-column: 1 / -1;
-  margin: -4px 0 0;
+  margin: 0 0 4px;
+  color: var(--color-text-secondary);
+  font-size: 14px;
+  line-height: 1.4;
+}
+
+.subtitle-processing-method__technical {
+  grid-column: 1 / -1;
+  margin: 0;
   color: var(--color-text-secondary);
   font-size: 14px;
   line-height: 1.4;
@@ -603,9 +626,11 @@ a {
 
 .subtitle-processing-option {
   min-width: 0;
-  align-items: flex-start;
+  width: 100%;
+  min-height: 48px;
+  align-items: center;
   justify-content: flex-start;
-  padding: 12px;
+  padding: 8px 12px;
   text-align: left;
 }
 
@@ -1071,9 +1096,12 @@ input:focus-visible,
 
 .subtitle-dropzone {
   display: grid;
-  min-height: 220px;
+  width: 100%;
+  min-width: 0;
+  min-height: 160px;
   place-items: center;
   gap: 10px;
+  padding: 12px;
   border: 1px dashed var(--color-border);
   border-radius: var(--radius-lg);
   background: var(--color-surface-alt);
@@ -1084,14 +1112,14 @@ input:focus-visible,
 }
 
 .subtitle-dropzone .app-icon {
-  width: 40px;
-  height: 40px;
+  width: 32px;
+  height: 32px;
   color: var(--color-action-primary);
 }
 
 .subtitle-dropzone strong {
   color: var(--color-text-primary);
-  font-size: 18px;
+  font-size: 16px;
 }
 
 .subtitle-dropzone span {
@@ -1443,6 +1471,10 @@ input:focus-visible,
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
+  .subtitle-processing-method {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
   .status-head {
     gap: 12px;
     grid-template-columns: 52px minmax(0, 1fr);
@@ -1458,10 +1490,6 @@ input:focus-visible,
   }
 
   .subtitle-step-tabs {
-    grid-template-columns: 1fr;
-  }
-
-  .subtitle-processing-method {
     grid-template-columns: 1fr;
   }
 

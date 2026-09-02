@@ -236,7 +236,9 @@ Body line-height `1.6`은 Nintendo 원본에 없는 목표값이다. 한글 밀�
 
 두꺼운 테두리(2px)와 픽셀 하드 드롭섀도는 쓰지 않는다. 대부분의 분리는 flat tint와 hairline으로 한다.
 
-Web의 요청 설정 화면은 app shell과 workspace가 정렬을 담당하고, 주 작업 영역을 다시 카드로 감싸지 않는다. 입력·선택 control처럼 실제 조작 경계에는 surface와 hairline을 사용하며, readiness·오류·완료 결과처럼 별도 안내가 필요한 표면만 필요한 범위에서 tint 또는 shadow를 사용한다. 영상 추출 요청의 기본 읽기 순서는 `YouTube URL → 추출 형식 → 품질 → 추출 요청`이며, API·worker readiness는 이 흐름을 보조하는 별도 영역으로 둔다.
+Web의 요청 설정 화면은 app shell과 workspace가 정렬을 담당하고, 주 작업 영역을 다시 카드로 감싸지 않는다. 입력·선택 control처럼 실제 조작 경계에는 surface와 hairline을 사용하며, readiness·오류·완료 결과처럼 별도 안내가 필요한 표면만 필요한 범위에서 tint 또는 shadow를 사용한다. 영상 추출 요청의 기본 읽기 순서는 `YouTube URL → 추출 형식 → 품질 → 추출 요청`이며, 자막 추출 요청은 `로컬 영상 → 처리 방식 → 영어 SRT 생성` 순서를 따른다. API·worker readiness는 두 작업 흐름을 보조하는 별도 영역으로 둔다.
+
+자막 요청의 파일 선택 영역은 좁은 화면에서 140–160px 높이의 compact control로 유지하고, `속도 우선`과 `정확도 우선`은 모든 폭에서 비교 가능한 full-width row로 표시한다. 처리 방식 설명은 사용자가 얻는 영어 자막 결과를 먼저 설명하고 `base.en`, `small.en`, 로컬 Whisper 같은 기술 정보는 뒤에 둔다.
 
 ## 10. Theme과 Mode
 

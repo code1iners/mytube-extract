@@ -14,22 +14,27 @@ const SUBTITLE_STEPS: Array<{ /** 단계 key. */ key: SubtitleStepKey; /** 화�
 /** 선택 화면에서 안내할 자막 처리 방식. */
 const SUBTITLE_PROCESSING_OPTIONS = [
   {
-    detail: 'base.en · 상대적으로 빠른 처리',
+    description: '파일을 빠르게 영어 자막으로 만들고 싶을 때',
     icon: 'processing',
     label: '속도 우선',
+    technicalDetail: 'base.en · 상대적으로 빠른 처리',
     value: 'base_en',
   },
   {
-    detail: 'small.en · 인식 정확도를 우선하는 처리',
+    description: '음성을 더 꼼꼼하게 영어 자막으로 옮기고 싶을 때',
     icon: 'subtitle',
     label: '정확도 우선',
+    technicalDetail: 'small.en · 인식 정확도를 우선하는 처리',
     value: 'small_en',
   },
 ] as const;
 
-/** 자막 처리 방식과 실행 환경을 설명하는 짧은 안내. */
+/** 자막 처리 방식 선택을 시작하게 하는 사용자 중심 안내. */
 const SUBTITLE_PROCESSING_GUIDANCE =
-  '영어 전용 자막을 로컬 Whisper로 처리합니다.';
+  '파일의 음성을 영어 SRT 자막으로 만들 처리 방향을 선택하세요.';
+/** 자막 생성 방식의 기술적인 실행 환경을 설명하는 보조 안내. */
+const SUBTITLE_PROCESSING_TECHNICAL_NOTE =
+  '영어 전용 자막은 로컬 Whisper로 처리합니다.';
 
 /** 자막 오류 상세 위에 표시할 평이한 요약. */
 const SUBTITLE_ERROR_DETAIL_SUMMARY =
@@ -56,16 +61,9 @@ export function SubtitlesExtractPage() {
   } = useSubtitlesExtractLogic();
 
   if (viewPhase === 'request') {
-    return <section className="console-panel phase-panel" aria-labelledby="subtitles-title">
+    return <section className="phase-panel subtitle-request-panel" aria-labelledby="subtitles-title">
       <PanelTitle icon="subtitle" id="subtitles-title">영어 SRT 생성</PanelTitle>
       <div className="subtitle-form">
-        <WorkerHealthStatusNotice
-          id="subtitle-worker-health-title"
-          isFetching={workerHealthIsFetching}
-          lastCheckedAt={workerHealthCheckedAt}
-          status={workerHealthStatus}
-          onRetry={retryWorkerHealth}
-        />
         <div className={fileFeedbackIsError ? 'field has-error' : 'field'}>
           <span className="field-label">로컬 영상 파일</span>
           <input
@@ -127,10 +125,14 @@ export function SubtitlesExtractPage() {
               <AppIcon name={option.icon} />
               <span className="subtitle-processing-option__copy">
                 <strong>{option.label}</strong>
-                <span>{option.detail}</span>
+                <span className="subtitle-processing-option__description">{option.description}</span>
+                <span className="subtitle-processing-option__technical">{option.technicalDetail}</span>
               </span>
             </label>
           ))}
+          <p className="subtitle-processing-method__technical">
+            {SUBTITLE_PROCESSING_TECHNICAL_NOTE}
+          </p>
         </fieldset>
         <button
           aria-describedby={
@@ -152,6 +154,13 @@ export function SubtitlesExtractPage() {
           </p>
         ) : null}
       </div>
+      <WorkerHealthStatusNotice
+        id="subtitle-worker-health-title"
+        isFetching={workerHealthIsFetching}
+        lastCheckedAt={workerHealthCheckedAt}
+        status={workerHealthStatus}
+        onRetry={retryWorkerHealth}
+      />
     </section>;
   }
 

@@ -14,7 +14,7 @@ vi.mock(
 import { SubtitlesExtractPage } from '../../src/app/pages/subtitles-extract/page';
 
 describe('subtitles extract page', () => {
-  it('puts readiness status before file selection and links the disabled reason', () => {
+  it('keeps the subtitle task order and places readiness after the form', () => {
     subtitlesExtractLogic.mockReturnValue({
       canChangeWhisperModel: true,
       canSubmit: false,
@@ -50,13 +50,20 @@ describe('subtitles extract page', () => {
     const markup = renderToStaticMarkup(<SubtitlesExtractPage />);
 
     expect(markup).toContain('data-health-status="unavailable"');
+    expect(markup).toContain('class="phase-panel subtitle-request-panel"');
     expect(markup).toContain('role="alert"');
     expect(markup).toContain('마지막 확인');
     expect(markup).toContain('다시 확인');
     expect(markup).toContain('aria-describedby="subtitle-submit-disabled-reason"');
     expect(markup).toContain('worker가 준비되지 않아 요청할 수 없습니다.');
-    expect(markup.indexOf('data-health-status="unavailable"')).toBeLessThan(
-      markup.indexOf('로컬 영상 파일'),
+    expect(markup.indexOf('로컬 영상 파일')).toBeLessThan(
+      markup.indexOf('<legend>처리 방식</legend>'),
+    );
+    expect(markup.indexOf('<legend>처리 방식</legend>')).toBeLessThan(
+      markup.indexOf('영어 SRT 생성</button>'),
+    );
+    expect(markup).toMatch(
+      /class="subtitle-form">[\s\S]*<\/div><section[^>]*class="worker-health-status/,
     );
   });
 
@@ -153,15 +160,24 @@ describe('subtitles extract page', () => {
 
     expect(markup).toContain('<legend>처리 방식</legend>');
     expect(markup).toContain('속도 우선');
+    expect(markup).toContain('파일을 빠르게 영어 자막으로 만들고 싶을 때');
     expect(markup).toContain('base.en');
     expect(markup).toContain('정확도 우선');
+    expect(markup).toContain('음성을 더 꼼꼼하게 영어 자막으로 옮기고 싶을 때');
     expect(markup).toContain('small.en');
-    expect(markup).toContain('영어 전용');
+    expect(markup).toContain('파일의 음성을 영어 SRT 자막으로 만들 처리 방향을 선택하세요.');
+    expect(markup).toContain('영어 전용 자막은 로컬 Whisper로 처리합니다.');
     expect(markup).toContain('로컬 Whisper');
     expect(markup).toContain('value="small_en"');
     expect(markup).toContain('checked=""');
     expect(markup).not.toContain('Whisper 모델');
     expect(markup).not.toContain('예상 처리 시간');
+    expect(markup.indexOf('파일을 빠르게 영어 자막으로 만들고 싶을 때')).toBeLessThan(
+      markup.indexOf('base.en'),
+    );
+    expect(markup.indexOf('음성을 더 꼼꼼하게 영어 자막으로 옮기고 싶을 때')).toBeLessThan(
+      markup.indexOf('small.en'),
+    );
   });
 
   it('shows a lightweight acceptance status without processing stages or a progress meter', () => {

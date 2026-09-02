@@ -40,7 +40,7 @@ try {
   await run('video in-place success, failure, navigation lock, and download', verifyVideoRequestFlows);
   await run('receipt storage failure keeps the accepted job history destination', verifyAcceptedJobStorageFallback);
   await run('subtitle in-place success and navigation lock', verifySubtitleRequestFlow);
-  await run('subtitle processing choice copy and responsive steps', verifySubtitleProcessingChoice);
+  await run('subtitle task-first mobile density and processing choices', verifySubtitleProcessingChoice);
   await run('accessible subtitle file picker keeps one control and all input paths', verifySubtitleFilePicker);
   await run('active request status errors stay actionable', verifyActiveRequestStatusErrors);
   await run('active polling stops at terminal status', verifyTerminalPolling);
@@ -501,7 +501,7 @@ async function verifyAcceptedJobStorageFallback() {
 }
 
 async function verifySubtitleRequestFlow() {
-  const context = await createContext({ viewport: { height: 780, width: 390 } });
+  const context = await createContext({ viewport: { height: 844, width: 390 } });
   const { page, assertNoRuntimeErrors } = await createPage(context);
   let releaseUpload;
   let uploadStarted;
@@ -595,7 +595,7 @@ async function verifySubtitleProcessingChoice() {
   for (const width of [320, 390, 1280]) {
     /** viewport별 자막 처리 방식 검증 context. */
     const context = await createContext({
-      viewport: { height: width <= 820 ? 780 : 900, width },
+      viewport: { height: width <= 820 ? 844 : 900, width },
     });
     /** 자막 처리 방식 검증 page. */
     const { page, assertNoRuntimeErrors } = await createPage(context);
@@ -637,6 +637,37 @@ async function verifySubtitleProcessingChoice() {
       await page.goto(`${staticServer.origin}/subtitles`);
       await page.getByRole('heading', { name: '영어 SRT 생성' }).waitFor();
 
+      /** 자막 입력 흐름과 readiness 보조 영역의 DOM 위치. */
+      const documentOrder = await page.evaluate(() => {
+        /** 자막 요청 주 작업 영역. */
+        const panel = document.querySelector('.subtitle-request-panel');
+        /** 자막 요청 입력 흐름. */
+        const form = document.querySelector('.subtitle-form');
+        /** 파일 선택 control. */
+        const picker = form?.querySelector('.subtitle-dropzone');
+        /** 처리 방식 선택 fieldset. */
+        const processingMethod = form?.querySelector('.subtitle-processing-method');
+        /** 영어 SRT 생성 주요 동작. */
+        const submit = form?.querySelector('.primary-button');
+        /** 입력 흐름 뒤에 표시하는 readiness 보조 영역. */
+        const readiness = panel?.querySelector('.worker-health-status');
+        /** 전체 문서에서 요소의 읽기 위치를 반환한다. */
+        const getDocumentIndex = (element) =>
+          element ? [...document.querySelectorAll('*')].indexOf(element) : -1;
+
+        return {
+          formContainsReadiness: Boolean(form && readiness && form.contains(readiness)),
+          indexes: [picker, processingMethod, submit, readiness].map(getDocumentIndex),
+        };
+      });
+      assert.equal(documentOrder.formContainsReadiness, false);
+      assert.ok(documentOrder.indexes.every((index) => index >= 0));
+      assert.ok(
+        documentOrder.indexes.every(
+          (index, position, indexes) => position === 0 || indexes[position - 1] < index,
+        ),
+      );
+
       /** 사용자 언어로 설명하는 처리 방식 fieldset. */
       const processingMethod = page.locator('.subtitle-processing-method');
       /** 두 처리 방식 radio. */
@@ -649,18 +680,37 @@ async function verifySubtitleProcessingChoice() {
       assert.equal(await speedOption.isChecked(), true);
       await accuracyOption.check();
       assert.equal(await accuracyOption.isChecked(), true);
-      assert.equal(await page.getByText('영어 전용 자막을 로컬 Whisper로 처리합니다.', { exact: true }).count(), 1);
+      assert.equal(await page.getByText('파일의 음성을 영어 SRT 자막으로 만들 처리 방향을 선택하세요.', { exact: true }).count(), 1);
+      assert.equal(await page.getByText('영어 전용 자막은 로컬 Whisper로 처리합니다.', { exact: true }).count(), 1);
+      assert.equal(await page.getByText('파일을 빠르게 영어 자막으로 만들고 싶을 때', { exact: true }).count(), 1);
+      assert.equal(await page.getByText('음성을 더 꼼꼼하게 영어 자막으로 옮기고 싶을 때', { exact: true }).count(), 1);
       assert.equal(await page.getByText('base.en · 상대적으로 빠른 처리', { exact: true }).count(), 1);
       assert.equal(await page.getByText('small.en · 인식 정확도를 우선하는 처리', { exact: true }).count(), 1);
       assert.equal(await page.getByText(/예상 처리 시간/, { exact: false }).count(), 0);
+      assert.ok(
+        await page.evaluate(() => {
+          /** 첫 처리 방식의 사용자 중심 설명. */
+          const description = document.querySelector(
+            '.subtitle-processing-option__description',
+          );
+          /** 첫 처리 방식의 기술 정보. */
+          const technical = document.querySelector(
+            '.subtitle-processing-option__technical',
+          );
+
+          return Boolean(
+            description &&
+              technical &&
+              description.compareDocumentPosition(technical) &
+                Node.DOCUMENT_POSITION_FOLLOWING,
+          );
+        }),
+      );
       /** 처리 방식 선택지의 실제 grid 열 위치. */
       const processingOptionLefts = await processingOptions.evaluateAll((options) =>
         options.map((option) => Math.round(option.getBoundingClientRect().left)),
       );
-      assert.deepEqual(
-        new Set(processingOptionLefts).size,
-        width <= 560 ? 1 : 2,
-      );
+      assert.deepEqual(new Set(processingOptionLefts).size, 1);
       assert.ok(
         (await processingOptions.evaluateAll((options) => options.map((option) => {
           const rect = option.getBoundingClientRect();
@@ -669,6 +719,69 @@ async function verifySubtitleProcessingChoice() {
           (option) => option.height >= 44 && option.left >= 0 && option.right <= width,
         ),
       );
+
+      /** 자막 요청의 밀도와 fixed 하단 내비게이션 여유를 측정한다. */
+      const layoutMetrics = await page.evaluate(() => {
+        /** 자막 요청 주 작업 영역. */
+        const panel = document.querySelector('.subtitle-request-panel');
+        /** 파일 선택 control. */
+        const dropzone = document.querySelector('.subtitle-dropzone');
+        /** 주요 요청 동작. */
+        const submit = document.querySelector('.subtitle-form .primary-button');
+        /** readiness 보조 영역. */
+        const readiness = document.querySelector('.worker-health-status');
+        /** 처리 방식 fieldset. */
+        const processingMethod = document.querySelector('.subtitle-processing-method');
+        /** 현재 viewport에서 보이는 주요 navigation. */
+        const visibleNavigation = [...document.querySelectorAll('nav[aria-label="주요 메뉴"]')]
+          .find((element) => getComputedStyle(element).display !== 'none');
+        /** 요소의 viewport 영역을 직렬화한다. */
+        const toBox = (element) => {
+          /** 요소의 viewport 사각형. */
+          const rect = element?.getBoundingClientRect();
+          return rect
+            ? { bottom: rect.bottom, height: rect.height, left: rect.left, right: rect.right, top: rect.top, width: rect.width }
+            : null;
+        };
+
+        return {
+          document: {
+            clientWidth: document.documentElement.clientWidth,
+            scrollWidth: document.documentElement.scrollWidth,
+          },
+          dropzone: toBox(dropzone),
+          navigation: toBox(visibleNavigation),
+          options: [...document.querySelectorAll('.subtitle-processing-option')].map(toBox),
+          panel: {
+            backgroundColor: panel ? getComputedStyle(panel).backgroundColor : null,
+            borderTopWidth: panel ? getComputedStyle(panel).borderTopWidth : null,
+            boxShadow: panel ? getComputedStyle(panel).boxShadow : null,
+          },
+          processingMethod: toBox(processingMethod),
+          readiness: toBox(readiness),
+          submit: toBox(submit),
+        };
+      });
+      assert.deepEqual(layoutMetrics.document, {
+        clientWidth: width,
+        scrollWidth: width,
+      });
+      assert.equal(layoutMetrics.panel.borderTopWidth, '0px');
+      assert.equal(layoutMetrics.panel.boxShadow, 'none');
+      assert.equal(layoutMetrics.panel.backgroundColor, 'rgba(0, 0, 0, 0)');
+      assert.ok(layoutMetrics.dropzone);
+      assert.ok(layoutMetrics.dropzone.height >= 140);
+      assert.ok(layoutMetrics.dropzone.height < 220);
+      assert.ok(layoutMetrics.processingMethod);
+      assert.ok(layoutMetrics.options.every((option) => option.width === layoutMetrics.processingMethod.width));
+      assert.ok(layoutMetrics.options.every((option) => option.left >= 0 && option.right <= width));
+      assert.ok(layoutMetrics.readiness);
+      assert.ok(layoutMetrics.submit);
+      assert.ok(layoutMetrics.submit.bottom <= layoutMetrics.readiness.top);
+      if (width <= 820) {
+        assert.ok(layoutMetrics.navigation);
+        assert.ok(layoutMetrics.submit.bottom <= layoutMetrics.navigation.top);
+      }
 
       /** 처리 방식 선택 후 영어 SRT 생성 요청. */
       const submit = page.getByRole('button', { name: '영어 SRT 생성' });
@@ -708,7 +821,7 @@ async function verifySubtitleProcessingChoice() {
 /** 자막 파일 선택 control의 접근성·클릭·키보드·drag-and-drop 경로를 검증한다. */
 async function verifySubtitleFilePicker() {
   /** 파일 선택 route의 독립 browser context. */
-  const context = await createContext({ viewport: { height: 780, width: 390 } });
+  const context = await createContext({ viewport: { height: 844, width: 390 } });
   /** 합성 파일의 media metadata resource 경고만 제외하고 JS 오류는 계속 검사한다. */
   const { page, assertNoRuntimeErrors } = await createPage(context, {
     ignoreConsoleError: (message) =>
@@ -761,19 +874,10 @@ async function verifySubtitleFilePicker() {
         ? document.activeElement
         : null)?.blur();
     });
-    /** 파일 picker 앞에 있는 worker health 재확인 control. */
-    const retryButton = page.getByRole('button', {
-      name: '서버와 worker 상태 다시 확인',
-    });
     /** 파일 picker 다음에 오는 첫 처리 방식 radio. */
     const firstModelRadio = page.getByRole('radio', { name: '속도 우선' });
-    await retryButton.focus();
-    // 재확인 control 다음에는 유일한 파일 picker가, 그 다음에는 첫 처리 방식 radio가 온다.
-    await page.keyboard.press('Tab');
-    assert.equal(
-      await picker.evaluate((element) => document.activeElement === element),
-      true,
-    );
+    await picker.focus();
+    // 유일한 파일 picker 다음에는 첫 처리 방식 radio가 온다.
     await page.keyboard.press('Tab');
     assert.equal(
       await firstModelRadio.evaluate(
