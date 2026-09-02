@@ -380,7 +380,7 @@ export function createSubtitleMessage(
   errorCode?: string | null,
 ) {
   if (status === SubtitleJobStatus.queued) {
-    return '요청이 접수되어 대기 중입니다.';
+    return '영어 SRT 생성 요청이 접수되어 대기 중입니다.';
   }
 
   if (status === SubtitleJobStatus.extracting_audio) {
@@ -388,7 +388,7 @@ export function createSubtitleMessage(
   }
 
   if (status === SubtitleJobStatus.transcribing) {
-    return '영어 자막을 생성하고 있습니다.';
+    return '영어 SRT를 생성하고 있습니다.';
   }
 
   if (status === SubtitleJobStatus.completed) {
@@ -399,7 +399,7 @@ export function createSubtitleMessage(
     return '추출된 음성 파일이 커서 현재 설정으로 처리할 수 없습니다.';
   }
 
-  return '자막 생성에 실패했습니다. 다시 시도해 주세요.';
+  return '영어 SRT 생성에 실패했습니다. 다시 시도해 주세요.';
 }
 
 /** yt-dlp에서 읽은 원본 제목을 DB에 저장 가능한 값으로 정리한다. */

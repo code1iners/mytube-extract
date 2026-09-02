@@ -29,7 +29,6 @@ describe('subtitles extract page', () => {
       handleFilePickerOpen: () => undefined,
       handleSubtitleSubmit: () => undefined,
       handleWhisperModelChange: () => undefined,
-      processingEstimateMessage: '예상 시간은 영상 분석 후 표시됩니다.',
       retryWorkerHealth: () => undefined,
       selectedFile: null,
       selectedFileMeta: '',
@@ -76,7 +75,6 @@ describe('subtitles extract page', () => {
       handleFilePickerOpen: () => undefined,
       handleSubtitleSubmit: () => undefined,
       handleWhisperModelChange: () => undefined,
-      processingEstimateMessage: '예상 시간은 영상 분석 후 표시됩니다.',
       retryWorkerHealth: () => undefined,
       selectedFile: new File(['video'], 'sample.txt', { type: 'text/plain' }),
       selectedFileMeta: '1KB',
@@ -118,6 +116,54 @@ describe('subtitles extract page', () => {
     expect(markup.match(/class="subtitle-dropzone"/g)).toHaveLength(1);
   });
 
+  it('explains subtitle processing choices without requiring Whisper knowledge', () => {
+    subtitlesExtractLogic.mockReturnValue({
+      canChangeWhisperModel: true,
+      canSubmit: true,
+      clearSelectedFile: () => undefined,
+      fileInputRef: { current: null },
+      fileFeedbackIsError: false,
+      fileFeedbackMessage: '',
+      filePickerButtonRef: { current: null },
+      handleDropzoneDragOver: () => undefined,
+      handleDropzoneDrop: () => undefined,
+      handleFileInputChange: () => undefined,
+      handleFilePickerOpen: () => undefined,
+      handleSubtitleSubmit: () => undefined,
+      handleWhisperModelChange: () => undefined,
+      retryWorkerHealth: () => undefined,
+      selectedFile: new File(['video'], 'sample-video.mp4', { type: 'video/mp4' }),
+      selectedFileMeta: '5B',
+      selectedWhisperModel: 'small_en',
+      submitDisabledReason: '',
+      validation: { kind: 'ready', message: '영어 SRT 생성을 시작할 수 있습니다.' },
+      viewPhase: 'request',
+      workerHealthCheckedAt: 0,
+      workerHealthIsFetching: false,
+      workerHealthStatus: {
+        kind: 'ready',
+        label: '준비됨',
+        message: '서버와 worker가 요청을 받을 준비가 되었습니다.',
+        role: 'status',
+      },
+    });
+
+    /** 처리 방식 선택 화면의 정적 HTML. */
+    const markup = renderToStaticMarkup(<SubtitlesExtractPage />);
+
+    expect(markup).toContain('<legend>처리 방식</legend>');
+    expect(markup).toContain('속도 우선');
+    expect(markup).toContain('base.en');
+    expect(markup).toContain('정확도 우선');
+    expect(markup).toContain('small.en');
+    expect(markup).toContain('영어 전용');
+    expect(markup).toContain('로컬 Whisper');
+    expect(markup).toContain('value="small_en"');
+    expect(markup).toContain('checked=""');
+    expect(markup).not.toContain('Whisper 모델');
+    expect(markup).not.toContain('예상 처리 시간');
+  });
+
   it('shows a lightweight acceptance status without processing stages or a progress meter', () => {
     subtitlesExtractLogic.mockReturnValue({
       statusIconName: 'processing',
@@ -152,7 +198,8 @@ describe('subtitles extract page', () => {
     const markup = renderToStaticMarkup(<SubtitlesExtractPage />);
 
     expect(markup).toContain('aria-current="step"');
-    expect(markup).toContain('SRT 생성');
+    expect(markup).toContain('영어 SRT 생성');
+    expect(markup.match(/class="step-tab/g)).toHaveLength(4);
   });
 
   it('renders the completed job download URL in the in-place result panel', () => {
@@ -166,7 +213,7 @@ describe('subtitles extract page', () => {
     /** 완료 결과 화면을 정적 HTML로 렌더링한 결과. */
     const markup = renderToStaticMarkup(<SubtitlesExtractPage />);
 
-    expect(markup).toContain('SRT 준비 완료');
+    expect(markup).toContain('영어 SRT 준비 완료');
     expect(markup).toContain(
       'href="https://api.example.test/subtitles/job-1/file.srt"',
     );
@@ -178,13 +225,13 @@ describe('subtitles extract page', () => {
       returnToRequest: () => undefined,
       statusErrorDetail: {
         code: 'SUBTITLE_REQUEST_FAILED',
-        guidance: '자막 생성 요청을 다시 시도해 주세요.',
-        location: '자막 생성 요청',
+        guidance: '영어 SRT 생성 요청을 다시 시도해 주세요.',
+        location: '영어 SRT 생성 요청',
         responseBody: 'upstream failure',
         responseStatus: 502,
       },
-      statusMessage: '자막 생성 요청을 다시 시도해 주세요.',
-      statusTitle: '자막 생성에 실패했습니다',
+      statusMessage: '영어 SRT 생성 요청을 다시 시도해 주세요.',
+      statusTitle: '영어 SRT 생성에 실패했습니다',
       viewPhase: 'error',
       workerHealthFailed: false,
     });
@@ -193,7 +240,7 @@ describe('subtitles extract page', () => {
     const markup = renderToStaticMarkup(<SubtitlesExtractPage />);
 
     expect(markup).toContain('class="error-details__summary"');
-    expect(markup).toContain('자막 생성 요청이 정상적으로 처리되지 않았습니다.');
+    expect(markup).toContain('영어 SRT 생성 요청이 정상적으로 처리되지 않았습니다.');
     expect(markup).toContain('aria-expanded="false"');
     expect(markup).not.toContain('오류 코드: SUBTITLE_REQUEST_FAILED');
     expect(markup).not.toContain('응답 상태: 502');
@@ -211,7 +258,7 @@ describe('subtitles extract page', () => {
               ? 'TRANSCRIPTION_FAILED'
               : 'JOB_ASSET_EXPIRED',
           guidance: '다시 요청해 주세요.',
-          location: '자막 생성 상태',
+          location: '영어 SRT 생성 상태',
         },
         statusMessage: '다시 요청해 주세요.',
         statusTitle: '요청을 완료하지 못했습니다',
@@ -223,7 +270,7 @@ describe('subtitles extract page', () => {
       const markup = renderToStaticMarkup(<SubtitlesExtractPage />);
 
       expect(markup).toContain('요청 설정으로 돌아가기');
-      expect(markup).toContain('자막 생성 요청이 정상적으로 처리되지 않았습니다.');
+      expect(markup).toContain('영어 SRT 생성 요청이 정상적으로 처리되지 않았습니다.');
       expect(markup).toContain('aria-expanded="false"');
       expect(displayStatus).toMatch(/failed|expired/);
     },

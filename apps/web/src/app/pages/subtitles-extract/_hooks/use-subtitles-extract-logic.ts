@@ -9,7 +9,6 @@ import {
 import {
   type SubtitleJobResponse,
   type SubtitleWhisperModel,
-  createSubtitleProcessingEstimate,
   validateSubtitleFile,
 } from '../../../../domain/subtitle-request/subtitle-request';
 import {
@@ -89,9 +88,6 @@ export function useSubtitlesExtractLogic() {
     useState<SubtitleWhisperModel>(
       () => getRequestPreferences().whisperModel,
     );
-  /** 선택한 영상의 길이. */
-  const [selectedVideoDurationSeconds, setSelectedVideoDurationSeconds] =
-    useState<number | null>(null);
   /** 요청 실패 메시지. */
   const [requestError, setRequestError] = useState('');
   /** 마지막 worker health 확인 시작 시각(epoch milliseconds). */
@@ -283,8 +279,8 @@ export function useSubtitlesExtractLogic() {
   /** 현재 상태 제목. */
   const statusTitle =
     (uploadProgress !== null ? '원본 영상을 업로드 중입니다' : '') ||
-    (isSubmitting ? '자막 요청을 준비하고 있습니다' : '') ||
-    (requestError ? '자막 생성 요청에 실패했습니다' : '') ||
+    (isSubmitting ? '영어 SRT 생성 요청을 준비하고 있습니다' : '') ||
+    (requestError ? '영어 SRT 생성 요청에 실패했습니다' : '') ||
     (jobStatusRequestErrorDetail ? '작업 상태를 확인할 수 없습니다' : '') ||
     (workerHealthAffectsView
       ? createWorkerHealthTitle({
@@ -330,11 +326,6 @@ export function useSubtitlesExtractLogic() {
   const selectedFileMeta = selectedFile
     ? `${formatFileSize(selectedFile.size)}`
     : '';
-  /** 선택한 모델 기준 예상 처리 시간. */
-  const processingEstimateMessage = createSubtitleProcessingEstimate(
-    selectedVideoDurationSeconds,
-    selectedWhisperModel,
-  );
   /** 현재 화면에 단독으로 표시할 자막 추출 단계. */
   // 업로드 용량 오류는 파일 선택 feedback에서 복구하게 요청 화면을 유지한다.
   const viewPhase = getExtractViewPhase({
@@ -366,7 +357,6 @@ export function useSubtitlesExtractLogic() {
   /** 선택 파일과 이전 실패 상태를 초기화한다. */
   function clearSelectedFile() {
     setSelectedFile(null);
-    setSelectedVideoDurationSeconds(null);
     setRequestError('');
     setUploadProgress(null);
     setActiveJob(null);
@@ -383,7 +373,6 @@ export function useSubtitlesExtractLogic() {
   /** 파일 선택을 상태에 반영한다. */
   function selectFile(file: File | null) {
     setSelectedFile(file);
-    setSelectedVideoDurationSeconds(null);
     setRequestError('');
     setUploadProgress(null);
     setActiveJob(null);
@@ -409,41 +398,6 @@ export function useSubtitlesExtractLogic() {
   }
 
   // Effects.
-
-  useEffect(
-    function readSelectedVideoDuration() {
-      // 지원하지 않는 파일은 영상 metadata를 읽지 않는다.
-      if (!selectedFile || validation.kind !== 'ready') {
-        setSelectedVideoDurationSeconds(null);
-        return;
-      }
-
-      /** 선택한 영상의 임시 browser URL. */
-      const objectUrl = URL.createObjectURL(selectedFile);
-      /** metadata만 읽을 video element. */
-      const video = document.createElement('video');
-
-      video.preload = 'metadata';
-      video.src = objectUrl;
-      video.onloadedmetadata = function handleLoadedMetadata() {
-        setSelectedVideoDurationSeconds(
-          Number.isFinite(video.duration) ? video.duration : null,
-        );
-        URL.revokeObjectURL(objectUrl);
-      };
-      video.onerror = function handleMetadataError() {
-        setSelectedVideoDurationSeconds(null);
-        URL.revokeObjectURL(objectUrl);
-      };
-
-      return () => {
-        video.onloadedmetadata = null;
-        video.onerror = null;
-        URL.revokeObjectURL(objectUrl);
-      };
-    },
-    [selectedFile, validation.kind],
-  );
 
   useEffect(
     function cleanupSubtitleRequest() {
@@ -501,7 +455,7 @@ export function useSubtitlesExtractLogic() {
     selectFile(event.dataTransfer.files[0] ?? null);
   }
 
-  /** 자막 생성 submit 이벤트를 처리한다. */
+  /** 영어 SRT 생성 submit 이벤트를 처리한다. */
   async function handleSubtitleSubmit() {
     if (!selectedFile || !canSubmit) {
       return;
@@ -537,7 +491,7 @@ export function useSubtitlesExtractLogic() {
             ? createSubtitleUploadTooLargeMessage(selectedFile)
             : error instanceof Error && hasUserVisibleErrorDetail(error)
               ? error.detail.guidance
-              : '자막 생성 요청에 실패했습니다. 다시 시도해 주세요.',
+              : '영어 SRT 생성 요청에 실패했습니다. 다시 시도해 주세요.',
       );
     } finally {
       requestAbortControllerRef.current = null;
@@ -567,7 +521,6 @@ export function useSubtitlesExtractLogic() {
     handleSubtitleSubmit,
     isSubtitlePending: subtitleJobMutation.isPending,
     handleWhisperModelChange,
-    processingEstimateMessage,
     retryWorkerHealth,
     selectedFile,
     selectedFileMeta,
@@ -644,10 +597,10 @@ function createStatusTitle(job: SubtitleJobResponse) {
   }
 
   if (job.displayStatus === 'failed') {
-    return '자막 생성에 실패했습니다';
+    return '영어 SRT 생성에 실패했습니다';
   }
 
-  return '보관 기간이 지났습니다';
+  return '영어 SRT 보관 기간이 지났습니다';
 }
 
 /** 표시 상태에 맞는 아이콘 이름을 반환한다. */
@@ -712,7 +665,7 @@ export function createSubtitleRequestErrorDetail(
   return {
     code: 'SUBTITLE_REQUEST_FAILED',
     guidance,
-    location: '자막 생성 요청',
+    location: '영어 SRT 생성 요청',
   };
 }
 

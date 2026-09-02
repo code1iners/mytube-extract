@@ -127,7 +127,7 @@ export function createTerminalJobErrorDetail(
       job.errorCode ??
       (job.displayStatus === 'expired' ? 'JOB_ASSET_EXPIRED' : 'JOB_FAILED'),
     guidance: job.message,
-    location: receipt.kind === 'video' ? '영상 추출 상태' : '자막 생성 상태',
+    location: receipt.kind === 'video' ? '영상 추출 상태' : '영어 SRT 생성 상태',
     requestPath: createJobStatusRequestPath(receipt),
   };
 }

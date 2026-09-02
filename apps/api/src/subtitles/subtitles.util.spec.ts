@@ -27,15 +27,19 @@ describe('createSubtitleProgress', () => {
 
 describe('createSubtitleStatusMessage', () => {
   it.each([
-    [SubtitleJobStatus.queued, null, '요청이 접수되어 대기 중입니다.'],
+    [
+      SubtitleJobStatus.queued,
+      null,
+      '영어 SRT 생성 요청이 접수되어 대기 중입니다.',
+    ],
     [
       SubtitleJobStatus.extracting_audio,
       null,
       '영상에서 음성을 추출하고 있습니다.',
     ],
-    [SubtitleJobStatus.transcribing, null, '영어 자막을 생성하고 있습니다.'],
+    [SubtitleJobStatus.transcribing, null, '영어 SRT를 생성하고 있습니다.'],
     [SubtitleJobStatus.completed, null, '영어 SRT가 준비되었습니다.'],
-    ['expired', null, '보관 기간이 지났습니다. 다시 생성해 주세요.'],
+    ['expired', null, '영어 SRT 보관 기간이 지났습니다. 다시 생성해 주세요.'],
   ] as const)('maps %s to the expected copy', (status, errorCode, expected) => {
     expect(createSubtitleStatusMessage(status, errorCode)).toBe(expected);
   });
@@ -55,7 +59,7 @@ describe('createSubtitleStatusMessage', () => {
       'UPLOAD_FAILED',
       '파일 업로드 중 문제가 발생했습니다. 잠시 후 다시 시도해 주세요.',
     ],
-    ['UNKNOWN', '자막 생성에 실패했습니다. 다시 시도해 주세요.'],
+    ['UNKNOWN', '영어 SRT 생성에 실패했습니다. 다시 시도해 주세요.'],
   ])('maps failed/%s to the expected copy', (errorCode, expected) => {
     expect(
       createSubtitleStatusMessage(SubtitleJobStatus.failed, errorCode),

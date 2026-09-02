@@ -17,7 +17,7 @@
 
 - 상태: 미구현
 - 대상 표면: `route /subtitles`, `POST /subtitles/uploads/complete`, `GET /subtitles/jobs/:jobId/file`, `apps/worker`
-- 현재 상태: Web 앱은 `/subtitles`에서 로컬 `mp4`, `mov`, `webm` 파일을 받아 영어 SRT 생성 job을 요청하고 완료된 영어 SRT 다운로드를 제공한다. 사용자는 `base.en`, `small.en` 모델을 선택할 수 있고 예상 처리 시간을 볼 수 있다. worker는 사용자가 직접 준비한 `whisper.cpp` binary/model path를 사용하며, 긴 영상 audio chunking과 모델 자동 다운로드를 제공하지 않는다.
+- 현재 상태: Web 앱은 `/subtitles`에서 로컬 `mp4`, `mov`, `webm` 파일을 받아 영어 SRT 생성 job을 요청하고 완료된 영어 SRT 다운로드를 제공한다. 사용자는 `base.en`, `small.en` 처리 방식을 선택할 수 있고 선택 화면에서 상대적 차이와 영어 전용·로컬 처리 정책을 안내받는다. worker는 사용자가 직접 준비한 `whisper.cpp` binary/model path를 사용하며, 긴 영상 audio chunking과 모델 자동 다운로드를 제공하지 않는다.
 - 필요성: 긴 영상 처리와 Whisper 모델 준비 자동화가 필요해질 수 있다.
 - 구현 조건: 긴 영상 chunking 정책과 Whisper binary/model 배포 방식을 먼저 결정한다.
 - 관련 근거:

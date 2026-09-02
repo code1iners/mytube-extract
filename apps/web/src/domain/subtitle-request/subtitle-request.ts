@@ -80,54 +80,9 @@ const SUPPORTED_SUBTITLE_VIDEO_TYPES = [
   'video/webm',
 ];
 
-/** 모델별 예상 처리 시간 범위 계수. */
-const PROCESSING_ESTIMATE_MULTIPLIER: Record<
-  SubtitleWhisperModel,
-  { max: number; min: number }
-> = {
-  base_en: { max: 0.25, min: 0.12 },
-  small_en: { max: 0.4, min: 0.2 },
-};
-
 /** terminal 상태인지 확인한다. */
 export function isSubtitleTerminalStatus(status: SubtitleDisplayStatus) {
   return status === 'completed' || status === 'failed' || status === 'expired';
-}
-
-/** 영상 길이와 모델로 예상 처리 시간을 만든다. */
-export function createSubtitleProcessingEstimate(
-  durationSeconds: number | null,
-  whisperModel: SubtitleWhisperModel,
-) {
-  if (!durationSeconds || !Number.isFinite(durationSeconds)) {
-    return '예상 시간은 영상 분석 후 표시됩니다.';
-  }
-
-  /** 선택 모델의 예상 처리 계수. */
-  const multiplier = PROCESSING_ESTIMATE_MULTIPLIER[whisperModel];
-  /** 예상 처리 시간 범위 시작 초. */
-  const minEstimatedSeconds = durationSeconds * multiplier.min;
-  /** 예상 처리 시간 범위 끝 초. */
-  const maxEstimatedSeconds = durationSeconds * multiplier.max;
-
-  return `예상 처리 시간: 약 ${formatDurationRange(
-    minEstimatedSeconds,
-    maxEstimatedSeconds,
-  )}`;
-}
-
-/** 초 단위 범위를 화면용 분 단위로 줄인다. */
-function formatDurationRange(minSeconds: number, maxSeconds: number) {
-  /** 낮은 쪽 예상 분. */
-  const minMinutes = Math.max(1, Math.floor(minSeconds / 60));
-  /** 높은 쪽 예상 분. */
-  const maxMinutes = Math.max(minMinutes, Math.ceil(maxSeconds / 60));
-
-  if (minMinutes === maxMinutes) {
-    return `${maxMinutes}분`;
-  }
-
-  return `${minMinutes}~${maxMinutes}분`;
 }
 
 /** 선택된 영상 파일을 검증한다. */

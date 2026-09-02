@@ -7,13 +7,33 @@ import { type SubtitleStepKey, useSubtitlesExtractLogic } from './_hooks/use-sub
 const SUBTITLE_STEPS: Array<{ /** 단계 key. */ key: SubtitleStepKey; /** 화면 라벨. */ label: string }> = [
   { key: 'queued', label: '대기' },
   { key: 'extracting_audio', label: '음성 추출' },
-  { key: 'transcribing', label: 'SRT 생성' },
+  { key: 'transcribing', label: '영어 SRT 생성' },
   { key: 'completed', label: '완료' },
 ];
 
+/** 선택 화면에서 안내할 자막 처리 방식. */
+const SUBTITLE_PROCESSING_OPTIONS = [
+  {
+    detail: 'base.en · 상대적으로 빠른 처리',
+    icon: 'processing',
+    label: '속도 우선',
+    value: 'base_en',
+  },
+  {
+    detail: 'small.en · 인식 정확도를 우선하는 처리',
+    icon: 'subtitle',
+    label: '정확도 우선',
+    value: 'small_en',
+  },
+] as const;
+
+/** 자막 처리 방식과 실행 환경을 설명하는 짧은 안내. */
+const SUBTITLE_PROCESSING_GUIDANCE =
+  '영어 전용 자막을 로컬 Whisper로 처리합니다.';
+
 /** 자막 오류 상세 위에 표시할 평이한 요약. */
 const SUBTITLE_ERROR_DETAIL_SUMMARY =
-  '자막 생성 요청이 정상적으로 처리되지 않았습니다.';
+  '영어 SRT 생성 요청이 정상적으로 처리되지 않았습니다.';
 /** 자막 원본 파일 선택 control의 accessible name. */
 const SUBTITLE_FILE_PICKER_LABEL = '영상 선택 또는 드래그 (로컬 영상 파일)';
 /** 자막 파일 검증 안내를 연결할 id. */
@@ -29,7 +49,7 @@ export function SubtitlesExtractPage() {
     fileFeedbackIsError, fileFeedbackMessage, filePickerButtonRef,
     filledProgressCells, handleDropzoneDragOver, handleDropzoneDrop, handleFileInputChange,
     handleFilePickerOpen, handleSubtitleSubmit, handleWhisperModelChange, isSubtitlePending,
-    processingEstimateMessage, retryWorkerHealth, returnToRequest, selectedFile, selectedFileMeta,
+    retryWorkerHealth, returnToRequest, selectedFile, selectedFileMeta,
     selectedWhisperModel, statusErrorDetail, statusIconName, statusJob, statusMessage, statusTitle,
     statusTone, submitDisabledReason, viewPhase, workerHealthCheckedAt, workerHealthFailed,
     workerHealthIsFetching, workerHealthStatus,
@@ -83,11 +103,35 @@ export function SubtitlesExtractPage() {
           ) : null}
         </div>
         {selectedFile ? <div className="selected-file-row"><AppIcon name="video" /><div><strong>{selectedFile.name}</strong><span>{selectedFileMeta}</span></div><button type="button" onClick={clearSelectedFile}>지우기</button></div> : null}
-        <fieldset className="segmented-control"><legend>Whisper 모델</legend>
-          <label className={selectedWhisperModel === 'base_en' ? 'segment is-selected' : 'segment'}><input checked={selectedWhisperModel === 'base_en'} disabled={!canChangeWhisperModel} name="subtitle-whisper-model" type="radio" value="base_en" onChange={handleWhisperModelChange} /><AppIcon name="processing" />빠름</label>
-          <label className={selectedWhisperModel === 'small_en' ? 'segment is-selected' : 'segment'}><input checked={selectedWhisperModel === 'small_en'} disabled={!canChangeWhisperModel} name="subtitle-whisper-model" type="radio" value="small_en" onChange={handleWhisperModelChange} /><AppIcon name="subtitle" />정확도</label>
+        <fieldset
+          aria-describedby="subtitle-processing-guidance"
+          className="segmented-control subtitle-processing-method"
+        >
+          <legend>처리 방식</legend>
+          <p className="subtitle-processing-method__description" id="subtitle-processing-guidance">
+            {SUBTITLE_PROCESSING_GUIDANCE}
+          </p>
+          {SUBTITLE_PROCESSING_OPTIONS.map((option) => (
+            <label
+              className={selectedWhisperModel === option.value ? 'segment subtitle-processing-option is-selected' : 'segment subtitle-processing-option'}
+              key={option.value}
+            >
+              <input
+                checked={selectedWhisperModel === option.value}
+                disabled={!canChangeWhisperModel}
+                name="subtitle-whisper-model"
+                type="radio"
+                value={option.value}
+                onChange={handleWhisperModelChange}
+              />
+              <AppIcon name={option.icon} />
+              <span className="subtitle-processing-option__copy">
+                <strong>{option.label}</strong>
+                <span>{option.detail}</span>
+              </span>
+            </label>
+          ))}
         </fieldset>
-        <p className="subtitle-estimate">{processingEstimateMessage}</p>
         <button
           aria-describedby={
             !canSubmit && submitDisabledReason
@@ -115,7 +159,7 @@ export function SubtitlesExtractPage() {
     return <section className="console-panel phase-panel status-panel" aria-labelledby="subtitle-status-title">
       <PanelTitle icon="processing" id="subtitle-status-title">처리 상태</PanelTitle>
       <StatusHead icon={statusIconName} tone={statusTone} title={statusTitle} message={statusMessage} />
-      <div className="subtitle-step-tabs" aria-label="자막 처리 단계">{SUBTITLE_STEPS.map((step) => <span aria-current={currentStepKey === step.key ? 'step' : undefined} className={currentStepKey === step.key ? 'step-tab is-selected' : 'step-tab'} key={step.key}>{step.label}</span>)}</div>
+      <div className="subtitle-step-tabs" aria-label="영어 SRT 처리 단계">{SUBTITLE_STEPS.map((step) => <span aria-current={currentStepKey === step.key ? 'step' : undefined} className={currentStepKey === step.key ? 'step-tab is-selected' : 'step-tab'} key={step.key}>{step.label}</span>)}</div>
       <ProgressMeter filledCells={filledProgressCells} value={statusJob.progress} />
     </section>;
   }
@@ -129,7 +173,7 @@ export function SubtitlesExtractPage() {
 
   if (viewPhase === 'result') {
     return <section className="console-panel phase-panel status-panel" aria-labelledby="subtitle-result-title">
-      <PanelTitle icon="completed" id="subtitle-result-title">SRT 준비 완료</PanelTitle>
+      <PanelTitle icon="completed" id="subtitle-result-title">영어 SRT 준비 완료</PanelTitle>
       <StatusHead icon="completed" tone="completed" title={statusTitle} message={statusMessage} />
       <div className="result-actions"><a className="download-button" download href={downloadHref}><AppIcon name="download" />영어 SRT 다운로드</a><button className="secondary-button" type="button" onClick={returnToRequest}>새 요청</button></div>
     </section>;

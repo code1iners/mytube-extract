@@ -9,8 +9,8 @@
 
 ## 사용자 흐름
 
-1. 사용자는 `mp4`, `mov`, `webm` 파일과 `base_en` 또는 `small_en` 모델을 선택한다.
-2. 앱은 영상 metadata로 예상 시간을 표시하고 `GET /health`로 worker를 확인한다.
+1. 사용자는 `mp4`, `mov`, `webm` 파일과 속도 우선(`base_en`) 또는 정확도 우선(`small_en`) 처리 방식을 선택한다.
+2. 앱은 처리 방식과 영어 전용·로컬 Whisper 처리 정책을 안내하고 `GET /health`로 worker를 확인한다.
 3. `POST /subtitles/uploads`로 multipart session을 만들고 presigned URL로 파일 part를 직접 업로드한다.
 4. `POST /subtitles/uploads/complete` 성공 응답의 UUID와 접수 시각을 자막 접수증으로 저장한다.
 5. 현재 route에서 `GET /subtitles/jobs/:jobId`를 polling해 처리·완료·실패·만료 상태를 표시한다.

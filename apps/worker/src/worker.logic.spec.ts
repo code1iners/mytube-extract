@@ -248,7 +248,7 @@ assert.equal(createSubtitleProgress(SubtitleJobStatus.completed), 100);
 assert.equal(createSubtitleProgress(SubtitleJobStatus.failed), null);
 assert.equal(
   createSubtitleMessage(SubtitleJobStatus.transcribing),
-  '영어 자막을 생성하고 있습니다.',
+  '영어 SRT를 생성하고 있습니다.',
 );
 assert.equal(
   createSubtitleMessage(SubtitleJobStatus.failed, 'AUDIO_TOO_LARGE'),

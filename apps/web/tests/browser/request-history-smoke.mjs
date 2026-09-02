@@ -38,6 +38,7 @@ try {
   await run('request routes expose worker readiness and guarded refresh', verifyRequestReadinessStatus);
   await run('video in-place success, failure, navigation lock, and download', verifyVideoRequestFlows);
   await run('subtitle in-place success and navigation lock', verifySubtitleRequestFlow);
+  await run('subtitle processing choice copy and responsive steps', verifySubtitleProcessingChoice);
   await run('accessible subtitle file picker keeps one control and all input paths', verifySubtitleFilePicker);
   await run('active request status errors stay actionable', verifyActiveRequestStatusErrors);
   await run('active polling stops at terminal status', verifyTerminalPolling);
@@ -362,7 +363,7 @@ async function verifySubtitleRequestFlow() {
     assert.equal(new URL(page.url()).pathname, '/subtitles');
 
     releaseUpload();
-    await page.getByRole('heading', { name: 'SRT 준비 완료' }).waitFor();
+    await page.getByRole('heading', { name: '영어 SRT 준비 완료' }).waitFor();
     assert.equal(new URL(page.url()).pathname, '/subtitles');
     assert.equal(await page.locator('.worker-health-status').count(), 0);
     assert.equal(await receiptCount(page), 1);
@@ -375,6 +376,122 @@ async function verifySubtitleRequestFlow() {
     assertNoRuntimeErrors();
   } finally {
     await context.close();
+  }
+}
+
+/** 자막 처리 방식 설명과 처리 단계의 반응형 표시를 검증한다. */
+async function verifySubtitleProcessingChoice() {
+  /** 선택 화면과 처리 화면을 확인할 모바일·데스크톱 viewport 폭. */
+  for (const width of [320, 390, 1280]) {
+    /** viewport별 자막 처리 방식 검증 context. */
+    const context = await createContext({
+      viewport: { height: width <= 820 ? 780 : 900, width },
+    });
+    /** 자막 처리 방식 검증 page. */
+    const { page, assertNoRuntimeErrors } = await createPage(context);
+
+    try {
+      await page.route('https://upload.example/**', async (route) => {
+        await route.fulfill({
+          body: '',
+          headers: {
+            'Access-Control-Allow-Origin': '*',
+            'Access-Control-Expose-Headers': 'ETag',
+            ETag: '"part-1"',
+          },
+          status: 200,
+        });
+      });
+      await routeApi(page, async ({ request, route, url }) => {
+        if (url.pathname === '/health') return fulfillJson(route, healthResponse());
+        if (url.pathname === '/subtitles/uploads' && request.method() === 'POST') {
+          assert.equal(request.postDataJSON().whisperModel, 'small_en');
+          return fulfillJson(route, {
+            expiresAt: '2026-08-13T12:00:00.000Z',
+            objectKey: 'source/video.mp4',
+            partSizeBytes: 1024,
+            parts: [{ partNumber: 1, uploadUrl: 'https://upload.example/part-1' }],
+            uploadId: 'upload-1',
+            uploadToken: 'token-1',
+          });
+        }
+        if (url.pathname === '/subtitles/uploads/complete') {
+          return fulfillJson(route, subtitleJob(SUBTITLE_ID, 'queued'));
+        }
+        if (url.pathname === `/subtitles/jobs/${SUBTITLE_ID}`) {
+          return fulfillJson(route, subtitleJob(SUBTITLE_ID, 'transcribing'));
+        }
+        return fulfillJson(route, {}, 404);
+      });
+
+      await page.goto(`${staticServer.origin}/subtitles`);
+      await page.getByRole('heading', { name: '영어 SRT 생성' }).waitFor();
+
+      /** 사용자 언어로 설명하는 처리 방식 fieldset. */
+      const processingMethod = page.locator('.subtitle-processing-method');
+      /** 두 처리 방식 radio. */
+      const processingOptions = processingMethod.locator('.subtitle-processing-option');
+      const speedOption = page.getByRole('radio', { name: /속도 우선/ });
+      const accuracyOption = page.getByRole('radio', { name: /정확도 우선/ });
+
+      assert.equal(await processingMethod.locator('legend').innerText(), '처리 방식');
+      assert.equal(await processingOptions.count(), 2);
+      assert.equal(await speedOption.isChecked(), true);
+      await accuracyOption.check();
+      assert.equal(await accuracyOption.isChecked(), true);
+      assert.equal(await page.getByText('영어 전용 자막을 로컬 Whisper로 처리합니다.', { exact: true }).count(), 1);
+      assert.equal(await page.getByText('base.en · 상대적으로 빠른 처리', { exact: true }).count(), 1);
+      assert.equal(await page.getByText('small.en · 인식 정확도를 우선하는 처리', { exact: true }).count(), 1);
+      assert.equal(await page.getByText(/예상 처리 시간/, { exact: false }).count(), 0);
+      /** 처리 방식 선택지의 실제 grid 열 위치. */
+      const processingOptionLefts = await processingOptions.evaluateAll((options) =>
+        options.map((option) => Math.round(option.getBoundingClientRect().left)),
+      );
+      assert.deepEqual(
+        new Set(processingOptionLefts).size,
+        width <= 560 ? 1 : 2,
+      );
+      assert.ok(
+        (await processingOptions.evaluateAll((options) => options.map((option) => {
+          const rect = option.getBoundingClientRect();
+          return { height: rect.height, left: rect.left, right: rect.right };
+        }))).every(
+          (option) => option.height >= 44 && option.left >= 0 && option.right <= width,
+        ),
+      );
+
+      /** 처리 방식 선택 후 영어 SRT 생성 요청. */
+      const submit = page.getByRole('button', { name: '영어 SRT 생성' });
+      await page.locator('input[type="file"]').setInputFiles({
+        buffer: Buffer.from('fake-video'),
+        mimeType: 'video/mp4',
+        name: 'sample.mp4',
+      });
+      await waitForEnabled(submit);
+      await submit.click();
+      await page.locator('.subtitle-step-tabs').waitFor();
+
+      /** 실제 자막 처리 단계 네 개. */
+      const stepTabs = page.locator('.subtitle-step-tabs .step-tab');
+      assert.equal(await stepTabs.count(), 4);
+      assert.deepEqual(await stepTabs.allTextContents(), ['대기', '음성 추출', '영어 SRT 생성', '완료']);
+      assert.equal(await page.locator('.subtitle-step-tabs [aria-current="step"]').count(), 1);
+      /** 처리 단계의 실제 grid 열 위치. */
+      const stepLefts = await stepTabs.evaluateAll((steps) =>
+        steps.map((step) => Math.round(step.getBoundingClientRect().left)),
+      );
+      assert.deepEqual(new Set(stepLefts).size, width <= 820 ? 1 : 4);
+      assert.deepEqual(
+        await page.evaluate(() => ({
+          clientWidth: document.documentElement.clientWidth,
+          scrollWidth: document.documentElement.scrollWidth,
+        })),
+        { clientWidth: width, scrollWidth: width },
+      );
+      assertNoRuntimeErrors();
+    } finally {
+      await context.close();
+    }
   }
 }
 
@@ -438,10 +555,10 @@ async function verifySubtitleFilePicker() {
     const retryButton = page.getByRole('button', {
       name: '서버와 worker 상태 다시 확인',
     });
-    /** 파일 picker 다음에 오는 첫 Whisper 모델 radio. */
-    const firstModelRadio = page.getByRole('radio', { name: '빠름' });
+    /** 파일 picker 다음에 오는 첫 처리 방식 radio. */
+    const firstModelRadio = page.getByRole('radio', { name: '속도 우선' });
     await retryButton.focus();
-    // 재확인 control 다음에는 유일한 파일 picker가, 그 다음에는 첫 모델 radio가 온다.
+    // 재확인 control 다음에는 유일한 파일 picker가, 그 다음에는 첫 처리 방식 radio가 온다.
     await page.keyboard.press('Tab');
     assert.equal(
       await picker.evaluate((element) => document.activeElement === element),

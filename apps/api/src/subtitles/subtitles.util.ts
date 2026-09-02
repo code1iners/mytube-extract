@@ -50,7 +50,7 @@ export function createSubtitleStatusMessage(
   errorCode: string | null,
 ) {
   if (status === SubtitleJobStatus.queued) {
-    return '요청이 접수되어 대기 중입니다.';
+    return '영어 SRT 생성 요청이 접수되어 대기 중입니다.';
   }
 
   if (status === SubtitleJobStatus.extracting_audio) {
@@ -58,7 +58,7 @@ export function createSubtitleStatusMessage(
   }
 
   if (status === SubtitleJobStatus.transcribing) {
-    return '영어 자막을 생성하고 있습니다.';
+    return '영어 SRT를 생성하고 있습니다.';
   }
 
   if (status === SubtitleJobStatus.completed) {
@@ -69,7 +69,7 @@ export function createSubtitleStatusMessage(
     return createSubtitleFailureMessage(errorCode);
   }
 
-  return '보관 기간이 지났습니다. 다시 생성해 주세요.';
+  return '영어 SRT 보관 기간이 지났습니다. 다시 생성해 주세요.';
 }
 
 /** 업로드 가능한 영상 파일인지 확인한다. */
@@ -191,7 +191,7 @@ function createSubtitleFailureMessage(errorCode: string | null) {
     return '파일 업로드 중 문제가 발생했습니다. 잠시 후 다시 시도해 주세요.';
   }
 
-  return '자막 생성에 실패했습니다. 다시 시도해 주세요.';
+  return '영어 SRT 생성에 실패했습니다. 다시 시도해 주세요.';
 }
 
 /** 파일명 확장자를 소문자로 반환한다. */

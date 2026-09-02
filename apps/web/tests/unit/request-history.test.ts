@@ -146,14 +146,14 @@ describe('request history query contract', () => {
         {
           displayStatus: 'failed',
           errorCode: 'TRANSCRIPTION_FAILED',
-          message: '자막 생성에 실패했습니다.',
+          message: '영어 SRT 생성에 실패했습니다.',
         },
         receipt,
       ),
     ).toEqual({
       code: 'TRANSCRIPTION_FAILED',
-      guidance: '자막 생성에 실패했습니다.',
-      location: '자막 생성 상태',
+      guidance: '영어 SRT 생성에 실패했습니다.',
+      location: '영어 SRT 생성 상태',
       requestPath: `/subtitles/jobs/${SUBTITLE_ID}`,
     });
   });

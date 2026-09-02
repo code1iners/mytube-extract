@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest';
 import {
-  createSubtitleProcessingEstimate,
   isSubtitleTerminalStatus,
   type SubtitleJobResponse,
   validateSubtitleFile,
@@ -38,21 +37,6 @@ describe('subtitle request', () => {
     expect(isSubtitleTerminalStatus('completed')).toBe(true);
     expect(isSubtitleTerminalStatus('failed')).toBe(true);
     expect(isSubtitleTerminalStatus('expired')).toBe(true);
-  });
-
-  it('estimates processing time from video duration and whisper model', () => {
-    expect(createSubtitleProcessingEstimate(600, 'base_en')).toBe(
-      '예상 처리 시간: 약 1~3분',
-    );
-    expect(createSubtitleProcessingEstimate(600, 'small_en')).toBe(
-      '예상 처리 시간: 약 2~4분',
-    );
-    expect(createSubtitleProcessingEstimate(6420, 'small_en')).toBe(
-      '예상 처리 시간: 약 21~43분',
-    );
-    expect(createSubtitleProcessingEstimate(null, 'base_en')).toBe(
-      '예상 시간은 영상 분석 후 표시됩니다.',
-    );
   });
 
   it('keeps file selection as a UI-only subtitle step before queueing', () => {
