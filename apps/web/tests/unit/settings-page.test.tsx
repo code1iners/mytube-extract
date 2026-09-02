@@ -26,7 +26,12 @@ describe('settings page', () => {
     );
 
     expect(markup).toContain('설정');
-    expect(markup).toContain('테마');
+    expect(markup).toContain('class="phase-panel settings-panel"');
+    expect(markup).not.toContain('class="console-panel phase-panel settings-panel"');
+    expect(markup).toContain('화면 표시');
+    expect(markup).toContain(
+      '시스템 설정을 따르거나 라이트·다크 중 하나를 선택합니다. 설정에는 요청과 파일 정보를 저장하지 않습니다.',
+    );
     expect(markup.match(/type="radio"/g)).toHaveLength(3);
     expect(markup).toContain('시스템');
     expect(markup).toContain('라이트');

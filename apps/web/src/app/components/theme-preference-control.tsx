@@ -37,7 +37,7 @@ export function ThemePreferenceControl({
 
   return (
     <fieldset className="theme-control theme-control--settings">
-      <legend>테마</legend>
+      <legend>화면 표시</legend>
       <div className="theme-toggle">
         {THEME_OPTIONS.map((option) => (
           <label className="theme-toggle__option" key={option.value}>

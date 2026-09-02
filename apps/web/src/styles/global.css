@@ -426,6 +426,24 @@ a {
   margin: 0;
 }
 
+/* 설정은 workspace가 정렬만 담당하고 주 표면은 flat하게 유지한다. */
+.settings-panel {
+  display: grid;
+  gap: 24px;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.settings-description {
+  margin: 0;
+  color: var(--color-text-secondary);
+  font-size: 16px;
+  line-height: 1.6;
+}
+
 /* 영상·자막 요청은 입력 흐름을 먼저 읽도록 외곽 카드 표면을 사용하지 않는다. */
 .video-request-panel,
 .subtitle-request-panel {
@@ -1230,24 +1248,40 @@ input:focus-visible,
   gap: 16px;
 }
 
+.history-panel {
+  min-width: 0;
+  gap: 24px;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
 .history-empty__links {
   display: grid;
-  gap: 12px;
+  gap: 0;
   grid-template-columns: repeat(2, minmax(0, 1fr));
+  border-top: 1px solid var(--color-border);
+  border-bottom: 1px solid var(--color-border);
 }
 
 .history-empty__link {
   display: grid;
-  min-height: 128px;
+  min-height: 96px;
   align-items: start;
   gap: 12px;
   grid-template-columns: 28px minmax(0, 1fr);
-  padding: 16px;
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-lg);
-  background: var(--color-surface);
+  padding: 16px 12px 16px 0;
+  border: 0;
+  background: transparent;
   color: var(--color-text-primary);
   text-decoration: none;
+}
+
+.history-empty__link + .history-empty__link {
+  padding-left: 16px;
+  border-left: 1px solid var(--color-border);
 }
 
 .history-empty__link:hover {
@@ -1283,6 +1317,14 @@ input:focus-visible,
   word-break: keep-all;
 }
 
+.history-empty__prompt {
+  margin: 0;
+  color: var(--color-text-primary);
+  font-size: 18px;
+  font-weight: 600;
+  line-height: 1.4;
+}
+
 .history-empty__note {
   display: flex;
   align-items: flex-start;
@@ -1301,6 +1343,7 @@ input:focus-visible,
 
 .history-description,
 .history-empty p,
+.history-empty__prompt,
 .history-item h3,
 .history-item p {
   margin: 0;
@@ -1632,6 +1675,16 @@ input:focus-visible,
 
   .history-empty__links {
     grid-template-columns: 1fr;
+  }
+
+  .history-empty__link {
+    padding: 16px 0;
+  }
+
+  .history-empty__link + .history-empty__link {
+    padding-left: 0;
+    border-top: 1px solid var(--color-border);
+    border-left: 0;
   }
 
   .result-actions,

@@ -6,6 +6,7 @@
 - source: `apps/web/src/app/pages/request-history/page.tsx`
 - navigation: primary navigation `요청 내역` (desktop header tab / mobile bottom tab)
 - data source: browser `localStorage` 접수증과 job status API
+- surface: 외곽 card 없이 workspace에 정렬된 요청 목록·빈 상태 영역
 
 ## 사용자 흐름
 
@@ -21,9 +22,10 @@
    원래 `kind`, `jobId`, `acceptedAt`을 유지하고 최신순 위치로 다시 표시한다.
 
 접수증이 하나도 없을 때는 빈 상태에서 `영상 추출`과 `자막 추출`을 동등한 시작점으로
-제공한다. 영상 추출은 YouTube URL에서 영상·오디오 파일을 받고, 자막 추출은 로컬
-영상에서 영어 SRT 자막을 만든다는 출발 입력과 결과를 각 링크에 설명한다. 이력은
-현재 브라우저에만 저장되고 완료 파일은 7일 동안 보관된다는 운영 모델도 함께 안내한다.
+제공한다. `시작할 작업을 선택하세요.`를 먼저 보여주고, 영상 추출은 YouTube URL에서
+영상·오디오 파일을 받으며 자막 추출은 로컬 영상에서 영어 SRT 자막을 만든다는 출발
+입력과 결과를 각 링크에 짧게 설명한다. 이력은 현재 브라우저에만 저장되고 완료 파일은
+7일 동안 보관된다는 운영 모델도 별도 note로 한 번 안내한다.
 
 ## 저장 계약
 

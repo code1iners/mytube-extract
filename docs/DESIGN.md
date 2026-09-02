@@ -240,6 +240,13 @@ Web의 요청 설정 화면은 app shell과 workspace가 정렬을 담당하고,
 
 자막 요청의 파일 선택 영역은 좁은 화면에서 140–160px 높이의 compact control로 유지하고, `속도 우선`과 `정확도 우선`은 모든 폭에서 비교 가능한 full-width row로 표시한다. 처리 방식 설명은 사용자가 얻는 영어 자막 결과를 먼저 설명하고 `base.en`, `small.en`, 로컬 Whisper 같은 기술 정보는 뒤에 둔다.
 
+`/settings`는 외곽 card elevation 없이 `화면 표시` preference group을 workspace의
+직접적인 세로 흐름으로 보여준다. 시스템·라이트·다크 선택과 설명은 같은 flat 표면에
+두고, 실제 radio label의 조작 영역은 44px 이상으로 유지한다. `/history`도 페이지
+바깥 표면은 flat하게 두며, 빈 상태에서는 `시작할 작업을 선택하세요.`를 먼저 보여준
+뒤 영상·자막 시작 링크를 동등한 행으로 제공한다. 브라우저 로컬 이력과 완료 파일
+7일 보관 안내는 별도 보조 note로 한 번만 표시한다.
+
 ## 10. Theme과 Mode
 
 - light와 dark를 모두 제공한다.

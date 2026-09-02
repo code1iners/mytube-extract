@@ -51,6 +51,7 @@ try {
   await run('blocked localStorage keeps the deep-link item', verifyBlockedStorageFallback);
   await run('failed and expired jobs expose matching retry routes', verifyRetryRoutes);
   await run('empty history explains both request paths and retention', verifyEmptyHistoryProductModel);
+  await run('populated history stays unclipped with long job details', verifyPopulatedHistoryResponsiveLayout);
   await run('responsive primary navigation stays aligned and unclipped', verifyResponsivePrimaryNavigation);
 
   console.log(JSON.stringify({ origin: staticServer.origin, status: 'ok' }, null, 2));
@@ -685,7 +686,7 @@ async function verifyAcceptedJobStorageFallback() {
       `/history?kind=video&jobId=${VIDEO_OTHER_ID}`,
     );
     await historyLink.click();
-    await page.getByRole('heading', { name: '이 브라우저의 요청 내역' }).waitFor();
+    await page.getByRole('heading', { name: '요청 내역' }).waitFor();
     assert.equal(await page.locator('.history-item').count(), 1);
     assert.equal(new URL(page.url()).searchParams.get('jobId'), VIDEO_OTHER_ID);
     assertNoRuntimeErrors();
@@ -1545,7 +1546,7 @@ async function verifyHistoryDeleteUndo() {
     await page.getByRole('heading', { name: '추출 요청' }).waitFor();
     await page.getByRole('link', { name: '요청 내역', exact: true }).click();
     await page
-      .getByRole('heading', { name: '이 브라우저의 요청 내역' })
+      .getByRole('heading', { name: '요청 내역' })
       .waitFor();
     await waitForHistoryCount(page, 0);
     assert.equal(await page.getByRole('button', { name: /되돌리기/ }).count(), 0);
@@ -1734,78 +1735,254 @@ async function verifyRetryRoutes() {
   }
 }
 
-/** 빈 요청 내역의 두 시작점과 보관 모델을 viewport별로 검증한다. */
+/** 빈 요청 내역의 시작점·보관 모델·표면 계층을 viewport와 theme별로 검증한다. */
 async function verifyEmptyHistoryProductModel() {
   /** 빈 상태를 확인할 모바일·데스크톱 viewport 폭. */
-  for (const width of [390, 1280]) {
-    /** 빈 내역의 모바일·데스크톱 viewport. */
-    const context = await createContext({
-      viewport: { height: width <= 560 ? 780 : 900, width },
-    });
-    /** 빈 상태 browser page와 runtime error assertion. */
-    const { page, assertNoRuntimeErrors } = await createPage(context);
+  for (const width of [320, 390, 1280]) {
+    /** 빈 내역의 light·dark 표면을 각각 독립적으로 확인한다. */
+    for (const theme of ['light', 'dark']) {
+      /** 빈 내역의 모바일·데스크톱 viewport. */
+      const context = await createContext({
+        viewport: { height: width <= 820 ? 844 : 900, width },
+      });
+      /** 빈 상태 browser page와 runtime error assertion. */
+      const { page, assertNoRuntimeErrors } = await createPage(context);
 
-    try {
-      await page.goto(`${staticServer.origin}/history`);
-      await page
-        .getByText('아직 이 브라우저에서 접수한 요청이 없습니다.')
-        .waitFor();
+      try {
+        await page.addInitScript((preference) => {
+          localStorage.setItem(
+            'mytube-extract-theme-preference',
+            preference,
+          );
+        }, theme);
+        await page.goto(`${staticServer.origin}/history`);
+        await page.getByText('시작할 작업을 선택하세요.', { exact: true }).waitFor();
 
-      /** 빈 상태에서 제공하는 두 개의 요청 시작 링크. */
-      const emptyLinks = page.locator('.history-empty__link');
-      assert.equal(await emptyLinks.count(), 2);
-      assert.deepEqual(
-        await emptyLinks.evaluateAll((links) =>
-          links.map((link) => link.getAttribute('href')),
-        ),
-        ['/video', '/subtitles'],
-      );
-      /** 키보드 focus와 손가락 조작을 위한 링크 크기. */
-      for (const link of await emptyLinks.all()) {
-        /** 빈 상태 링크의 실제 viewport 영역. */
-        const linkBox = await link.boundingBox();
-        assert.ok(linkBox && linkBox.width > 0 && linkBox.height >= 44);
-        await link.focus();
+        assert.equal(await page.getByRole('heading', { name: '요청 내역' }).count(), 1);
         assert.equal(
-          await link.evaluate((element) => document.activeElement === element),
-          true,
+          await page
+            .getByText('최근 요청 20건을 서버의 최신 상태로 확인합니다.', {
+              exact: true,
+            })
+            .count(),
+          1,
         );
-      }
-      assert.equal(
-        await page
-          .getByText(
-            'YouTube URL을 입력해 영상(MP4) 또는 오디오(MP3)를 받습니다.',
-            { exact: true },
-          )
-          .count(),
-        1,
-      );
-      assert.equal(
-        await page
-          .getByText('로컬 영상을 올려 영어 SRT 자막을 만듭니다.', {
-            exact: true,
-          })
-          .count(),
-        1,
-      );
-      assert.equal(
-        await page
-          .getByText(
-            '이력은 이 브라우저에만 저장되며, 완료 파일은 7일 동안 보관됩니다.',
-            { exact: true },
-          )
-          .count(),
-        1,
-      );
 
-      /** viewport별 빈 상태 링크 열 배치. */
-      const linkColumns = await page
-        .locator('.history-empty__links')
-        .evaluate((element) => getComputedStyle(element).gridTemplateColumns);
-      assert.equal(linkColumns.trim().split(/\s+/).length, width <= 560 ? 1 : 2);
-      assertNoRuntimeErrors();
-    } finally {
-      await context.close();
+        /** 빈 상태에서 제공하는 두 개의 요청 시작 링크. */
+        const emptyLinks = page.locator('.history-empty__link');
+        assert.equal(await emptyLinks.count(), 2);
+        assert.deepEqual(
+          await emptyLinks.evaluateAll((links) =>
+            links.map((link) => link.getAttribute('href')),
+          ),
+          ['/video', '/subtitles'],
+        );
+        /** 키보드 focus와 손가락 조작을 위한 링크 크기. */
+        for (const link of await emptyLinks.all()) {
+          await link.focus();
+          assert.equal(
+            await link.evaluate((element) => document.activeElement === element),
+            true,
+          );
+        }
+        assert.equal(
+          await page
+            .getByText(
+              'YouTube URL로 영상(MP4) 또는 오디오(MP3)를 받습니다.',
+              { exact: true },
+            )
+            .count(),
+          1,
+        );
+        assert.equal(
+          await page
+            .getByText('로컬 영상으로 영어 SRT 자막을 만듭니다.', {
+              exact: true,
+            })
+            .count(),
+          1,
+        );
+        assert.equal(
+          await page
+            .getByText(
+              '이력은 이 브라우저에만 저장되며, 완료 파일은 7일 동안 보관됩니다.',
+              { exact: true },
+            )
+            .count(),
+          1,
+        );
+
+        /** 빈 내역 표면과 링크의 실제 viewport 영역. */
+        const layoutMetrics = await page.evaluate(() => {
+          /** 빈 내역의 flat work surface. */
+          const panel = document.querySelector('.history-panel');
+          /** 빈 상태 시작 링크 영역. */
+          const links = [...document.querySelectorAll('.history-empty__link')];
+          /** 요소의 viewport 영역을 직렬화한다. */
+          const toBox = (element) => {
+            /** 요소의 viewport 사각형. */
+            const rect = element?.getBoundingClientRect();
+            return rect
+              ? {
+                  bottom: rect.bottom,
+                  height: rect.height,
+                  left: rect.left,
+                  right: rect.right,
+                  top: rect.top,
+                  width: rect.width,
+                }
+              : null;
+          };
+
+          return {
+            document: {
+              clientWidth: document.documentElement.clientWidth,
+              scrollWidth: document.documentElement.scrollWidth,
+            },
+            links: links.map(toBox),
+            panel: {
+              backgroundColor: panel
+                ? getComputedStyle(panel).backgroundColor
+                : null,
+              borderTopWidth: panel
+                ? getComputedStyle(panel).borderTopWidth
+                : null,
+              boxShadow: panel ? getComputedStyle(panel).boxShadow : null,
+            },
+          };
+        });
+        assert.deepEqual(layoutMetrics.document, {
+          clientWidth: width,
+          scrollWidth: width,
+        });
+        assert.equal(layoutMetrics.panel.borderTopWidth, '0px');
+        assert.equal(layoutMetrics.panel.boxShadow, 'none');
+        assert.equal(layoutMetrics.panel.backgroundColor, 'rgba(0, 0, 0, 0)');
+        assert.ok(
+          layoutMetrics.links.every(
+            (link) =>
+              link &&
+              link.width > 0 &&
+              link.height >= 44 &&
+              link.left >= 0 &&
+              link.right <= width,
+          ),
+        );
+
+        /** viewport별 빈 상태 링크 열 배치. */
+        const linkColumns = await page
+          .locator('.history-empty__links')
+          .evaluate((element) => getComputedStyle(element).gridTemplateColumns);
+        assert.equal(linkColumns.trim().split(/\s+/).length, width <= 560 ? 1 : 2);
+        assertNoRuntimeErrors();
+      } finally {
+        await context.close();
+      }
+    }
+  }
+}
+
+/** 실제 receipt 목록도 긴 파일명에서 좁은 viewport를 밀어내지 않는지 확인한다. */
+async function verifyPopulatedHistoryResponsiveLayout() {
+  /** 기존 목록의 실제 데이터 경계를 확인할 viewport 폭. */
+  for (const width of [320, 390, 1280]) {
+    /** populated history의 light·dark surface를 각각 확인한다. */
+    for (const theme of ['light', 'dark']) {
+      const context = await createContext({
+        viewport: { height: width <= 820 ? 844 : 900, width },
+      });
+      const { page, assertNoRuntimeErrors } = await createPage(context);
+      const longFileName = `${'long-file-name-'.repeat(12)}.mp4`;
+
+      try {
+        await page.addInitScript((preference) => {
+          localStorage.setItem(
+            'mytube-extract-theme-preference',
+            preference,
+          );
+        }, theme);
+        await seedReceipts(page, [
+          ['subtitle', SUBTITLE_ID, '2026-08-11T00:01:00.000Z'],
+        ]);
+        await routeApi(page, async ({ route, url }) => {
+          if (url.pathname === `/subtitles/jobs/${SUBTITLE_ID}`) {
+            return fulfillJson(route, {
+              ...subtitleJob(SUBTITLE_ID, 'completed'),
+              fileName: longFileName,
+            });
+          }
+
+          return fulfillJson(route, {}, 404);
+        });
+        await page.goto(`${staticServer.origin}/history`);
+        const detail = page.locator('.history-item__header p');
+        await detail.waitFor();
+        assert.ok((await detail.textContent())?.includes(longFileName));
+
+        const layoutMetrics = await page.evaluate(() => {
+          /** 목록과 항목의 실제 viewport 및 scroll 영역. */
+          const panel = document.querySelector('.history-panel');
+          const item = document.querySelector('.history-item');
+          const article = document.querySelector('.history-item article');
+          const toBox = (element) => {
+            const rect = element?.getBoundingClientRect();
+            return rect
+              ? { right: rect.right, width: rect.width }
+              : null;
+          };
+
+          return {
+            document: {
+              clientWidth: document.documentElement.clientWidth,
+              scrollWidth: document.documentElement.scrollWidth,
+            },
+            item: item
+              ? {
+                  box: toBox(item),
+                  clientWidth: item.clientWidth,
+                  scrollWidth: item.scrollWidth,
+                }
+              : null,
+            panel: panel
+              ? {
+                  box: toBox(panel),
+                  clientWidth: panel.clientWidth,
+                  scrollWidth: panel.scrollWidth,
+                }
+              : null,
+            article: article
+              ? {
+                  clientWidth: article.clientWidth,
+                  scrollWidth: article.scrollWidth,
+                }
+              : null,
+          };
+        });
+
+        assert.deepEqual(layoutMetrics.document, {
+          clientWidth: width,
+          scrollWidth: width,
+        });
+        assert.ok(
+          layoutMetrics.panel &&
+            layoutMetrics.panel.box &&
+            layoutMetrics.panel.box.right <= width &&
+            layoutMetrics.panel.scrollWidth <= layoutMetrics.panel.clientWidth,
+        );
+        assert.ok(
+          layoutMetrics.item &&
+            layoutMetrics.item.box &&
+            layoutMetrics.item.box.right <= width &&
+            layoutMetrics.item.scrollWidth <= layoutMetrics.item.clientWidth,
+        );
+        assert.ok(
+          layoutMetrics.article &&
+            layoutMetrics.article.scrollWidth <= layoutMetrics.article.clientWidth,
+        );
+        assertNoRuntimeErrors();
+      } finally {
+        await context.close();
+      }
     }
   }
 }
@@ -1843,8 +2020,9 @@ async function verifyResponsivePrimaryNavigation() {
           if (routePath === '/settings') {
             await page.getByRole('heading', { name: '설정' }).waitFor();
             await verifyThemePreference(page, theme);
+            await verifySettingsSurface(page, width);
           }
-          await verifyResponsiveNavigationLayout(page, width);
+          await verifyResponsiveNavigationLayout(page, width, routePath);
         }
         assertNoRuntimeErrors();
       } finally {
@@ -1873,15 +2051,135 @@ async function verifyThemePreference(page, theme) {
     await page.evaluate(() => document.documentElement.dataset.theme),
     alternateTheme,
   );
+
+  await page.getByText('시스템', { exact: true }).click();
+  assert.equal(
+    await page.evaluate(() =>
+      localStorage.getItem('mytube-extract-theme-preference'),
+    ),
+    'system',
+  );
+  assert.ok(
+    ['light', 'dark'].includes(
+      await page.evaluate(() => document.documentElement.dataset.theme),
+    ),
+  );
+  await page.reload();
+  assert.equal(
+    await page.evaluate(() =>
+      localStorage.getItem('mytube-extract-theme-preference'),
+    ),
+    'system',
+  );
+  assert.ok(
+    ['light', 'dark'].includes(
+      await page.evaluate(() => document.documentElement.dataset.theme),
+    ),
+  );
+}
+
+/** 설정 route가 flat 표면·테마 조작·focus 계약을 지키는지 확인한다. */
+async function verifySettingsSurface(page, width) {
+  /** 설정 route의 실제 조작 대상. */
+  const settingsLink = page.getByRole('link', { name: '설정' });
+  /** 설정 화면의 테마 선택 label 영역. */
+  const themeOptions = page.locator('.theme-toggle__option');
+  /** 설정 surface와 radio geometry를 한 번에 읽는다. */
+  const layoutMetrics = await page.evaluate(() => {
+    /** 설정의 flat work surface. */
+    const panel = document.querySelector('.settings-panel');
+    /** 설정 surface와 workspace의 viewport 영역. */
+    const panelRect = panel?.getBoundingClientRect();
+    const workspaceRect = document.querySelector('.workspace')?.getBoundingClientRect();
+
+    return {
+      panel: {
+        backgroundColor: panel ? getComputedStyle(panel).backgroundColor : null,
+        borderTopWidth: panel ? getComputedStyle(panel).borderTopWidth : null,
+        boxShadow: panel ? getComputedStyle(panel).boxShadow : null,
+        right: panelRect?.right,
+        width: panelRect?.width,
+      },
+      workspace: {
+        right: workspaceRect?.right,
+        width: workspaceRect?.width,
+      },
+    };
+  });
+
+  assert.deepEqual(
+    {
+      clientWidth: await page.evaluate(() => document.documentElement.clientWidth),
+      scrollWidth: await page.evaluate(() => document.documentElement.scrollWidth),
+    },
+    { clientWidth: width, scrollWidth: width },
+  );
+  assert.equal(layoutMetrics.panel.borderTopWidth, '0px');
+  assert.equal(layoutMetrics.panel.boxShadow, 'none');
+  assert.equal(layoutMetrics.panel.backgroundColor, 'rgba(0, 0, 0, 0)');
+  assert.equal(layoutMetrics.panel.width, layoutMetrics.workspace.width);
+  assert.equal(layoutMetrics.panel.right, layoutMetrics.workspace.right);
+  assert.equal(await page.getByText('화면 표시', { exact: true }).count(), 1);
+  assert.equal(
+    await page
+      .getByText(
+        '시스템 설정을 따르거나 라이트·다크 중 하나를 선택합니다. 설정에는 요청과 파일 정보를 저장하지 않습니다.',
+        { exact: true },
+      )
+      .count(),
+    1,
+  );
+  assert.equal(await themeOptions.count(), 3);
+  assert.ok(
+    (await themeOptions.evaluateAll((options) =>
+      options.map((option) => {
+        const rect = option.getBoundingClientRect();
+        return {
+          bottom: rect.bottom,
+          height: rect.height,
+          left: rect.left,
+          right: rect.right,
+          top: rect.top,
+          width: rect.width,
+        };
+      }),
+    )).every(
+      (option) =>
+        option.width >= 44 &&
+        option.height >= 44 &&
+        option.left >= 0 &&
+        option.right <= width,
+    ),
+  );
+  const settingsBox = await settingsLink.boundingBox();
+  assert.ok(settingsBox && settingsBox.width >= 44 && settingsBox.height >= 44);
+  await settingsLink.focus();
+  assert.equal(
+    await settingsLink.evaluate((element) => document.activeElement === element),
+    true,
+  );
+  assert.equal(
+    await settingsLink.evaluate((element) => element.matches(':focus-visible')),
+    true,
+  );
 }
 
 /** 주요 navigation surface의 overflow·touch target·position을 검증한다. */
-async function verifyResponsiveNavigationLayout(page, width) {
+async function verifyResponsiveNavigationLayout(page, width, routePath) {
   const visibleNavigation = page.locator(
     'nav[aria-label="주요 메뉴"]:visible',
   );
   assert.equal(await visibleNavigation.count(), 1);
   assert.equal(await visibleNavigation.locator('a').count(), 3);
+  if (routePath === '/settings') {
+    assert.equal(await visibleNavigation.locator('a[aria-current="page"]').count(), 0);
+    assert.equal(
+      await page.getByRole('link', { name: '설정' }).getAttribute('aria-current'),
+      'page',
+    );
+  } else {
+    assert.equal(await visibleNavigation.locator('a[aria-current="page"]').count(), 1);
+  }
   assert.deepEqual(
     await page.evaluate(() => ({
       clientWidth: document.documentElement.clientWidth,

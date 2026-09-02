@@ -297,15 +297,15 @@ export function RequestHistoryPage() {
   }
 
   return (
-    <section className="console-panel history-panel" aria-labelledby="history-title">
+    <section className="phase-panel history-panel" aria-labelledby="history-title">
       <div className="panel-title-row">
         <h2 id="history-title" tabIndex={-1}>
-          <AppIcon name="queued" />이 브라우저의 요청 내역
+          <AppIcon name="queued" />요청 내역
         </h2>
         <span className="title-dots" aria-hidden="true" />
       </div>
       <p className="history-description">
-        이 브라우저에서 접수한 최근 요청 20건을 서버의 최신 상태로 확인합니다.
+        최근 요청 20건을 서버의 최신 상태로 확인합니다.
       </p>
       {storageFailed ? (
         <div className="notice-box" role="status">
@@ -363,14 +363,14 @@ export function RequestHistoryPage() {
 function HistoryEmptyState() {
   return (
     <div className="history-empty">
-      <p>아직 이 브라우저에서 접수한 요청이 없습니다.</p>
+      <h3 className="history-empty__prompt">시작할 작업을 선택하세요.</h3>
       <div className="history-empty__links">
         <NavLink className="history-empty__link" to={ROUTE_PATHS.video}>
           <AppIcon name="video" />
           <span className="history-empty__link-copy">
             <strong>영상 추출</strong>
             <span>
-              YouTube URL을 입력해 영상(MP4) 또는 오디오(MP3)를 받습니다.
+              YouTube URL로 영상(MP4) 또는 오디오(MP3)를 받습니다.
             </span>
           </span>
         </NavLink>
@@ -378,7 +378,7 @@ function HistoryEmptyState() {
           <AppIcon name="subtitle" />
           <span className="history-empty__link-copy">
             <strong>자막 추출</strong>
-            <span>로컬 영상을 올려 영어 SRT 자막을 만듭니다.</span>
+            <span>로컬 영상으로 영어 SRT 자막을 만듭니다.</span>
           </span>
         </NavLink>
       </div>
