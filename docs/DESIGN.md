@@ -104,8 +104,9 @@ components:
     rounded: "{rounded.md}"
     height: "48px"
   chip-quality-selected:
-    backgroundColor: "{colors.surface-alt}"
-    textColor: "{colors.action-primary}"
+    backgroundColor: "{colors.surface}"
+    textColor: "{colors.text-primary}"
+    borderColor: "{colors.action-primary}"
     typography: "{typography.label}"
     rounded: "{rounded.md}"
     height: "48px"
@@ -248,6 +249,7 @@ Body line-height `1.6`은 Nintendo 원본에 없는 목표값이다. 한글 밀�
 - 일반 텍스트는 최소 `4.5:1`, 큰 텍스트는 최소 `3:1` 대비를 충족한다.
 - UI 경계·focus indicator는 인접 색상과 최소 `3:1` 대비를 충족한다.
 - 상태는 색과 함께 텍스트·아이콘으로 전달한다.
+- 선택형 control은 선택 경계·형식 아이콘에만 Nintendo red를 사용하고, 라벨과 밑줄은 테마별 본문 색을 사용한다. 밑줄을 함께 두어 선택 여부를 색상만으로 전달하지 않는다.
 - keyboard focus는 blue accent outline으로 명확히 표시한다. red는 focus에 쓰지 않아 액션 신호와 분리한다.
 - 200% text resize와 키보드 조작을 Web·popup 모두에서 검증한다.
 
