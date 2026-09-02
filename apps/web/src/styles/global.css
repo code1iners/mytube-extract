@@ -769,8 +769,19 @@ input:focus-visible,
 
 .worker-health-status {
   display: grid;
+  min-width: 0;
+  gap: 8px;
+}
+
+.worker-health-status--compact {
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  padding: 4px 0;
+}
+
+.worker-health-status--expanded {
   gap: 12px;
-  padding: 16px;
+  padding: 12px;
   border: 1px solid var(--color-border);
   border-radius: var(--radius-md);
   background: var(--color-surface-alt);
@@ -778,24 +789,36 @@ input:focus-visible,
 
 .worker-health-status__main {
   display: grid;
+  min-width: 0;
+  align-items: center;
+  gap: 8px;
+  grid-template-columns: 24px minmax(0, 1fr);
+}
+
+.worker-health-status--expanded .worker-health-status__main {
   align-items: start;
-  gap: 12px;
-  grid-template-columns: 40px minmax(0, 1fr);
+  gap: 8px;
+  grid-template-columns: 28px minmax(0, 1fr);
 }
 
 .worker-health-status__icon {
   display: grid;
-  width: 40px;
-  height: 40px;
+  width: 24px;
+  height: 24px;
   place-items: center;
-  border: 1px solid var(--color-status-processing);
   border-radius: var(--radius-full);
   color: var(--color-status-processing);
 }
 
 .worker-health-status__icon .app-icon {
-  width: 22px;
-  height: 22px;
+  width: 20px;
+  height: 20px;
+}
+
+.worker-health-status--expanded .worker-health-status__icon {
+  width: 28px;
+  height: 28px;
+  border: 1px solid var(--color-status-processing);
 }
 
 .worker-health-status h3 {
@@ -816,13 +839,25 @@ input:focus-visible,
   word-break: keep-all;
 }
 
+.worker-health-status--compact .worker-health-status__message {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+}
+
 .worker-health-status__message strong {
   color: var(--color-status-processing);
   font-weight: 600;
 }
 
+.worker-health-status--checking .worker-health-status__icon {
+  color: var(--color-status-processing);
+}
+
 .worker-health-status--ready .worker-health-status__icon {
   border-color: var(--color-status-completed);
+  color: var(--color-status-completed);
 }
 
 .worker-health-status--ready .worker-health-status__message strong {
@@ -832,6 +867,7 @@ input:focus-visible,
 .worker-health-status--unavailable .worker-health-status__icon,
 .worker-health-status--failed .worker-health-status__icon {
   border-color: var(--color-status-failed);
+  color: var(--color-status-failed);
 }
 
 .worker-health-status--unavailable .worker-health-status__message strong,
@@ -841,9 +877,10 @@ input:focus-visible,
 
 .worker-health-status__meta {
   display: flex;
+  min-width: 0;
   flex-wrap: wrap;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-end;
   gap: 8px 12px;
 }
 
@@ -852,10 +889,11 @@ input:focus-visible,
   color: var(--color-text-secondary);
   font-size: 14px;
   line-height: 1.4;
+  white-space: nowrap;
 }
 
 .worker-health-status__last-checked time {
-  color: var(--color-text-primary);
+  color: var(--color-text-secondary);
   font-weight: 600;
 }
 
@@ -1523,6 +1561,24 @@ input:focus-visible,
 
   .console-hero {
     align-items: start;
+  }
+
+  .video-request-panel,
+  .subtitle-request-panel {
+    gap: 16px;
+  }
+
+  .worker-health-status--compact {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .worker-health-status--compact .worker-health-status__meta {
+    justify-content: flex-end;
+  }
+
+  .worker-health-status--expanded {
+    gap: 8px;
+    padding: 8px;
   }
 
   .hero-utilities {

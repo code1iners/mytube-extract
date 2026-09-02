@@ -2,6 +2,7 @@ import { type DownloadDisplayStatus } from '../../../domain/download-request/dow
 import { ErrorDetailsDisclosure } from '../../components/error-details-disclosure';
 import { AppIcon, type AppIconName } from '../../components/app-icon';
 import { WorkerHealthStatusNotice } from '../../components/worker-health-status';
+import { getWorkerHealthStatusMessageId } from '../../utils/worker-health-notice.util';
 import { useVideoExtractLogic } from './_hooks/use-video-extract-logic';
 
 /** 처리 화면에서 표시할 영상 추출 단계. */
@@ -21,6 +22,12 @@ const STATUS_ITEMS = [
 /** 영상 오류 상세 위에 표시할 평이한 요약. */
 const VIDEO_ERROR_DETAIL_SUMMARY =
   '영상 추출 요청이 정상적으로 처리되지 않았습니다.';
+/** 영상 route worker health 제목 id. */
+const VIDEO_WORKER_HEALTH_TITLE_ID = 'video-worker-health-title';
+/** 영상 route worker health 설명 id. */
+const VIDEO_WORKER_HEALTH_MESSAGE_ID = getWorkerHealthStatusMessageId(
+  VIDEO_WORKER_HEALTH_TITLE_ID,
+);
 
 /** 영상 추출 route page. */
 export function VideoExtractPage() {
@@ -61,6 +68,9 @@ export function VideoExtractPage() {
   } = useVideoExtractLogic();
 
   if (viewPhase === 'request') {
+    /** readiness 상태가 제출을 막고 있는지 여부. */
+    const workerHealthBlocksSubmit = workerHealthStatus.kind !== 'ready';
+
     return (
       <section className="phase-panel video-request-panel" aria-labelledby="request-title">
         <PanelTitle icon="download" id="request-title">추출 요청</PanelTitle>
@@ -117,9 +127,11 @@ export function VideoExtractPage() {
 
           <button
             aria-describedby={
-              !canSubmit && submitDisabledReason
-                ? 'video-submit-disabled-reason'
-                : undefined
+              workerHealthBlocksSubmit
+                ? VIDEO_WORKER_HEALTH_MESSAGE_ID
+                : !canSubmit && submitDisabledReason
+                  ? 'video-submit-disabled-reason'
+                  : undefined
             }
             className="primary-button"
             disabled={!canSubmit}
@@ -128,14 +140,14 @@ export function VideoExtractPage() {
             <AppIcon name="download" />
             {isDownloadPending ? '요청 중' : '추출 요청'}
           </button>
-          {!canSubmit && submitDisabledReason ? (
+          {!canSubmit && submitDisabledReason && !workerHealthBlocksSubmit ? (
             <p className="submit-disabled-reason" id="video-submit-disabled-reason">
               {submitDisabledReason}
             </p>
           ) : null}
         </form>
         <WorkerHealthStatusNotice
-          id="video-worker-health-title"
+          id={VIDEO_WORKER_HEALTH_TITLE_ID}
           isFetching={workerHealthIsFetching}
           lastCheckedAt={workerHealthCheckedAt}
           status={workerHealthStatus}

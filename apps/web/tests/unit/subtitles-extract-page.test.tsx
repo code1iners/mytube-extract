@@ -41,7 +41,8 @@ describe('subtitles extract page', () => {
       workerHealthStatus: {
         kind: 'unavailable',
         label: 'worker 중단',
-        message: '현재 자막 추출 서버가 준비되지 않았습니다.',
+        message:
+          'API는 응답했지만 worker가 작업을 받을 수 없습니다. 현재 자막 추출 서버가 준비되지 않았습니다. 잠시 후 다시 시도해 주세요.',
         role: 'alert',
       },
     });
@@ -50,12 +51,17 @@ describe('subtitles extract page', () => {
     const markup = renderToStaticMarkup(<SubtitlesExtractPage />);
 
     expect(markup).toContain('data-health-status="unavailable"');
+    expect(markup).toContain('data-health-presentation="expanded"');
     expect(markup).toContain('class="phase-panel subtitle-request-panel"');
     expect(markup).toContain('role="alert"');
-    expect(markup).toContain('마지막 확인');
     expect(markup).toContain('다시 확인');
-    expect(markup).toContain('aria-describedby="subtitle-submit-disabled-reason"');
-    expect(markup).toContain('worker가 준비되지 않아 요청할 수 없습니다.');
+    expect(markup).toContain(
+      'aria-describedby="subtitle-worker-health-title-message"',
+    );
+    expect(markup).not.toContain('class="submit-disabled-reason"');
+    expect(markup).toContain(
+      'API는 응답했지만 worker가 작업을 받을 수 없습니다. 현재 자막 추출 서버가 준비되지 않았습니다. 잠시 후 다시 시도해 주세요.',
+    );
     expect(markup.indexOf('로컬 영상 파일')).toBeLessThan(
       markup.indexOf('<legend>처리 방식</legend>'),
     );
@@ -65,6 +71,51 @@ describe('subtitles extract page', () => {
     expect(markup).toMatch(
       /class="subtitle-form">[\s\S]*<\/div><section[^>]*class="worker-health-status/,
     );
+  });
+
+  it('uses the expanded API-failure guidance as the submit description', () => {
+    subtitlesExtractLogic.mockReturnValue({
+      canChangeWhisperModel: true,
+      canSubmit: false,
+      clearSelectedFile: () => undefined,
+      fileInputRef: { current: null },
+      fileFeedbackIsError: false,
+      fileFeedbackMessage: '',
+      filePickerButtonRef: { current: null },
+      handleDropzoneDragOver: () => undefined,
+      handleDropzoneDrop: () => undefined,
+      handleFileInputChange: () => undefined,
+      handleFilePickerOpen: () => undefined,
+      handleSubtitleSubmit: () => undefined,
+      handleWhisperModelChange: () => undefined,
+      retryWorkerHealth: () => undefined,
+      selectedFile: new File(['video'], 'sample-video.mp4', { type: 'video/mp4' }),
+      selectedFileMeta: '5B',
+      selectedWhisperModel: 'base_en',
+      submitDisabledReason: '서버 상태를 확인하지 못해 요청할 수 없습니다.',
+      validation: { kind: 'ready', message: '영어 SRT 생성을 시작할 수 있습니다.' },
+      viewPhase: 'request',
+      workerHealthCheckedAt: Date.parse('2026-08-19T05:32:14.000Z'),
+      workerHealthIsFetching: false,
+      workerHealthStatus: {
+        kind: 'failed',
+        label: '확인 실패',
+        message: 'API 상태를 확인하지 못했습니다. 다시 확인해 주세요.',
+        role: 'alert',
+      },
+    });
+
+    /** API 확인 실패 자막 요청 화면의 정적 HTML. */
+    const markup = renderToStaticMarkup(<SubtitlesExtractPage />);
+
+    expect(markup).toContain('data-health-presentation="expanded"');
+    expect(markup).toContain(
+      'aria-describedby="subtitle-worker-health-title-message"',
+    );
+    expect(markup).not.toContain('class="submit-disabled-reason"');
+    expect(
+      markup.match(/API 상태를 확인하지 못했습니다\. 다시 확인해 주세요\./g),
+    ).toHaveLength(1);
   });
 
   it('exposes one named file picker and keeps file validation beside it', () => {

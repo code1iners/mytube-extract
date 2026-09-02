@@ -91,98 +91,290 @@ async function verifyRequestRoutesDoNotRestore() {
 async function verifyRequestReadinessStatus() {
   /** readiness 상태를 확인할 요청 route. */
   for (const routePath of ['/video', '/subtitles']) {
-    /** route별 독립 browser context. */
-    const context = await createContext();
-    const { page, assertNoRuntimeErrors } = await createPage(context, {
-      ignoreHttpErrors: true,
-    });
-    /** health endpoint가 호출된 횟수. */
-    let healthCalls = 0;
-    /** 최초 health 응답을 해제하는 함수. */
-    let releaseInitialHealth;
-    /** 수동 재확인 응답을 해제하는 함수. */
-    let releaseRefreshHealth;
-    /** 최초 확인을 대기시키는 gate. */
-    const initialHealthGate = new Promise((resolve) => {
-      releaseInitialHealth = resolve;
-    });
-    /** 수동 재확인을 대기시키는 gate. */
-    const refreshHealthGate = new Promise((resolve) => {
-      releaseRefreshHealth = resolve;
-    });
+    /** readiness의 반응형 viewport 폭. */
+    for (const width of [320, 390, 1280]) {
+      /** readiness의 light·dark 테마. */
+      for (const theme of ['light', 'dark']) {
+        /** route·viewport·theme 조합별 독립 browser context. */
+        const context = await createContext({
+          viewport: { height: width <= 820 ? 844 : 900, width },
+        });
+        /** route readiness를 확인할 browser page. */
+        const { page, assertNoRuntimeErrors } = await createPage(context, {
+          ignoreHttpErrors: true,
+        });
+        /** health endpoint가 호출된 횟수. */
+        let healthCalls = 0;
+        /** readiness가 차단된 동안 발생한 job 제출 요청 횟수. */
+        let submitCalls = 0;
+        /** 최초 health 응답을 해제하는 함수. */
+        let releaseInitialHealth;
+        /** 수동 재확인 응답을 해제하는 함수. */
+        let releaseRefreshHealth;
+        /** 최초 확인을 대기시키는 gate. */
+        const initialHealthGate = new Promise((resolve) => {
+          releaseInitialHealth = resolve;
+        });
+        /** 수동 재확인을 대기시키는 gate. */
+        const refreshHealthGate = new Promise((resolve) => {
+          releaseRefreshHealth = resolve;
+        });
 
-    try {
-      await routeApi(page, async ({ route, url }) => {
-        if (url.pathname !== '/health') {
-          return fulfillJson(route, {}, 404);
+        try {
+          await page.addInitScript((preference) => {
+            localStorage.setItem(
+              'mytube-extract-theme-preference',
+              preference,
+            );
+          }, theme);
+          await routeApi(page, async ({ request, route, url }) => {
+            if (
+              url.pathname ===
+                (routePath === '/video'
+                  ? '/downloads'
+                  : '/subtitles/uploads') &&
+              request.method() === 'POST'
+            ) {
+              submitCalls += 1;
+            }
+
+            if (url.pathname !== '/health') {
+              return fulfillJson(route, {}, 404);
+            }
+
+            healthCalls += 1;
+            if (healthCalls === 1) {
+              await initialHealthGate;
+              return fulfillJson(route, healthResponse());
+            }
+
+            if (healthCalls === 2) {
+              await refreshHealthGate;
+              return fulfillJson(route, healthResponse());
+            }
+
+            if (healthCalls === 3) {
+              return fulfillJson(route, healthResponse(false));
+            }
+
+            return fulfillJson(route, {}, 503);
+          });
+
+          await page.goto(staticServer.origin + routePath);
+          await page
+            .getByRole('heading', { name: '서버 연결·worker 준비 상태' })
+            .waitFor();
+          await page.getByText('확인 중', { exact: true }).waitFor();
+          if (routePath === '/video') {
+            await page
+              .getByLabel('YouTube URL')
+              .fill('https://youtu.be/abc123_DEF0');
+          } else {
+            await page.locator('input[type="file"]').setInputFiles({
+              buffer: Buffer.from('fake-video'),
+              mimeType: 'video/mp4',
+              name: 'sample.mp4',
+            });
+          }
+
+          /** readiness 확인 중 상태에서 제출할 수 없는 button. */
+          const submitButton = page.locator('.primary-button').first();
+          /** route별 health 상태 설명 id. */
+          const workerHealthMessageId =
+            routePath === '/video'
+              ? 'video-worker-health-title-message'
+              : 'subtitle-worker-health-title-message';
+          assert.equal(
+            await page.evaluate(
+              () => document.documentElement.dataset.theme,
+            ),
+            theme,
+          );
+          assert.equal(healthCalls, 1);
+          assert.equal(await submitButton.isDisabled(), true);
+          assert.equal(
+            await page.locator('[data-health-presentation="compact"]').count(),
+            1,
+          );
+          assert.equal(
+            await page.locator('.worker-health-status__last-checked').count(),
+            0,
+          );
+          assert.equal(
+            await page.getByRole('button', {
+              name: '서버와 worker 상태 다시 확인',
+            }).isDisabled(),
+            true,
+          );
+          assert.equal(
+            await submitButton.getAttribute('aria-describedby'),
+            workerHealthMessageId,
+          );
+          assert.equal(await page.locator('.submit-disabled-reason').count(), 0);
+          assert.match(
+            await page.locator('.worker-health-status__message').textContent(),
+            /서버 연결과 worker 준비 상태를 확인하고 있습니다/,
+          );
+          assert.equal(submitCalls, 0);
+          await assertRequestReadinessLayout(page, width);
+
+          releaseInitialHealth();
+          await page.getByText('준비됨', { exact: true }).waitFor();
+          assert.equal(
+            await page.locator('[data-health-presentation="compact"]').count(),
+            1,
+          );
+          assert.equal(await submitButton.isDisabled(), false);
+          assert.equal(
+            await page.locator('.worker-health-status__last-checked').count(),
+            1,
+          );
+          await assertRequestReadinessLayout(page, width);
+
+          /** readiness 상태를 수동으로 다시 확인하는 button. */
+          const refreshButton = page.getByRole('button', {
+            name: '서버와 worker 상태 다시 확인',
+          });
+          await refreshButton.focus();
+          assert.equal(
+            await refreshButton.evaluate(
+              (element) => document.activeElement === element,
+            ),
+            true,
+          );
+          assert.equal(
+            await refreshButton.evaluate((element) =>
+              element.matches(':focus-visible'),
+            ),
+            true,
+          );
+          await page.keyboard.press('Enter');
+          await waitForCondition(async () => healthCalls === 2);
+          await waitForCondition(async () => refreshButton.isDisabled());
+          await refreshButton.dispatchEvent('click');
+          await refreshButton.dispatchEvent('click');
+          assert.equal(healthCalls, 2);
+          releaseRefreshHealth();
+          await page.getByText('준비됨', { exact: true }).waitFor();
+          assert.equal(healthCalls, 2);
+
+          await refreshButton.click();
+          await page.getByText('worker 중단', { exact: true }).waitFor();
+          assert.equal(
+            await page.locator('[data-health-presentation="expanded"]').count(),
+            1,
+          );
+          assert.equal(
+            await page.locator('.worker-health-status__last-checked').count(),
+            0,
+          );
+          assert.equal(await submitButton.isDisabled(), true);
+          assert.equal(await page.locator('.submit-disabled-reason').count(), 0);
+          assert.equal(
+            await submitButton.getAttribute('aria-describedby'),
+            workerHealthMessageId,
+          );
+          assert.match(
+            await page.locator('.worker-health-status__message').textContent(),
+            /API는 응답했지만 worker가 작업을 받을 수 없습니다/,
+          );
+          assert.equal(submitCalls, 0);
+          await assertRequestReadinessLayout(page, width);
+
+          await refreshButton.click();
+          await page.getByText('확인 실패', { exact: true }).waitFor();
+          assert.equal(
+            await page.locator('[data-health-presentation="expanded"]').count(),
+            1,
+          );
+          assert.equal(
+            await page.locator('.worker-health-status__last-checked').count(),
+            0,
+          );
+          assert.equal(await submitButton.isDisabled(), true);
+          assert.equal(await page.locator('.submit-disabled-reason').count(), 0);
+          assert.equal(
+            await submitButton.getAttribute('aria-describedby'),
+            workerHealthMessageId,
+          );
+          assert.match(
+            await page.locator('.worker-health-status__message').textContent(),
+            /API 상태를 확인하지 못했습니다\. 다시 확인해 주세요\./,
+          );
+          assert.equal(submitCalls, 0);
+          await assertRequestReadinessLayout(page, width);
+          assertNoRuntimeErrors();
+        } finally {
+          await context.close();
         }
-
-        healthCalls += 1;
-        if (healthCalls === 1) {
-          await initialHealthGate;
-          return fulfillJson(route, healthResponse());
-        }
-
-        if (healthCalls === 2) {
-          await refreshHealthGate;
-          return fulfillJson(route, healthResponse());
-        }
-
-        if (healthCalls === 3) {
-          return fulfillJson(route, healthResponse(false));
-        }
-
-        return fulfillJson(route, {}, 503);
-      });
-
-      await page.goto(staticServer.origin + routePath);
-      await page.getByRole('heading', { name: '서버 연결·worker 준비 상태' }).waitFor();
-      await page.getByText('확인 중', { exact: true }).waitFor();
-      assert.equal(healthCalls, 1);
-      assert.equal(
-        await page.getByRole('button', {
-          name: '서버와 worker 상태 다시 확인',
-        }).isDisabled(),
-        true,
-      );
-      assert.match(
-        await page.locator('.submit-disabled-reason').innerText(),
-        /서버 연결과 worker 준비 상태를 확인하는 동안 요청할 수 없습니다/,
-      );
-
-      releaseInitialHealth();
-      await page.getByText('준비됨', { exact: true }).waitFor();
-      await page.getByText('마지막 확인:', { exact: false }).waitFor();
-      /** readiness 상태를 수동으로 다시 확인하는 버튼. */
-      const refreshButton = page.getByRole('button', {
-        name: '서버와 worker 상태 다시 확인',
-      });
-      assert.equal(await refreshButton.isDisabled(), false);
-
-      await refreshButton.dispatchEvent('click');
-      await refreshButton.dispatchEvent('click');
-      await waitForCondition(async () => healthCalls === 2);
-      releaseRefreshHealth();
-      await page.getByText('준비됨', { exact: true }).waitFor();
-      assert.equal(healthCalls, 2);
-
-      await refreshButton.click();
-      await page.getByText('worker 중단', { exact: true }).waitFor();
-      assert.match(
-        await page.locator('.submit-disabled-reason').innerText(),
-        /worker가 준비되지 않아 요청할 수 없습니다/,
-      );
-
-      await refreshButton.click();
-      await page.getByText('확인 실패', { exact: true }).waitFor();
-      assert.match(
-        await page.locator('.submit-disabled-reason').innerText(),
-        /서버 상태를 확인하지 못해 요청할 수 없습니다/,
-      );
-      assertNoRuntimeErrors();
-    } finally {
-      await context.close();
+      }
     }
+  }
+}
+
+/** readiness 상태가 viewport와 fixed 내비게이션 경계를 지키는지 확인한다. */
+async function assertRequestReadinessLayout(page, width) {
+  /** readiness와 현재 주요 내비게이션의 viewport 측정값. */
+  const metrics = await page.evaluate(() => {
+    /** readiness 보조 영역. */
+    const readiness = document.querySelector('.worker-health-status');
+    /** 현재 viewport에서 보이는 주요 navigation. */
+    const navigation = [...document.querySelectorAll('nav[aria-label="주요 메뉴"]')]
+      .find((element) => getComputedStyle(element).display !== 'none');
+    /** 요소의 viewport 영역을 직렬화한다. */
+    const toBox = (element) => {
+      /** 요소의 viewport 사각형. */
+      const rect = element?.getBoundingClientRect();
+      return rect
+        ? {
+            bottom: rect.bottom,
+            left: rect.left,
+            right: rect.right,
+            top: rect.top,
+          }
+        : null;
+    };
+
+    return {
+      document: {
+        clientWidth: document.documentElement.clientWidth,
+        scrollWidth: document.documentElement.scrollWidth,
+      },
+      navigation: toBox(navigation),
+      readiness: toBox(readiness),
+    };
+  });
+
+  assert.deepEqual(metrics.document, {
+    clientWidth: width,
+    scrollWidth: width,
+  });
+  assert.ok(metrics.readiness);
+  assert.ok(metrics.readiness.left >= 0);
+  assert.ok(metrics.readiness.right <= width);
+  if (width <= 820) {
+    assert.ok(metrics.navigation);
+    /** 문서 끝까지 스크롤했을 때 fixed 내비게이션과 readiness 사이의 여유. */
+    const scrolledMetrics = await page.evaluate(() => {
+      window.scrollTo(0, document.documentElement.scrollHeight);
+
+      /** 스크롤된 readiness 보조 영역. */
+      const readiness = document
+        .querySelector('.worker-health-status')
+        ?.getBoundingClientRect();
+      /** 스크롤된 주요 navigation. */
+      const navigation = [...document.querySelectorAll('nav[aria-label="주요 메뉴"]')]
+        .find((element) => getComputedStyle(element).display !== 'none')
+        ?.getBoundingClientRect();
+
+      return {
+        navigationTop: navigation?.top,
+        readinessBottom: readiness?.bottom,
+      };
+    });
+    assert.ok(scrolledMetrics.navigationTop !== undefined);
+    assert.ok(scrolledMetrics.readinessBottom !== undefined);
+    assert.ok(scrolledMetrics.readinessBottom <= scrolledMetrics.navigationTop);
   }
 }
 

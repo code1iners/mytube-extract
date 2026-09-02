@@ -91,7 +91,8 @@ describe('worker health status', () => {
       expected: {
         kind: 'unavailable',
         label: 'worker 중단',
-        message: '현재 추출 서버가 준비되지 않았습니다.',
+        message:
+          'API는 응답했지만 worker가 작업을 받을 수 없습니다. 현재 추출 서버가 준비되지 않았습니다.',
         role: 'alert',
       },
       input: {
@@ -107,7 +108,7 @@ describe('worker health status', () => {
       expected: {
         kind: 'failed',
         label: '확인 실패',
-        message: '서버 상태를 확인할 수 없습니다. 다시 확인해 주세요.',
+        message: 'API 상태를 확인하지 못했습니다. 다시 확인해 주세요.',
         role: 'alert',
       },
       input: {

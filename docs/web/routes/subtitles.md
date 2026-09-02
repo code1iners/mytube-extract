@@ -21,8 +21,8 @@
 ## 상태와 오류
 
 - mount 시 과거 접수증을 읽거나 상태 조회를 시작하지 않는다. 현재 화면에서 새로 접수한 job만 조회한다.
-- 요청 설정 흐름 다음 보조 영역에서 API 연결과 worker 준비 상태를 확인 중·준비됨·worker 중단·확인 실패의 텍스트와 아이콘으로 표시한다. 마지막 확인 시각과 `다시 확인` 동작을 함께 제공하며, 확인 중에는 재확인 요청을 중복 전송하지 않는다.
-- health가 준비되지 않았을 때 제출 버튼 가까이에 비활성화 이유를 표시하고 aria-describedby로 연결한다.
+- 요청 설정 흐름 다음 보조 영역에서 API 연결과 worker 준비 상태를 확인 중·준비됨·worker 중단·확인 실패의 텍스트와 아이콘으로 표시한다. 확인 중·준비됨은 compact status로, API 확인 실패·worker 미가용은 구분된 확장 안내로 표시한다. 정상 상태의 마지막 확인 시각은 보조 메타로만 제공하고 `다시 확인` 동작을 유지하며, 확인 중에는 재확인 요청을 중복 전송하지 않는다.
+- health가 준비되지 않았을 때 제출 button은 readiness live 설명을 `aria-describedby`로 참조하고 CTA 아래에 같은 health 차단 문구를 반복하지 않는다. 파일 validation 안내는 readiness가 정상일 때만 제출 button 가까이에 표시한다.
 - session 생성부터 part upload와 complete 응답까지 주요 navigation의 현재 목적지를 제외한 route와 상단 `설정` 링크의 이동 및 중복 제출을 막는다. 링크는 계속 표시하며 비활성 목적지에는 `aria-disabled="true"`와 잠금 사유를 제공한다.
 - complete 성공 뒤 navigation lock을 해제하고 현재 route에서 공유 정책으로 job을 polling한다.
 - 파일 검증, 413, direct upload, complete 실패 시 접수증을 저장하거나 history로 이동하지 않는다.

@@ -1,6 +1,7 @@
 import { AppIcon, type AppIconName } from './app-icon';
 import {
   formatWorkerHealthCheckedAt,
+  getWorkerHealthStatusMessageId,
   type WorkerHealthStatus,
   type WorkerHealthStatusKind,
 } from '../utils/worker-health-notice.util';
@@ -40,14 +41,26 @@ export function WorkerHealthStatusNotice({
 }: WorkerHealthStatusNoticeProps) {
   /** 상태에 대응하는 아이콘 이름. */
   const iconName = WORKER_HEALTH_STATUS_ICONS[status.kind];
+  /** 장애 상태 안내를 확장해서 표시할지 여부. */
+  const isExpandedStatus =
+    status.kind === 'failed' || status.kind === 'unavailable';
   /** 유효한 마지막 health 확인 시각. */
   const checkedAtDate = createCheckedAtDate(lastCheckedAt);
+  /** 제출 control이 참조할 health 상태 설명 id. */
+  const messageId = getWorkerHealthStatusMessageId(id);
 
   return (
     <section
       aria-busy={isFetching}
       aria-labelledby={id}
-      className={'worker-health-status worker-health-status--' + status.kind}
+      className={
+        'worker-health-status worker-health-status--' +
+        status.kind +
+        (isExpandedStatus
+          ? ' worker-health-status--expanded'
+          : ' worker-health-status--compact')
+      }
+      data-health-presentation={isExpandedStatus ? 'expanded' : 'compact'}
       data-health-status={status.kind}
     >
       <div className="worker-health-status__main">
@@ -60,20 +73,25 @@ export function WorkerHealthStatusNotice({
             aria-atomic="true"
             aria-live={status.role === 'alert' ? 'assertive' : 'polite'}
             className="worker-health-status__message"
+            id={messageId}
             role={status.role}
           >
             <strong>{status.label}</strong>
-            <span>{status.message}</span>
+            <span className={isExpandedStatus ? undefined : 'visually-hidden'}>
+              {status.message}
+            </span>
           </p>
         </div>
       </div>
       <div className="worker-health-status__meta">
-        <p className="worker-health-status__last-checked">
-          마지막 확인:{' '}
-          <time dateTime={checkedAtDate?.toISOString()}>
-            {formatWorkerHealthCheckedAt(lastCheckedAt)}
-          </time>
-        </p>
+        {status.kind === 'ready' ? (
+          <p className="worker-health-status__last-checked">
+            마지막 확인:{' '}
+            <time dateTime={checkedAtDate?.toISOString()}>
+              {formatWorkerHealthCheckedAt(lastCheckedAt)}
+            </time>
+          </p>
+        ) : null}
         <button
           aria-busy={isFetching}
           aria-label="서버와 worker 상태 다시 확인"

@@ -21,8 +21,7 @@ describe('video extract page', () => {
       qualityOptions: [],
       register: () => ({ onChange: () => undefined }),
       retryWorkerHealth: () => undefined,
-      submitDisabledReason:
-        '서버 연결과 worker 준비 상태를 확인하는 동안 요청할 수 없습니다.',
+      submitDisabledReason: 'YouTube URL을 입력해 주세요.',
       validation: { kind: 'empty', message: 'YouTube URL을 입력해 주세요.' },
       viewPhase: 'request',
       workerHealthCheckedAt: Date.parse('2026-08-19T05:32:14.000Z'),
@@ -39,13 +38,12 @@ describe('video extract page', () => {
     const markup = renderToStaticMarkup(<VideoExtractPage />);
 
     expect(markup).toContain('data-health-status="ready"');
+    expect(markup).toContain('data-health-presentation="compact"');
     expect(markup).toContain('role="status"');
     expect(markup).toContain('마지막 확인');
     expect(markup).toContain('다시 확인');
     expect(markup).toContain('aria-describedby="video-submit-disabled-reason"');
-    expect(markup).toContain(
-      '서버 연결과 worker 준비 상태를 확인하는 동안 요청할 수 없습니다.',
-    );
+    expect(markup).toContain('YouTube URL을 입력해 주세요.');
     expect(markup.indexOf('YouTube URL')).toBeLessThan(
       markup.indexOf('<legend>추출 형식</legend>'),
     );
@@ -59,6 +57,43 @@ describe('video extract page', () => {
       markup.indexOf('data-health-status="ready"'),
     );
     expect(markup).not.toContain('url-reset-button');
+  });
+
+  it('uses the expanded API-failure guidance as the submit description', () => {
+    videoExtractLogic.mockReturnValue({
+      canSubmit: false,
+      draft: { mode: 'audio', quality: '320', sourceUrl: 'https://youtu.be/abc123_DEF0' },
+      handleDownloadFormSubmit: () => undefined,
+      handleModeChange: () => undefined,
+      handleSourceUrlReset: () => undefined,
+      qualityOptions: [],
+      register: () => ({ onChange: () => undefined }),
+      retryWorkerHealth: () => undefined,
+      submitDisabledReason: '서버 상태를 확인하지 못해 요청할 수 없습니다.',
+      validation: { kind: 'ready', message: '' },
+      viewPhase: 'request',
+      workerHealthCheckedAt: Date.parse('2026-08-19T05:32:14.000Z'),
+      workerHealthIsFetching: false,
+      workerHealthStatus: {
+        kind: 'failed',
+        label: '확인 실패',
+        message: 'API 상태를 확인하지 못했습니다. 다시 확인해 주세요.',
+        role: 'alert',
+      },
+    });
+
+    /** API 확인 실패 요청 화면의 정적 HTML. */
+    const markup = renderToStaticMarkup(<VideoExtractPage />);
+
+    expect(markup).toContain('data-health-presentation="expanded"');
+    expect(markup).toContain(
+      'aria-describedby="video-worker-health-title-message"',
+    );
+    expect(markup).toContain('API 상태를 확인하지 못했습니다. 다시 확인해 주세요.');
+    expect(markup).not.toContain('class="submit-disabled-reason"');
+    expect(
+      markup.match(/API 상태를 확인하지 못했습니다\. 다시 확인해 주세요\./g),
+    ).toHaveLength(1);
   });
 
   it('shows the URL reset control only when a URL has been entered', () => {

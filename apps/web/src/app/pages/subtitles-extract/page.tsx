@@ -1,6 +1,7 @@
 import { ErrorDetailsDisclosure } from '../../components/error-details-disclosure';
 import { AppIcon, type AppIconName } from '../../components/app-icon';
 import { WorkerHealthStatusNotice } from '../../components/worker-health-status';
+import { getWorkerHealthStatusMessageId } from '../../utils/worker-health-notice.util';
 import { type SubtitleStepKey, useSubtitlesExtractLogic } from './_hooks/use-subtitles-extract-logic';
 
 /** 처리 화면에서 표시할 자막 단계. */
@@ -43,6 +44,12 @@ const SUBTITLE_ERROR_DETAIL_SUMMARY =
 const SUBTITLE_FILE_PICKER_LABEL = '영상 선택 또는 드래그 (로컬 영상 파일)';
 /** 자막 파일 검증 안내를 연결할 id. */
 const SUBTITLE_FILE_FEEDBACK_ID = 'subtitle-file-feedback';
+/** 자막 route worker health 제목 id. */
+const SUBTITLE_WORKER_HEALTH_TITLE_ID = 'subtitle-worker-health-title';
+/** 자막 route worker health 설명 id. */
+const SUBTITLE_WORKER_HEALTH_MESSAGE_ID = getWorkerHealthStatusMessageId(
+  SUBTITLE_WORKER_HEALTH_TITLE_ID,
+);
 
 /** 자막 추출 route page. */
 export function SubtitlesExtractPage() {
@@ -61,6 +68,9 @@ export function SubtitlesExtractPage() {
   } = useSubtitlesExtractLogic();
 
   if (viewPhase === 'request') {
+    /** readiness 상태가 제출을 막고 있는지 여부. */
+    const workerHealthBlocksSubmit = workerHealthStatus.kind !== 'ready';
+
     return <section className="phase-panel subtitle-request-panel" aria-labelledby="subtitles-title">
       <PanelTitle icon="subtitle" id="subtitles-title">영어 SRT 생성</PanelTitle>
       <div className="subtitle-form">
@@ -136,9 +146,11 @@ export function SubtitlesExtractPage() {
         </fieldset>
         <button
           aria-describedby={
-            !canSubmit && submitDisabledReason
-              ? 'subtitle-submit-disabled-reason'
-              : undefined
+            workerHealthBlocksSubmit
+              ? SUBTITLE_WORKER_HEALTH_MESSAGE_ID
+              : !canSubmit && submitDisabledReason
+                ? 'subtitle-submit-disabled-reason'
+                : undefined
           }
           className="primary-button"
           disabled={!canSubmit}
@@ -148,14 +160,14 @@ export function SubtitlesExtractPage() {
           <AppIcon name="subtitle" />
           {isSubtitlePending ? '요청 중' : '영어 SRT 생성'}
         </button>
-        {!canSubmit && submitDisabledReason ? (
+        {!canSubmit && submitDisabledReason && !workerHealthBlocksSubmit ? (
           <p className="submit-disabled-reason" id="subtitle-submit-disabled-reason">
             {submitDisabledReason}
           </p>
         ) : null}
       </div>
       <WorkerHealthStatusNotice
-        id="subtitle-worker-health-title"
+        id={SUBTITLE_WORKER_HEALTH_TITLE_ID}
         isFetching={workerHealthIsFetching}
         lastCheckedAt={workerHealthCheckedAt}
         status={workerHealthStatus}

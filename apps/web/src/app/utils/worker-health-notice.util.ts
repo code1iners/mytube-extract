@@ -20,6 +20,11 @@ export type WorkerHealthStatus = {
   role: WorkerHealthNoticeRole;
 };
 
+/** worker health 상태 설명을 가리킬 id를 만든다. */
+export function getWorkerHealthStatusMessageId(headingId: string) {
+  return `${headingId}-message`;
+}
+
 /** worker health 상태 표시값을 만드는 입력. */
 export type WorkerHealthStatusInput = {
   /** API process가 정상이라고 응답했는지 여부. */
@@ -51,7 +56,7 @@ export function getWorkerHealthStatus(
     return {
       kind: 'failed',
       label: '확인 실패',
-      message: '서버 상태를 확인할 수 없습니다. 다시 확인해 주세요.',
+      message: 'API 상태를 확인하지 못했습니다. 다시 확인해 주세요.',
       role: 'alert',
     };
   }
@@ -60,7 +65,7 @@ export function getWorkerHealthStatus(
     return {
       kind: 'unavailable',
       label: 'worker 중단',
-      message: input.unavailableMessage,
+      message: `API는 응답했지만 worker가 작업을 받을 수 없습니다. ${input.unavailableMessage}`,
       role: 'alert',
     };
   }
