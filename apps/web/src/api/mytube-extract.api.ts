@@ -685,11 +685,11 @@ export function buildApiUrl(path: string, apiBaseUrl = DEFAULT_API_BASE_URL) {
   return `${normalizedApiBaseUrl}/${normalizedPath}`;
 }
 
-/** worker 사용 가능 여부를 검증한다. */
+/** API와 worker가 모두 요청을 받을 수 있는지 검증한다. */
 export function assertWorkerAvailable(
   health: WorkerHealthResponse | undefined,
 ) {
-  if (health?.worker?.available !== true) {
+  if (health?.ok !== true || health.worker?.available !== true) {
     throw new WorkerUnavailableError();
   }
 }

@@ -677,6 +677,118 @@ input:focus-visible,
   word-break: keep-all;
 }
 
+.worker-health-status {
+  display: grid;
+  gap: 12px;
+  padding: 16px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-alt);
+}
+
+.worker-health-status__main {
+  display: grid;
+  align-items: start;
+  gap: 12px;
+  grid-template-columns: 40px minmax(0, 1fr);
+}
+
+.worker-health-status__icon {
+  display: grid;
+  width: 40px;
+  height: 40px;
+  place-items: center;
+  border: 1px solid var(--color-status-processing);
+  border-radius: var(--radius-full);
+  color: var(--color-status-processing);
+}
+
+.worker-health-status__icon .app-icon {
+  width: 22px;
+  height: 22px;
+}
+
+.worker-health-status h3 {
+  margin: 0;
+  color: var(--color-text-primary);
+  font-size: 16px;
+  font-weight: 600;
+  line-height: 1.4;
+}
+
+.worker-health-status__message {
+  display: grid;
+  gap: 4px;
+  margin: 4px 0 0;
+  color: var(--color-text-secondary);
+  font-size: 14px;
+  line-height: 1.4;
+  word-break: keep-all;
+}
+
+.worker-health-status__message strong {
+  color: var(--color-status-processing);
+  font-weight: 600;
+}
+
+.worker-health-status--ready .worker-health-status__icon {
+  border-color: var(--color-status-completed);
+}
+
+.worker-health-status--ready .worker-health-status__message strong {
+  color: var(--color-status-completed);
+}
+
+.worker-health-status--unavailable .worker-health-status__icon,
+.worker-health-status--failed .worker-health-status__icon {
+  border-color: var(--color-status-failed);
+}
+
+.worker-health-status--unavailable .worker-health-status__message strong,
+.worker-health-status--failed .worker-health-status__message strong {
+  color: var(--color-status-failed);
+}
+
+.worker-health-status__meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 12px;
+}
+
+.worker-health-status__last-checked {
+  margin: 0;
+  color: var(--color-text-secondary);
+  font-size: 14px;
+  line-height: 1.4;
+}
+
+.worker-health-status__last-checked time {
+  color: var(--color-text-primary);
+  font-weight: 600;
+}
+
+.worker-health-status__retry {
+  min-height: 44px;
+  gap: 8px;
+  padding: 0 12px;
+  font-size: 14px;
+}
+
+.worker-health-status__retry .app-icon {
+  width: 18px;
+  height: 18px;
+}
+
+.submit-disabled-reason {
+  margin: -12px 0 0;
+  color: var(--color-text-secondary);
+  font-size: 14px;
+  line-height: 1.4;
+  word-break: keep-all;
+}
+
 .status-panel {
   display: grid;
   gap: 18px;

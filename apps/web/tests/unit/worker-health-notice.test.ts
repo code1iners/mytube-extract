@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { getWorkerHealthNotice } from '../../src/app/utils/worker-health-notice.util';
+import {
+  formatWorkerHealthCheckedAt,
+  getWorkerHealthNotice,
+  getWorkerHealthStatus,
+  getWorkerHealthSubmitReason,
+} from '../../src/app/utils/worker-health-notice.util';
 
 describe('worker health notice', () => {
   it('shows a quiet status while the first health check is pending', () => {
@@ -45,5 +50,140 @@ describe('worker health notice', () => {
         unavailableMessage: '현재 추출 서버가 준비되지 않았습니다.',
       }),
     ).toBeNull();
+  });
+});
+
+describe('worker health status', () => {
+  it.each([
+    {
+      expected: {
+        kind: 'checking',
+        label: '확인 중',
+        message: '서버 연결과 worker 준비 상태를 확인하고 있습니다.',
+        role: 'status',
+      },
+      input: {
+        apiReady: undefined,
+        hasError: false,
+        isFetching: true,
+        unavailableMessage: '현재 추출 서버가 준비되지 않았습니다.',
+        workerAvailable: undefined,
+      },
+      name: 'checking',
+    },
+    {
+      expected: {
+        kind: 'ready',
+        label: '준비됨',
+        message: '서버 연결됨 · worker가 작업을 받을 준비가 되었습니다.',
+        role: 'status',
+      },
+      input: {
+        apiReady: true,
+        hasError: false,
+        isFetching: false,
+        unavailableMessage: '현재 추출 서버가 준비되지 않았습니다.',
+        workerAvailable: true,
+      },
+      name: 'ready',
+    },
+    {
+      expected: {
+        kind: 'unavailable',
+        label: 'worker 중단',
+        message: '현재 추출 서버가 준비되지 않았습니다.',
+        role: 'alert',
+      },
+      input: {
+        apiReady: true,
+        hasError: false,
+        isFetching: false,
+        unavailableMessage: '현재 추출 서버가 준비되지 않았습니다.',
+        workerAvailable: false,
+      },
+      name: 'worker unavailable',
+    },
+    {
+      expected: {
+        kind: 'failed',
+        label: '확인 실패',
+        message: '서버 상태를 확인할 수 없습니다. 다시 확인해 주세요.',
+        role: 'alert',
+      },
+      input: {
+        apiReady: undefined,
+        hasError: true,
+        isFetching: false,
+        unavailableMessage: '현재 추출 서버가 준비되지 않았습니다.',
+        workerAvailable: undefined,
+      },
+      name: 'check failed',
+    },
+  ])('exposes the $name state with text and an assistive role', ({ expected, input }) => {
+    expect(getWorkerHealthStatus(input)).toEqual(expected);
+  });
+
+  it('shows checking while a refresh is fetching even when the previous result was ready', () => {
+    expect(
+      getWorkerHealthStatus({
+        apiReady: true,
+        hasError: false,
+        isFetching: true,
+        unavailableMessage: '현재 추출 서버가 준비되지 않았습니다.',
+        workerAvailable: true,
+      }).kind,
+    ).toBe('checking');
+  });
+
+  it('treats an unhealthy API response as a failed status', () => {
+    expect(
+      getWorkerHealthStatus({
+        apiReady: false,
+        hasError: false,
+        isFetching: false,
+        unavailableMessage: '현재 추출 서버가 준비되지 않았습니다.',
+        workerAvailable: true,
+      }).kind,
+    ).toBe('failed');
+  });
+});
+
+describe('worker health submit reason', () => {
+  it.each([
+    ['checking', '서버 연결과 worker 준비 상태를 확인하는 동안 요청할 수 없습니다.'],
+    ['unavailable', 'worker가 준비되지 않아 요청할 수 없습니다.'],
+    ['failed', '서버 상태를 확인하지 못해 요청할 수 없습니다.'],
+  ] as const)('explains why the %s state blocks submit', (kind, expected) => {
+    expect(
+      getWorkerHealthSubmitReason({
+        healthStatus: kind,
+        isSubmitting: false,
+        validationMessage: 'YouTube URL을 입력해 주세요.',
+        validationReady: true,
+      }),
+    ).toBe(expected);
+  });
+
+  it('uses the input validation message when the service is ready', () => {
+    expect(
+      getWorkerHealthSubmitReason({
+        healthStatus: 'ready',
+        isSubmitting: false,
+        validationMessage: 'YouTube URL을 입력해 주세요.',
+        validationReady: false,
+      }),
+    ).toBe('YouTube URL을 입력해 주세요.');
+  });
+});
+
+describe('formatWorkerHealthCheckedAt', () => {
+  it('formats a health response timestamp for the last-check label', () => {
+    expect(formatWorkerHealthCheckedAt(Date.parse('2026-08-19T05:32:14.000Z'))).toMatch(
+      /^(오전|오후) \d{2}:\d{2}:\d{2}$/,
+    );
+  });
+
+  it('uses a pre-check label before the first response', () => {
+    expect(formatWorkerHealthCheckedAt(0)).toBe('확인 전');
   });
 });

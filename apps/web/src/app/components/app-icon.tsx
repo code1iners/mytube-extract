@@ -11,6 +11,7 @@ export type AppIconName =
   | 'newRequest'
   | 'processing'
   | 'queued'
+  | 'server'
   | 'settings'
   | 'subtitle'
   | 'video';
@@ -176,6 +177,16 @@ function renderAppIcon(name: AppIconName) {
         <path d="M20 5v4h-4" />
         <path d="M20 12a8 8 0 0 1-13.66 5.66L4 15" />
         <path d="M4 19v-4h4" />
+      </>
+    );
+  }
+
+  if (name === 'server') {
+    return (
+      <>
+        <rect height="6" rx="1.5" width="16" x="4" y="4" />
+        <rect height="6" rx="1.5" width="16" x="4" y="14" />
+        <path d="M8 7h.01M8 17h.01M12 7h5M12 17h5" />
       </>
     );
   }

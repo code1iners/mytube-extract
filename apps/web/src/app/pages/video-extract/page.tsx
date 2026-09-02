@@ -1,6 +1,7 @@
 import { type DownloadDisplayStatus } from '../../../domain/download-request/download-request';
 import { ErrorDetailsDisclosure } from '../../components/error-details-disclosure';
 import { AppIcon, type AppIconName } from '../../components/app-icon';
+import { WorkerHealthStatusNotice } from '../../components/worker-health-status';
 import { useVideoExtractLogic } from './_hooks/use-video-extract-logic';
 
 /** 처리 화면에서 표시할 영상 추출 단계. */
@@ -41,7 +42,6 @@ export function VideoExtractPage() {
     qualityOptions,
     register,
     retryWorkerHealth,
-    requestAvailabilityNotice,
     returnToRequest,
     statusErrorDetail,
     statusIconName,
@@ -51,10 +51,13 @@ export function VideoExtractPage() {
     statusTitle,
     statusTone,
     statusTypeLabel,
+    submitDisabledReason,
     validation,
     viewPhase,
     workerHealthFailed,
+    workerHealthCheckedAt,
     workerHealthIsFetching,
+    workerHealthStatus,
   } = useVideoExtractLogic();
 
   if (viewPhase === 'request') {
@@ -63,6 +66,13 @@ export function VideoExtractPage() {
         <PanelTitle icon="download" id="request-title">추출 요청</PanelTitle>
 
         <form className="download-form" onSubmit={handleDownloadFormSubmit}>
+          <WorkerHealthStatusNotice
+            id="video-worker-health-title"
+            isFetching={workerHealthIsFetching}
+            lastCheckedAt={workerHealthCheckedAt}
+            status={workerHealthStatus}
+            onRetry={retryWorkerHealth}
+          />
           <label className={validation.kind === 'invalid' ? 'field field--wide has-error' : 'field field--wide'}>
             <span className="field-label">YouTube URL</span>
             <span className="url-input-frame">
@@ -111,24 +121,23 @@ export function VideoExtractPage() {
             ))}
           </fieldset>
 
-          <button className="primary-button" disabled={!canSubmit} type="submit">
+          <button
+            aria-describedby={
+              !canSubmit && submitDisabledReason
+                ? 'video-submit-disabled-reason'
+                : undefined
+            }
+            className="primary-button"
+            disabled={!canSubmit}
+            type="submit"
+          >
             <AppIcon name="download" />
             {isDownloadPending ? '요청 중' : '추출 요청'}
           </button>
-
-          {requestAvailabilityNotice ? (
-            <div className="notice-box" role={requestAvailabilityNotice.role}>
-              <span aria-hidden="true"><AppIcon name={requestAvailabilityNotice.role === 'status' ? 'processing' : 'failed'} /></span>
-              <p>{requestAvailabilityNotice.message}</p>
-              {requestAvailabilityNotice.showRetry ? <button
-                className="secondary-button secondary-button--compact"
-                disabled={workerHealthIsFetching}
-                type="button"
-                onClick={retryWorkerHealth}
-              >
-                다시 확인
-              </button> : null}
-            </div>
+          {!canSubmit && submitDisabledReason ? (
+            <p className="submit-disabled-reason" id="video-submit-disabled-reason">
+              {submitDisabledReason}
+            </p>
           ) : null}
         </form>
       </section>

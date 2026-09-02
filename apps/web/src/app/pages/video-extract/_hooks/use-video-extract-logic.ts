@@ -35,7 +35,10 @@ import {
   getRequestPreferences,
   setDownloadPreferences,
 } from '../../../utils/request-preference.util';
-import { getWorkerHealthNotice } from '../../../utils/worker-health-notice.util';
+import {
+  getWorkerHealthStatus,
+  getWorkerHealthSubmitReason,
+} from '../../../utils/worker-health-notice.util';
 
 /** worker 미가용 안내 문구. */
 const WORKER_UNAVAILABLE_MESSAGE =
@@ -68,6 +71,8 @@ export function useVideoExtractLogic() {
 
   /** 요청 실패 메시지. */
   const [requestError, setRequestError] = useState('');
+  /** 마지막 worker health 확인 시작 시각(epoch milliseconds). */
+  const [workerHealthCheckedAt, setWorkerHealthCheckedAt] = useState(0);
   /** 이 화면에서 상태를 확인할 직전 접수 job. */
   const [activeJob, setActiveJob] = useState<DownloadResponse | null>(null);
   /** 현재 화면에서 조회할 영상 job 접수증. */
@@ -111,7 +116,9 @@ export function useVideoExtractLogic() {
       signal: AbortSignal;
     }) => {
       /** submit 직전 최신 worker health. */
-      const workerHealth = await workerHealthQuery.refetch();
+      const workerHealth = await workerHealthQuery.refetch({
+        cancelRefetch: false,
+      });
 
       if (workerHealth.error) {
         throw workerHealth.error;
@@ -152,14 +159,13 @@ export function useVideoExtractLogic() {
   const workerUnavailable = workerHealthQuery.data?.worker?.available === false;
   /** worker health 확인에 실패했는지 여부. */
   const workerHealthFailed = workerHealthQuery.isError;
-  /** worker health 확인 중인지 여부. */
-  const workerHealthChecking = workerHealthQuery.isPending;
-  /** 요청 설정 화면에 표시할 worker health 안내. */
-  const requestAvailabilityNotice = getWorkerHealthNotice({
-    failed: workerHealthFailed,
-    pending: workerHealthChecking,
-    unavailable: workerUnavailable,
+  /** 요청 설정 화면에 표시할 worker health 상태. */
+  const workerHealthStatus = getWorkerHealthStatus({
+    apiReady: workerHealthQuery.data?.ok,
+    hasError: workerHealthFailed,
+    isFetching: workerHealthQuery.isFetching,
     unavailableMessage: WORKER_UNAVAILABLE_MESSAGE,
+    workerAvailable: workerHealthQuery.data?.worker?.available,
   });
   /** API job 생성 전 요청 처리 중인지 여부. */
   const isSubmitting = downloadJobMutation.isPending;
@@ -201,7 +207,15 @@ export function useVideoExtractLogic() {
     validation.kind === 'ready' &&
     isValid &&
     !downloadJobMutation.isPending &&
-    workerHealthQuery.data?.worker?.available === true;
+    workerHealthStatus.kind === 'ready';
+  /** 제출 버튼이 비활성화된 이유. */
+  const submitDisabledReason = getWorkerHealthSubmitReason({
+    healthStatus: workerHealthStatus.kind,
+    isSubmitting,
+    validationMessage:
+      validation.kind === 'ready' ? '입력값을 확인해 주세요.' : validation.message,
+    validationReady: validation.kind === 'ready' && isValid,
+  });
   /** 10칸 진행률 bar 중 채울 칸 수. */
   const filledProgressCells =
     statusJob.progress === null ? 0 : Math.round(statusJob.progress / 10);
@@ -222,7 +236,9 @@ export function useVideoExtractLogic() {
     (isSubmitting ? '추출 서버 상태를 확인하고 작업을 생성 중입니다.' : '') ||
     requestError ||
     jobStatusRequestErrorDetail?.guidance ||
-    (workerHealthAffectsView ? requestAvailabilityNotice?.message : '') ||
+    (workerHealthAffectsView && workerHealthStatus.kind !== 'ready'
+      ? workerHealthStatus.message
+      : '') ||
     statusJob.message ||
     validation.message;
   /** 요청 시작 시각 표시값. */
@@ -283,7 +299,11 @@ export function useVideoExtractLogic() {
 
   /** worker health를 다시 확인한다. */
   function retryWorkerHealth() {
-    void workerHealthQuery.refetch();
+    if (workerHealthQuery.isFetching) {
+      return;
+    }
+
+    void workerHealthQuery.refetch({ cancelRefetch: false });
   }
 
   /** 요청 오류에서 기존 입력을 유지한 채 요청 화면으로 돌아간다. */
@@ -304,6 +324,15 @@ export function useVideoExtractLogic() {
       };
     },
     [setNavigationLocked],
+  );
+
+  useEffect(
+    function recordWorkerHealthCheckTimestamp() {
+      if (workerHealthQuery.isFetching) {
+        setWorkerHealthCheckedAt(Date.now());
+      }
+    },
+    [workerHealthQuery.isFetching],
   );
 
   useEffect(
@@ -393,7 +422,6 @@ export function useVideoExtractLogic() {
     progressLabel,
     qualityOptions,
     register,
-    requestAvailabilityNotice,
     retryWorkerHealth,
     statusErrorDetail,
     statusIconName,
@@ -403,11 +431,14 @@ export function useVideoExtractLogic() {
     statusTitle,
     statusTone,
     statusTypeLabel,
+    submitDisabledReason,
     returnToRequest,
     validation,
     viewPhase,
     workerHealthFailed: workerHealthAffectsView && workerHealthFailed,
+    workerHealthCheckedAt,
     workerHealthIsFetching: workerHealthQuery.isFetching,
+    workerHealthStatus,
   };
 }
 

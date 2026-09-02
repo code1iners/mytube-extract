@@ -120,6 +120,15 @@ describe('mytube extract api client', () => {
     ).toThrow(WorkerUnavailableError);
   });
 
+  it('throws when the API reports an unhealthy process even if worker is available', () => {
+    expect(() =>
+      assertWorkerAvailable({
+        ok: false,
+        worker: { available: true },
+      }),
+    ).toThrow(WorkerUnavailableError);
+  });
+
   it('throws when worker health is missing', () => {
     expect(() => assertWorkerAvailable(undefined)).toThrow(
       WorkerUnavailableError,

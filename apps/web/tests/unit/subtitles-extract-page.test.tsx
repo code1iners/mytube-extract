@@ -14,6 +14,50 @@ vi.mock(
 import { SubtitlesExtractPage } from '../../src/app/pages/subtitles-extract/page';
 
 describe('subtitles extract page', () => {
+  it('puts readiness status before file selection and links the disabled reason', () => {
+    subtitlesExtractLogic.mockReturnValue({
+      canChangeWhisperModel: true,
+      canSubmit: false,
+      clearSelectedFile: () => undefined,
+      fileInputRef: { current: null },
+      handleDropzoneDragOver: () => undefined,
+      handleDropzoneDrop: () => undefined,
+      handleFileInputChange: () => undefined,
+      handleFilePickerOpen: () => undefined,
+      handleSubtitleSubmit: () => undefined,
+      handleWhisperModelChange: () => undefined,
+      processingEstimateMessage: '예상 시간은 영상 분석 후 표시됩니다.',
+      retryWorkerHealth: () => undefined,
+      selectedFile: null,
+      selectedFileMeta: '',
+      selectedWhisperModel: 'base_en',
+      submitDisabledReason: 'worker가 준비되지 않아 요청할 수 없습니다.',
+      validation: { kind: 'empty', message: '영상 파일을 선택해 주세요.' },
+      viewPhase: 'request',
+      workerHealthCheckedAt: Date.parse('2026-08-19T05:32:14.000Z'),
+      workerHealthIsFetching: false,
+      workerHealthStatus: {
+        kind: 'unavailable',
+        label: 'worker 중단',
+        message: '현재 자막 추출 서버가 준비되지 않았습니다.',
+        role: 'alert',
+      },
+    });
+
+    /** 요청 화면의 readiness 상태와 제출 안내 마크업. */
+    const markup = renderToStaticMarkup(<SubtitlesExtractPage />);
+
+    expect(markup).toContain('data-health-status="unavailable"');
+    expect(markup).toContain('role="alert"');
+    expect(markup).toContain('마지막 확인');
+    expect(markup).toContain('다시 확인');
+    expect(markup).toContain('aria-describedby="subtitle-submit-disabled-reason"');
+    expect(markup).toContain('worker가 준비되지 않아 요청할 수 없습니다.');
+    expect(markup.indexOf('data-health-status="unavailable"')).toBeLessThan(
+      markup.indexOf('로컬 영상 파일'),
+    );
+  });
+
   it('shows a lightweight acceptance status without processing stages or a progress meter', () => {
     subtitlesExtractLogic.mockReturnValue({
       statusIconName: 'processing',

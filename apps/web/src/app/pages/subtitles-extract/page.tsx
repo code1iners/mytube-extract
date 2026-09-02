@@ -1,5 +1,6 @@
 import { ErrorDetailsDisclosure } from '../../components/error-details-disclosure';
 import { AppIcon, type AppIconName } from '../../components/app-icon';
+import { WorkerHealthStatusNotice } from '../../components/worker-health-status';
 import { type SubtitleStepKey, useSubtitlesExtractLogic } from './_hooks/use-subtitles-extract-logic';
 
 /** 처리 화면에서 표시할 자막 단계. */
@@ -23,15 +24,23 @@ export function SubtitlesExtractPage() {
     canSubmit, canChangeWhisperModel, clearSelectedFile, currentStepKey, downloadHref, fileInputRef,
     filledProgressCells, handleDropzoneDragOver, handleDropzoneDrop, handleFileInputChange,
     handleFilePickerOpen, handleSubtitleSubmit, handleWhisperModelChange, isSubtitlePending,
-    processingEstimateMessage, retryWorkerHealth, requestAvailabilityNotice, returnToRequest, selectedFile, selectedFileMeta,
+    processingEstimateMessage, retryWorkerHealth, returnToRequest, selectedFile, selectedFileMeta,
     selectedWhisperModel, statusErrorDetail, statusIconName, statusJob, statusMessage, statusTitle,
-    statusTone, viewPhase, workerHealthFailed, workerHealthIsFetching,
+    statusTone, submitDisabledReason, viewPhase, workerHealthCheckedAt, workerHealthFailed,
+    workerHealthIsFetching, workerHealthStatus,
   } = useSubtitlesExtractLogic();
 
   if (viewPhase === 'request') {
     return <section className="console-panel phase-panel" aria-labelledby="subtitles-title">
       <PanelTitle icon="subtitle" id="subtitles-title">영어 SRT 생성</PanelTitle>
       <div className="subtitle-form">
+        <WorkerHealthStatusNotice
+          id="subtitle-worker-health-title"
+          isFetching={workerHealthIsFetching}
+          lastCheckedAt={workerHealthCheckedAt}
+          status={workerHealthStatus}
+          onRetry={retryWorkerHealth}
+        />
         <div className="field"><span className="field-label">로컬 영상 파일</span>
           <input accept="video/mp4,video/quicktime,video/webm,.mp4,.mov,.webm" className="subtitle-file-input" ref={fileInputRef} type="file" onChange={handleFileInputChange} />
           <button className="subtitle-dropzone" type="button" onClick={handleFilePickerOpen} onDragOver={handleDropzoneDragOver} onDrop={handleDropzoneDrop}><AppIcon name="subtitle" /><strong>영상 선택 또는 드래그</strong><span>mp4, mov, webm</span></button>
@@ -42,8 +51,25 @@ export function SubtitlesExtractPage() {
           <label className={selectedWhisperModel === 'small_en' ? 'segment is-selected' : 'segment'}><input checked={selectedWhisperModel === 'small_en'} disabled={!canChangeWhisperModel} name="subtitle-whisper-model" type="radio" value="small_en" onChange={handleWhisperModelChange} /><AppIcon name="subtitle" />정확도</label>
         </fieldset>
         <p className="subtitle-estimate">{processingEstimateMessage}</p>
-        <button className="primary-button" disabled={!canSubmit} type="button" onClick={handleSubtitleSubmit}><AppIcon name="subtitle" />{isSubtitlePending ? '요청 중' : '영어 SRT 생성'}</button>
-        {requestAvailabilityNotice ? <div className="notice-box" role={requestAvailabilityNotice.role}><span aria-hidden="true"><AppIcon name={requestAvailabilityNotice.role === 'status' ? 'processing' : 'failed'} /></span><p>{requestAvailabilityNotice.message}</p>{requestAvailabilityNotice.showRetry ? <button className="secondary-button secondary-button--compact" disabled={workerHealthIsFetching} type="button" onClick={retryWorkerHealth}>다시 확인</button> : null}</div> : null}
+        <button
+          aria-describedby={
+            !canSubmit && submitDisabledReason
+              ? 'subtitle-submit-disabled-reason'
+              : undefined
+          }
+          className="primary-button"
+          disabled={!canSubmit}
+          type="button"
+          onClick={handleSubtitleSubmit}
+        >
+          <AppIcon name="subtitle" />
+          {isSubtitlePending ? '요청 중' : '영어 SRT 생성'}
+        </button>
+        {!canSubmit && submitDisabledReason ? (
+          <p className="submit-disabled-reason" id="subtitle-submit-disabled-reason">
+            {submitDisabledReason}
+          </p>
+        ) : null}
       </div>
     </section>;
   }

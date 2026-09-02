@@ -35,6 +35,7 @@ const browser = await chromium.launch();
 
 try {
   await run('request routes do not restore stored jobs', verifyRequestRoutesDoNotRestore);
+  await run('request routes expose worker readiness and guarded refresh', verifyRequestReadinessStatus);
   await run('video in-place success, failure, navigation lock, and download', verifyVideoRequestFlows);
   await run('subtitle in-place success and navigation lock', verifySubtitleRequestFlow);
   await run('active request status errors stay actionable', verifyActiveRequestStatusErrors);
@@ -79,6 +80,105 @@ async function verifyRequestRoutesDoNotRestore() {
     assertNoRuntimeErrors();
   } finally {
     await context.close();
+  }
+}
+
+/** 영상·자막 요청 route의 worker health 네 상태와 재확인을 검증한다. */
+async function verifyRequestReadinessStatus() {
+  /** readiness 상태를 확인할 요청 route. */
+  for (const routePath of ['/video', '/subtitles']) {
+    /** route별 독립 browser context. */
+    const context = await createContext();
+    const { page, assertNoRuntimeErrors } = await createPage(context, {
+      ignoreHttpErrors: true,
+    });
+    /** health endpoint가 호출된 횟수. */
+    let healthCalls = 0;
+    /** 최초 health 응답을 해제하는 함수. */
+    let releaseInitialHealth;
+    /** 수동 재확인 응답을 해제하는 함수. */
+    let releaseRefreshHealth;
+    /** 최초 확인을 대기시키는 gate. */
+    const initialHealthGate = new Promise((resolve) => {
+      releaseInitialHealth = resolve;
+    });
+    /** 수동 재확인을 대기시키는 gate. */
+    const refreshHealthGate = new Promise((resolve) => {
+      releaseRefreshHealth = resolve;
+    });
+
+    try {
+      await routeApi(page, async ({ route, url }) => {
+        if (url.pathname !== '/health') {
+          return fulfillJson(route, {}, 404);
+        }
+
+        healthCalls += 1;
+        if (healthCalls === 1) {
+          await initialHealthGate;
+          return fulfillJson(route, healthResponse());
+        }
+
+        if (healthCalls === 2) {
+          await refreshHealthGate;
+          return fulfillJson(route, healthResponse());
+        }
+
+        if (healthCalls === 3) {
+          return fulfillJson(route, healthResponse(false));
+        }
+
+        return fulfillJson(route, {}, 503);
+      });
+
+      await page.goto(staticServer.origin + routePath);
+      await page.getByRole('heading', { name: '서버 연결·worker 준비 상태' }).waitFor();
+      await page.getByText('확인 중', { exact: true }).waitFor();
+      assert.equal(healthCalls, 1);
+      assert.equal(
+        await page.getByRole('button', {
+          name: '서버와 worker 상태 다시 확인',
+        }).isDisabled(),
+        true,
+      );
+      assert.match(
+        await page.locator('.submit-disabled-reason').innerText(),
+        /서버 연결과 worker 준비 상태를 확인하는 동안 요청할 수 없습니다/,
+      );
+
+      releaseInitialHealth();
+      await page.getByText('준비됨', { exact: true }).waitFor();
+      await page.getByText('마지막 확인:', { exact: false }).waitFor();
+      /** readiness 상태를 수동으로 다시 확인하는 버튼. */
+      const refreshButton = page.getByRole('button', {
+        name: '서버와 worker 상태 다시 확인',
+      });
+      assert.equal(await refreshButton.isDisabled(), false);
+
+      await refreshButton.dispatchEvent('click');
+      await refreshButton.dispatchEvent('click');
+      await waitForCondition(async () => healthCalls === 2);
+      releaseRefreshHealth();
+      await page.getByText('준비됨', { exact: true }).waitFor();
+      assert.equal(healthCalls, 2);
+
+      await refreshButton.click();
+      await page.getByText('worker 중단', { exact: true }).waitFor();
+      assert.match(
+        await page.locator('.submit-disabled-reason').innerText(),
+        /worker가 준비되지 않아 요청할 수 없습니다/,
+      );
+
+      await refreshButton.click();
+      await page.getByText('확인 실패', { exact: true }).waitFor();
+      assert.match(
+        await page.locator('.submit-disabled-reason').innerText(),
+        /서버 상태를 확인하지 못해 요청할 수 없습니다/,
+      );
+      assertNoRuntimeErrors();
+    } finally {
+      await context.close();
+    }
   }
 }
 
@@ -144,6 +244,7 @@ async function verifyVideoRequestFlows() {
     releaseCreate();
     assert.equal(new URL(page.url()).pathname, '/video');
     await page.getByRole('heading', { name: '추출 완료' }).waitFor();
+    assert.equal(await page.locator('.worker-health-status').count(), 0);
     const storedReceipt = await page.evaluate(
       (key) => JSON.parse(localStorage.getItem(key) ?? 'null'),
       receiptKey('video', VIDEO_ID),
@@ -262,6 +363,7 @@ async function verifySubtitleRequestFlow() {
     releaseUpload();
     await page.getByRole('heading', { name: 'SRT 준비 완료' }).waitFor();
     assert.equal(new URL(page.url()).pathname, '/subtitles');
+    assert.equal(await page.locator('.worker-health-status').count(), 0);
     assert.equal(await receiptCount(page), 1);
     assert.equal(
       await page
@@ -832,8 +934,8 @@ async function seedReceipts(page, entries) {
   );
 }
 
-function healthResponse() {
-  return { ok: true, worker: { available: true } };
+function healthResponse(workerAvailable = true) {
+  return { ok: true, worker: { available: workerAvailable } };
 }
 
 function videoJob(jobId, displayStatus) {

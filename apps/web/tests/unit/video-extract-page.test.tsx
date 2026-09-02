@@ -11,6 +11,46 @@ vi.mock('../../src/app/pages/video-extract/_hooks/use-video-extract-logic', () =
 import { VideoExtractPage } from '../../src/app/pages/video-extract/page';
 
 describe('video extract page', () => {
+  it('puts readiness status before the request fields and links the disabled reason', () => {
+    videoExtractLogic.mockReturnValue({
+      canSubmit: false,
+      draft: { mode: 'audio', quality: '320', sourceUrl: '' },
+      handleDownloadFormSubmit: () => undefined,
+      handleModeChange: () => undefined,
+      handleSourceUrlReset: () => undefined,
+      qualityOptions: [],
+      register: () => ({ onChange: () => undefined }),
+      retryWorkerHealth: () => undefined,
+      submitDisabledReason:
+        '서버 연결과 worker 준비 상태를 확인하는 동안 요청할 수 없습니다.',
+      validation: { kind: 'empty', message: 'YouTube URL을 입력해 주세요.' },
+      viewPhase: 'request',
+      workerHealthCheckedAt: Date.parse('2026-08-19T05:32:14.000Z'),
+      workerHealthIsFetching: false,
+      workerHealthStatus: {
+        kind: 'ready',
+        label: '준비됨',
+        message: '서버 연결됨 · worker가 작업을 받을 준비가 되었습니다.',
+        role: 'status',
+      },
+    });
+
+    /** 요청 화면의 readiness 상태와 제출 안내 마크업. */
+    const markup = renderToStaticMarkup(<VideoExtractPage />);
+
+    expect(markup).toContain('data-health-status="ready"');
+    expect(markup).toContain('role="status"');
+    expect(markup).toContain('마지막 확인');
+    expect(markup).toContain('다시 확인');
+    expect(markup).toContain('aria-describedby="video-submit-disabled-reason"');
+    expect(markup).toContain(
+      '서버 연결과 worker 준비 상태를 확인하는 동안 요청할 수 없습니다.',
+    );
+    expect(markup.indexOf('data-health-status="ready"')).toBeLessThan(
+      markup.indexOf('YouTube URL'),
+    );
+  });
+
   it('shows a lightweight acceptance status without a progress meter', () => {
     videoExtractLogic.mockReturnValue({
       statusIconName: 'processing',

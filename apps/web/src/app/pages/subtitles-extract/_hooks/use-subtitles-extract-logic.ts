@@ -38,7 +38,10 @@ import {
   getRequestPreferences,
   setSubtitleWhisperModelPreference,
 } from '../../../utils/request-preference.util';
-import { getWorkerHealthNotice } from '../../../utils/worker-health-notice.util';
+import {
+  getWorkerHealthStatus,
+  getWorkerHealthSubmitReason,
+} from '../../../utils/worker-health-notice.util';
 
 /** worker 미가용 안내 문구. */
 const WORKER_UNAVAILABLE_MESSAGE =
@@ -89,6 +92,8 @@ export function useSubtitlesExtractLogic() {
     useState<number | null>(null);
   /** 요청 실패 메시지. */
   const [requestError, setRequestError] = useState('');
+  /** 마지막 worker health 확인 시작 시각(epoch milliseconds). */
+  const [workerHealthCheckedAt, setWorkerHealthCheckedAt] = useState(0);
   /** R2 direct upload 진행률. */
   const [uploadProgress, setUploadProgress] = useState<number | null>(null);
   /** 이 화면에서 상태를 확인할 직전 접수 자막 job. */
@@ -118,7 +123,9 @@ export function useSubtitlesExtractLogic() {
       signal: AbortSignal;
     }) => {
       /** submit 직전 최신 worker health. */
-      const workerHealth = await workerHealthQuery.refetch();
+      const workerHealth = await workerHealthQuery.refetch({
+        cancelRefetch: false,
+      });
 
       if (workerHealth.error) {
         throw workerHealth.error;
@@ -182,14 +189,13 @@ export function useSubtitlesExtractLogic() {
   const workerUnavailable = workerHealthQuery.data?.worker?.available === false;
   /** worker health 확인에 실패했는지 여부. */
   const workerHealthFailed = workerHealthQuery.isError;
-  /** worker health 확인 중인지 여부. */
-  const workerHealthChecking = workerHealthQuery.isPending;
-  /** 요청 설정 화면에 표시할 worker health 안내. */
-  const requestAvailabilityNotice = getWorkerHealthNotice({
-    failed: workerHealthFailed,
-    pending: workerHealthChecking,
-    unavailable: workerUnavailable,
+  /** 요청 설정 화면에 표시할 worker health 상태. */
+  const workerHealthStatus = getWorkerHealthStatus({
+    apiReady: workerHealthQuery.data?.ok,
+    hasError: workerHealthFailed,
+    isFetching: workerHealthQuery.isFetching,
     unavailableMessage: WORKER_UNAVAILABLE_MESSAGE,
+    workerAvailable: workerHealthQuery.data?.worker?.available,
   });
   /** R2 업로드 session 생성부터 자막 job 생성까지의 요청 처리 여부. */
   const isSubmitting = subtitleJobMutation.isPending;
@@ -234,7 +240,15 @@ export function useSubtitlesExtractLogic() {
   const canSubmit =
     validation.kind === 'ready' &&
     !subtitleJobMutation.isPending &&
-    workerHealthQuery.data?.worker?.available === true;
+    workerHealthStatus.kind === 'ready';
+  /** 제출 버튼이 비활성화된 이유. */
+  const submitDisabledReason = getWorkerHealthSubmitReason({
+    healthStatus: workerHealthStatus.kind,
+    isSubmitting,
+    validationMessage:
+      validation.kind === 'ready' ? '입력값을 확인해 주세요.' : validation.message,
+    validationReady: validation.kind === 'ready',
+  });
   /** Whisper 모델 선택 가능 여부. */
   const canChangeWhisperModel =
     !subtitleJobMutation.isPending;
@@ -272,7 +286,9 @@ export function useSubtitlesExtractLogic() {
     (isSubmitting ? '추출 서버 상태를 확인하고 업로드를 준비 중입니다.' : '') ||
     requestError ||
     jobStatusRequestErrorDetail?.guidance ||
-    (workerHealthAffectsView ? requestAvailabilityNotice?.message : '') ||
+    (workerHealthAffectsView && workerHealthStatus.kind !== 'ready'
+      ? workerHealthStatus.message
+      : '') ||
     statusJob.message ||
     validation.message;
   /** 현재 상태 아이콘 이름. */
@@ -354,7 +370,11 @@ export function useSubtitlesExtractLogic() {
 
   /** worker health를 다시 확인한다. */
   function retryWorkerHealth() {
-    void workerHealthQuery.refetch();
+    if (workerHealthQuery.isFetching) {
+      return;
+    }
+
+    void workerHealthQuery.refetch({ cancelRefetch: false });
   }
 
   /** 요청 오류에서 선택 파일을 유지한 채 요청 화면으로 돌아간다. */
@@ -410,6 +430,15 @@ export function useSubtitlesExtractLogic() {
       };
     },
     [setNavigationLocked],
+  );
+
+  useEffect(
+    function recordWorkerHealthCheckTimestamp() {
+      if (workerHealthQuery.isFetching) {
+        setWorkerHealthCheckedAt(Date.now());
+      }
+    },
+    [workerHealthQuery.isFetching],
   );
 
   useEffect(
@@ -514,7 +543,6 @@ export function useSubtitlesExtractLogic() {
     handleWhisperModelChange,
     processingEstimateMessage,
     retryWorkerHealth,
-    requestAvailabilityNotice,
     selectedFile,
     selectedFileMeta,
     selectedWhisperModel,
@@ -524,11 +552,14 @@ export function useSubtitlesExtractLogic() {
     statusMessage,
     statusTitle,
     statusTone,
+    submitDisabledReason,
     returnToRequest,
     validation,
     viewPhase,
     workerHealthFailed: workerHealthAffectsView && workerHealthFailed,
+    workerHealthCheckedAt,
     workerHealthIsFetching: workerHealthQuery.isFetching,
+    workerHealthStatus,
   };
 }
 
