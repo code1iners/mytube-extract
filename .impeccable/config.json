@@ -1,0 +1,35 @@
+{
+  "detector": {
+    "ignoreRules": [],
+    "ignoreFiles": [],
+    "ignoreValues": [
+      {
+        "rule": "design-system-font-size",
+        "value": "13px",
+        "files": [
+          "apps/web/src/styles/global.css"
+        ],
+        "createdAt": "2026-09-03T14:35:14.959Z",
+        "reason": "Agent: 기준 커밋부터 유지한 global.css의 compact file metadata·button type; 44px target과 bounded responsive review를 통과한 의도된 예외."
+      },
+      {
+        "rule": "design-system-font-size",
+        "value": "19px",
+        "files": [
+          "apps/web/src/styles/global.css"
+        ],
+        "createdAt": "2026-09-03T14:35:15.073Z",
+        "reason": "Agent: 기준 커밋부터 유지한 global.css의 compact responsive page/status heading type; 320/390px bounded review를 통과한 의도된 예외."
+      },
+      {
+        "rule": "design-system-font-size",
+        "value": "24px",
+        "files": [
+          "apps/web/src/styles/global.css"
+        ],
+        "createdAt": "2026-09-03T14:35:15.187Z",
+        "reason": "Agent: 기준 커밋부터 유지한 global.css의 compact-width page title type; 320/390px bounded review를 통과한 의도된 예외."
+      }
+    ]
+  }
+}
