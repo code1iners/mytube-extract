@@ -18,6 +18,13 @@ describe('app hero theme control', () => {
     expect(markup).not.toContain('type="radio"');
     expect(markup).toContain('href="/settings"');
     expect(markup).toContain('설정');
+    expect(markup).toContain('class="usage-guide"');
+    expect(markup).toContain('사용 안내');
+    expect(markup).toContain('API 응답을 기준으로 표시합니다.');
+    expect(markup).toContain('현재 브라우저에만 남습니다.');
+    expect(markup).toContain('기본 7일 보관됩니다.');
+    expect(markup).toContain('U');
+    expect(markup).toContain('F');
   });
 
   it('always exposes the request history link', () => {

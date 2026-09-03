@@ -156,7 +156,7 @@ export function SubtitlesExtractPage() {
             </label>
           ))}
           <details className="subtitle-processing-method__details">
-            <summary>처리 정보</summary>
+            <summary>기술적인 처리 정보</summary>
             <div className="subtitle-processing-method__technical">
               <p>{SUBTITLE_PROCESSING_TECHNICAL_NOTE}</p>
               {SUBTITLE_PROCESSING_OPTIONS.map((option) => (

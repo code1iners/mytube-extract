@@ -220,9 +220,6 @@ export function useVideoExtractLogic() {
   const submitDisabledReason = getWorkerHealthSubmitReason({
     healthStatus: workerHealthStatus.kind,
     isSubmitting,
-    validationMessage:
-      validation.kind === 'ready' ? '입력값을 확인해 주세요.' : validation.message,
-    validationReady: validation.kind === 'ready' && isValid,
   });
   /** 10칸 진행률 bar 중 채울 칸 수. */
   const filledProgressCells =

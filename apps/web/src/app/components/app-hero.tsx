@@ -10,6 +10,7 @@ import { ROUTE_PATHS } from '../constants/route-paths.constant';
 import { AppMark } from './app-icon';
 import { useNavigation } from './navigation-context';
 import { PrimaryNavigation } from './primary-navigation';
+import { UsageGuideDisclosure } from './usage-guide-disclosure';
 
 /** 타이틀과 아이콘 사이 여백(px). CSS `.brand-lockup { gap }`과 값을 맞춘다. */
 const BRAND_LOCKUP_GAP = 12;
@@ -104,6 +105,7 @@ export function AppHero() {
         </p>
       </div>
       <div className="hero-utilities">
+        <UsageGuideDisclosure />
         <NavLink
           aria-disabled={navigationLocked || undefined}
           aria-describedby={navigationLocked ? settingsLockDescriptionId : undefined}

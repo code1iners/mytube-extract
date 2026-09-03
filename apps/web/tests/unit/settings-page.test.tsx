@@ -30,8 +30,9 @@ describe('settings page', () => {
     expect(markup).not.toContain('class="console-panel phase-panel settings-panel"');
     expect(markup).toContain('화면 표시');
     expect(markup).toContain(
-      '시스템 설정을 따르거나 라이트·다크 중 하나를 선택합니다. 설정에는 요청과 파일 정보를 저장하지 않습니다.',
+      '이 설정의 화면 표시 선택만 이 브라우저에 저장하며, 요청 URL과 파일 정보는 저장하지 않습니다.',
     );
+    expect(markup).toContain('개인 추출 콘솔입니다.');
     expect(markup.match(/type="radio"/g)).toHaveLength(3);
     expect(markup).toContain('시스템');
     expect(markup).toContain('라이트');

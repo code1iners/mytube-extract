@@ -33,7 +33,7 @@ describe('subtitles extract page', () => {
       selectedFile: null,
       selectedFileMeta: '',
       selectedWhisperModel: 'base_en',
-      submitDisabledReason: '영상 파일을 선택해 주세요.',
+      submitDisabledReason: '',
       validation: { kind: 'empty', message: '영상 파일을 선택해 주세요.' },
       viewPhase: 'request',
       workerHealthCheckedAt: Date.parse('2026-08-19T05:32:14.000Z'),
@@ -55,6 +55,7 @@ describe('subtitles extract page', () => {
     expect(markup).toContain('class="subtitle-form"');
     expect(markup).toContain('type="submit"');
     expect(markup).toContain('다시 확인');
+    expect(markup).not.toContain('subtitle-submit-disabled-reason');
     expect(markup.indexOf('로컬 영상 파일')).toBeLessThan(
       markup.indexOf('<legend>처리 방식</legend>'),
     );
@@ -153,7 +154,7 @@ describe('subtitles extract page', () => {
       selectedFile: new File(['video'], 'sample.txt', { type: 'text/plain' }),
       selectedFileMeta: '1KB',
       selectedWhisperModel: 'base_en',
-      submitDisabledReason: '지원하지 않는 영상 형식입니다.',
+      submitDisabledReason: '',
       validation: {
         kind: 'invalid',
         message: 'mp4, mov, webm 영상 파일만 사용할 수 있습니다.',
@@ -176,6 +177,7 @@ describe('subtitles extract page', () => {
       'aria-label="영상 선택 또는 드래그 (로컬 영상 파일)"',
     );
     expect(markup).toContain('aria-describedby="subtitle-file-feedback"');
+    expect(markup).not.toContain('subtitle-submit-disabled-reason');
     expect(markup).toContain('class="field has-error"');
     expect(markup).not.toContain('aria-invalid="true"');
     expect(markup).toContain('aria-hidden="true"');
@@ -229,6 +231,7 @@ describe('subtitles extract page', () => {
     expect(markup).toContain('속도 우선');
     expect(markup).toContain('파일을 빠르게 영어 자막으로 만들고 싶을 때');
     expect(markup).toContain('<details class="subtitle-processing-method__details">');
+    expect(markup).toContain('<summary>기술적인 처리 정보</summary>');
     expect(markup).toContain('정확도 우선');
     expect(markup).toContain('음성을 더 꼼꼼하게 영어 자막으로 옮기고 싶을 때');
     expect(markup).toContain('small.en');

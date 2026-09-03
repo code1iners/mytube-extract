@@ -265,9 +265,6 @@ export function useSubtitlesExtractLogic() {
   const submitDisabledReason = getWorkerHealthSubmitReason({
     healthStatus: workerHealthStatus.kind,
     isSubmitting,
-    validationMessage:
-      validation.kind === 'ready' ? '입력값을 확인해 주세요.' : validation.message,
-    validationReady: validation.kind === 'ready',
   });
   /** Whisper 모델 선택 가능 여부. */
   const canChangeWhisperModel =

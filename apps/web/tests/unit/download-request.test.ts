@@ -66,6 +66,16 @@ describe('download request', () => {
     });
     expect(audioQualities).toEqual(['128', '192', '320']);
     expect(videoQualities).toEqual(['360', '720', '1080']);
+    expect(AUDIO_QUALITY_OPTIONS.map((option) => option.label)).toEqual([
+      '128 kbps',
+      '192 kbps',
+      '320 kbps',
+    ]);
+    expect(VIDEO_QUALITY_OPTIONS.map((option) => option.label)).toEqual([
+      '360p',
+      '720p',
+      '1080p',
+    ]);
     expect(getDefaultDownloadQuality('audio')).toBe('320');
     expect(getDefaultDownloadQuality('video')).toBe('1080');
     expect(validateDownloadDraft(baseDraft).kind).toBe('ready');

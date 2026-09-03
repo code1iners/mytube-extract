@@ -159,21 +159,17 @@ describe('worker health submit reason', () => {
       getWorkerHealthSubmitReason({
         healthStatus: kind,
         isSubmitting: false,
-        validationMessage: 'YouTube URL을 입력해 주세요.',
-        validationReady: true,
       }),
     ).toBe(expected);
   });
 
-  it('uses the input validation message when the service is ready', () => {
+  it('does not duplicate field guidance when the service is ready', () => {
     expect(
       getWorkerHealthSubmitReason({
         healthStatus: 'ready',
         isSubmitting: false,
-        validationMessage: 'YouTube URL을 입력해 주세요.',
-        validationReady: false,
       }),
-    ).toBe('YouTube URL을 입력해 주세요.');
+    ).toBe('');
   });
 });
 

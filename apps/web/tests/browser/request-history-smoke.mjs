@@ -36,6 +36,8 @@ const browser = await chromium.launch();
 try {
   await run('request routes do not restore stored jobs', verifyRequestRoutesDoNotRestore);
   await run('request routes expose worker readiness and guarded refresh', verifyRequestReadinessStatus);
+  await run('global usage guide disclosure stays accessible', verifyUsageGuideDisclosure);
+  await run('desktop route headings share one top rhythm', verifyDesktopRouteHeadingAlignment);
   await run('video request keeps the task flow first across viewports', verifyVideoTaskFirstLayout);
   await run('video in-place success, failure, navigation lock, and download', verifyVideoRequestFlows);
   await run('video request cancellation restores input and navigation', verifyVideoRequestCancellation);
@@ -199,6 +201,17 @@ async function verifyRequestReadinessStatus() {
             await page.locator('.worker-health-status__last-checked').count(),
             1,
           );
+          /** 정상 상태에서 저강조로 표시하는 재확인 control. */
+          const readyRefreshButton = page.getByRole('button', {
+            name: '서비스 상태 다시 확인',
+          });
+          /** 재확인 control의 실제 touch target. */
+          const readyRefreshBox = await readyRefreshButton.boundingBox();
+          assert.ok(readyRefreshBox && readyRefreshBox.width >= 44 && readyRefreshBox.height >= 44);
+          assert.match(
+            (await readyRefreshButton.getAttribute('class')) ?? '',
+            /worker-health-status__retry--quiet/,
+          );
           await assertRequestReadinessLayout(page, width);
 
           if (routePath === '/video') {
@@ -354,7 +367,132 @@ async function assertRequestReadinessLayout(page, width) {
     });
     assert.ok(scrolledMetrics.navigationTop !== undefined);
     assert.ok(scrolledMetrics.readinessBottom !== undefined);
-    assert.ok(scrolledMetrics.readinessBottom <= scrolledMetrics.navigationTop);
+    assert.ok(scrolledMetrics.navigationTop - scrolledMetrics.readinessBottom >= 8);
+  }
+}
+
+/** 헤더의 사용 안내 disclosure가 모든 주요 route에서 열리고 닫히는지 확인한다. */
+async function verifyUsageGuideDisclosure() {
+  /** 사용 안내를 확인할 responsive viewport. */
+  for (const width of [390, 1280]) {
+    /** 사용 안내 viewport 높이. */
+    const height = width <= 820 ? 844 : 900;
+    /** route별 사용 안내를 격리할 browser context. */
+    const context = await createContext({ viewport: { height, width } });
+    /** 사용 안내 상호작용을 확인할 page. */
+    const { page, assertNoRuntimeErrors } = await createPage(context);
+
+    try {
+      await routeApi(page, async ({ route, url }) => {
+        if (url.pathname === '/health') return fulfillJson(route, healthResponse());
+        return fulfillJson(route, {}, 404);
+      });
+
+      for (const routePath of RESPONSIVE_NAVIGATION_ROUTES) {
+        await page.goto(staticServer.origin + routePath);
+        /** 헤더에서 항상 접근할 수 있는 native details. */
+        const guide = page.locator('.usage-guide');
+        /** 사용 안내를 열고 닫는 native summary. */
+        const summary = guide.locator('summary');
+        await summary.waitFor();
+        assert.equal(await guide.getAttribute('open'), null);
+        const summaryBox = await summary.boundingBox();
+        assert.ok(summaryBox && summaryBox.width >= 44 && summaryBox.height >= 44);
+        assert.equal(await summary.getAttribute('aria-expanded'), 'false');
+        assert.equal(await guide.getByText('API 응답을 기준으로 표시합니다.', { exact: true }).count(), 1);
+        assert.equal(await guide.getByText('현재 브라우저에만 남습니다.', { exact: true }).count(), 1);
+        assert.equal(await guide.getByText('기본 7일 보관됩니다.', { exact: true }).count(), 1);
+        assert.equal(await guide.getByText('U', { exact: true }).count(), 1);
+        assert.equal(await guide.getByText('F', { exact: true }).count(), 1);
+
+        /** 닫힌 chevron transform. */
+        const closedChevron = await summary.evaluate((element) =>
+          getComputedStyle(element, '::after').transform,
+        );
+        await summary.focus();
+        assert.equal(await summary.evaluate((element) => document.activeElement === element), true);
+        assert.equal(await summary.evaluate((element) => element.matches(':focus-visible')), true);
+        await page.keyboard.press('Enter');
+        await guide.locator('.usage-guide__content').waitFor();
+        assert.equal(await guide.getAttribute('open'), '');
+        assert.equal(await summary.getAttribute('aria-expanded'), 'true');
+        assert.equal(await guide.locator('.usage-guide__content').isVisible(), true);
+        await page.waitForTimeout(200);
+        /** 열린 chevron transform. */
+        const openChevron = await summary.evaluate((element) =>
+          getComputedStyle(element, '::after').transform,
+        );
+        assert.notEqual(openChevron, closedChevron);
+        await page.keyboard.press('Escape');
+        await waitForCondition(async () => (await guide.getAttribute('open')) === null);
+        assert.equal(await summary.getAttribute('aria-expanded'), 'false');
+        assert.equal(await summary.evaluate((element) => document.activeElement === element), true);
+
+        if (routePath === RESPONSIVE_NAVIGATION_ROUTES[0]) {
+          await summary.press('Space');
+          assert.equal(await guide.getAttribute('open'), '');
+          await summary.press('Space');
+          assert.equal(await guide.getAttribute('open'), null);
+        }
+      }
+      assertNoRuntimeErrors();
+    } finally {
+      await context.close();
+    }
+  }
+}
+
+/** 데스크톱 주요 route의 body heading이 공통 top gap에 맞는지 확인한다. */
+async function verifyDesktopRouteHeadingAlignment() {
+  /** 데스크톱 route heading을 확인할 독립 context. */
+  const context = await createContext({ viewport: { height: 900, width: 1280 } });
+  /** route heading의 수직 리듬을 측정할 page. */
+  const { page, assertNoRuntimeErrors } = await createPage(context);
+
+  try {
+    await routeApi(page, async ({ route, url }) => {
+      if (url.pathname === '/health') return fulfillJson(route, healthResponse());
+      return fulfillJson(route, {}, 404);
+    });
+
+    /** 각 route heading과 header의 실제 top gap. */
+    const headingMetrics = [];
+    for (const routePath of RESPONSIVE_NAVIGATION_ROUTES) {
+      await page.goto(staticServer.origin + routePath);
+      await page.locator('.phase-panel .panel-title-row h2').waitFor();
+      headingMetrics.push(
+        await page.evaluate(() => {
+          /** 공유 app header. */
+          const header = document.querySelector('.app-header');
+          /** 현재 route body heading. */
+          const heading = document.querySelector('.phase-panel .panel-title-row h2');
+          /** root layout token. */
+          const rootStyle = getComputedStyle(document.documentElement);
+          return {
+            headingTop: heading?.getBoundingClientRect().top,
+            headerBottom: header?.getBoundingClientRect().bottom,
+            routeTopGap: rootStyle.getPropertyValue('--layout-route-top-gap').trim(),
+          };
+        }),
+      );
+    }
+
+    assert.equal(
+      new Set(headingMetrics.map((metrics) => Math.round(metrics.headingTop))).size,
+      1,
+    );
+    assert.ok(
+      headingMetrics.every(
+        (metrics) =>
+          metrics.routeTopGap === '32px' &&
+          metrics.headingTop !== undefined &&
+          metrics.headerBottom !== undefined &&
+          Math.abs(metrics.headingTop - metrics.headerBottom - 32) <= 1,
+      ),
+    );
+    assertNoRuntimeErrors();
+  } finally {
+    await context.close();
   }
 }
 
@@ -572,6 +710,16 @@ async function verifyVideoTaskFirstLayout() {
         await page.getByLabel('YouTube URL').waitFor();
         assert.equal(await page.locator('.request-flow[data-flow-stage="source"]').count(), 1);
         assert.deepEqual(await page.locator('.request-flow__step').allTextContents(), ['원본', '추출', '파일 수령']);
+        assert.deepEqual(
+          await page.locator('.quality-grid .quality-chip').allTextContents(),
+          ['128 kbps', '192 kbps', '320 kbps'],
+        );
+        await page.getByRole('radio', { name: /비디오/ }).check();
+        assert.deepEqual(
+          await page.locator('.quality-grid .quality-chip').allTextContents(),
+          ['360p', '720p', '1080p'],
+        );
+        await page.getByRole('radio', { name: /오디오/ }).check();
 
         /** 작업 입력과 보조 readiness의 DOM 위치. */
         const documentOrder = await page.evaluate(() => {
@@ -667,6 +815,11 @@ async function verifyVideoTaskFirstLayout() {
         assert.ok(layoutMetrics.url.left >= 0);
         assert.ok(layoutMetrics.url.right <= width);
         assert.ok(layoutMetrics.submit);
+        assert.equal(await page.locator('.submit-disabled-reason').count(), 0);
+        assert.equal(
+          await page.getByLabel('YouTube URL').getAttribute('aria-describedby'),
+          'video-source-url-feedback',
+        );
 
         if (width <= 820) {
           assert.ok(layoutMetrics.navigation);
@@ -1026,6 +1179,7 @@ async function verifySubtitleProcessingChoice() {
     });
     /** 자막 처리 방식 검증 page. */
     const { page, assertNoRuntimeErrors } = await createPage(context);
+    await page.emulateMedia({ reducedMotion: 'reduce' });
 
     try {
       await page.route('https://upload.example/**', async (route) => {
@@ -1116,6 +1270,14 @@ async function verifySubtitleProcessingChoice() {
       const processingDetails = page.locator('.subtitle-processing-method__details');
       const processingSummary = processingDetails.locator('summary');
       assert.equal(await processingDetails.getAttribute('open'), null);
+      assert.equal(await processingSummary.innerText(), '기술적인 처리 정보');
+      assert.ok((await processingSummary.boundingBox())?.height >= 44);
+      assert.equal(
+        await processingSummary.evaluate((element) =>
+          getComputedStyle(element, '::after').transitionDuration,
+        ),
+        '0s',
+      );
       assert.equal(await processingDetails.getByText('속도 우선: base.en · 상대적으로 빠른 처리', { exact: true }).isVisible(), false);
       assert.equal(await processingDetails.getByText('정확도 우선: small.en · 인식 정확도를 우선하는 처리', { exact: true }).isVisible(), false);
       await processingSummary.focus();
@@ -1220,9 +1382,35 @@ async function verifySubtitleProcessingChoice() {
       assert.ok(layoutMetrics.readiness);
       assert.ok(layoutMetrics.submit);
       assert.ok(layoutMetrics.submit.bottom <= layoutMetrics.readiness.top);
+      assert.equal(await page.locator('.submit-disabled-reason').count(), 0);
+      assert.equal(
+        await page.locator('.subtitle-dropzone').getAttribute('aria-describedby'),
+        'subtitle-file-feedback',
+      );
       if (width <= 820) {
         assert.ok(layoutMetrics.navigation);
         assert.ok(layoutMetrics.submit.bottom <= layoutMetrics.navigation.top);
+        await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
+        /** 문서 끝에서 fixed navigation 위로 올라온 제출·readiness 영역. */
+        const scrolledMetrics = await page.evaluate(() => {
+          /** 현재 주요 navigation. */
+          const navigation = [...document.querySelectorAll('nav[aria-label="주요 메뉴"]')]
+            .find((element) => getComputedStyle(element).display !== 'none');
+          /** 제출 button. */
+          const submit = document.querySelector('.subtitle-form .primary-button');
+          /** 마지막 서비스 상태 영역. */
+          const readiness = document.querySelector('.worker-health-status');
+          return {
+            navigationTop: navigation?.getBoundingClientRect().top,
+            readinessBottom: readiness?.getBoundingClientRect().bottom,
+            submitBottom: submit?.getBoundingClientRect().bottom,
+          };
+        });
+        assert.ok(scrolledMetrics.navigationTop !== undefined);
+        assert.ok(scrolledMetrics.readinessBottom !== undefined);
+        assert.ok(scrolledMetrics.submitBottom !== undefined);
+        assert.ok(scrolledMetrics.submitBottom <= scrolledMetrics.navigationTop);
+        assert.ok(scrolledMetrics.navigationTop - scrolledMetrics.readinessBottom >= 8);
       }
 
       /** 처리 방식 선택 후 영어 SRT 생성 요청. */
@@ -2059,6 +2247,8 @@ async function verifyEmptyHistoryProductModel() {
             .count(),
           1,
         );
+        assert.equal(await page.locator('.request-flow[data-flow-stage="source"]').count(), 1);
+        assert.deepEqual(await page.locator('.request-flow__step').allTextContents(), ['원본', '추출', '파일 수령']);
 
         /** 빈 내역 표면과 링크의 실제 viewport 영역. */
         const layoutMetrics = await page.evaluate(() => {
@@ -2394,7 +2584,7 @@ async function verifySettingsSurface(page, width) {
   assert.equal(
     await page
       .getByText(
-        '시스템 설정을 따르거나 라이트·다크 중 하나를 선택합니다. 설정에는 요청과 파일 정보를 저장하지 않습니다.',
+        '이 설정의 화면 표시 선택만 이 브라우저에 저장하며, 요청 URL과 파일 정보는 저장하지 않습니다.',
         { exact: true },
       )
       .count(),

@@ -32,6 +32,8 @@ describe('worker health status notice', () => {
     expect(markup).toContain('id="video-worker-health-message"');
     expect(markup).toContain('마지막 확인');
     expect(markup).toContain('다시 확인');
+    expect(markup).toContain('worker-health-status__retry--quiet');
+    expect(markup).not.toContain('name="processing"');
     expect(markup).toContain('role="status"');
   });
 

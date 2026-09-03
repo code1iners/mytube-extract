@@ -98,10 +98,6 @@ export function getWorkerHealthSubmitReason(input: {
   healthStatus: WorkerHealthStatusKind;
   /** 요청 접수 mutation 진행 여부. */
   isSubmitting: boolean;
-  /** 현재 입력값이 제출 가능한지 여부. */
-  validationReady: boolean;
-  /** 입력값이 제출 불가할 때의 안내 문구. */
-  validationMessage: string;
 }) {
   if (input.isSubmitting) {
     return '요청을 접수하는 동안 잠시 기다려 주세요.';
@@ -119,7 +115,7 @@ export function getWorkerHealthSubmitReason(input: {
     return '서비스 상태를 확인하지 못해 요청할 수 없습니다.';
   }
 
-  return input.validationReady ? '' : input.validationMessage;
+  return '';
 }
 
 /** 마지막 worker health 확인 시각을 읽기 좋은 시간으로 표시한다. */

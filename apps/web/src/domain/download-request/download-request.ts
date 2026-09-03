@@ -102,16 +102,16 @@ export const INITIAL_DOWNLOAD_DRAFT: DownloadDraft = {
 
 /** audio 품질 선택지. */
 export const AUDIO_QUALITY_OPTIONS = [
-  { label: '128', value: '128' },
-  { label: '192', value: '192' },
-  { label: '320', value: '320' },
+  { label: '128 kbps', value: '128' },
+  { label: '192 kbps', value: '192' },
+  { label: '320 kbps', value: '320' },
 ] as const;
 
 /** video 품질 선택지. */
 export const VIDEO_QUALITY_OPTIONS = [
-  { label: '360', value: '360' },
-  { label: '720', value: '720' },
-  { label: '1080', value: '1080' },
+  { label: '360p', value: '360' },
+  { label: '720p', value: '720' },
+  { label: '1080p', value: '1080' },
 ] as const;
 
 /** 다운로드 형식별 기본 품질을 반환한다. */

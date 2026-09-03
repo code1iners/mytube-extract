@@ -21,7 +21,7 @@ describe('video extract page', () => {
       qualityOptions: [],
       register: () => ({ onChange: () => undefined }),
       retryWorkerHealth: () => undefined,
-      submitDisabledReason: 'YouTube URL을 입력해 주세요.',
+      submitDisabledReason: '',
       validation: { kind: 'empty', message: 'YouTube URL을 입력해 주세요.' },
       viewPhase: 'request',
       workerHealthCheckedAt: Date.parse('2026-08-19T05:32:14.000Z'),
@@ -42,7 +42,8 @@ describe('video extract page', () => {
     expect(markup).toContain('role="status"');
     expect(markup).toContain('마지막 확인');
     expect(markup).toContain('다시 확인');
-    expect(markup).toContain('aria-describedby="video-submit-disabled-reason"');
+    expect(markup).toContain('aria-describedby="video-source-url-feedback"');
+    expect(markup).not.toContain('video-submit-disabled-reason');
     expect(markup).toContain('YouTube URL을 입력해 주세요.');
     expect(markup.indexOf('YouTube URL')).toBeLessThan(
       markup.indexOf('<legend>추출 형식</legend>'),
@@ -108,7 +109,7 @@ describe('video extract page', () => {
       qualityOptions: [],
       register: () => ({ onChange: () => undefined }),
       retryWorkerHealth: () => undefined,
-      submitDisabledReason: '입력값을 확인해 주세요.',
+      submitDisabledReason: '',
       validation: { kind: 'ready', message: '' },
       viewPhase: 'request',
       workerHealthCheckedAt: 0,

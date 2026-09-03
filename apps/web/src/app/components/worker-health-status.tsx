@@ -53,6 +53,16 @@ export function WorkerHealthStatusNotice({
   const checkedAtDate = createCheckedAtDate(lastCheckedAt);
   /** 제출 control이 참조할 health 상태 설명 id. */
   const messageId = getWorkerHealthStatusMessageId(id);
+  /** 정상 상태에서 낮은 강조도로 보여 줄 재확인 동작인지 여부. */
+  const isQuietRetry = status.kind === 'ready';
+  /** health 상태에 맞춘 재확인 control className. */
+  const retryClassName = [
+    'secondary-button',
+    'worker-health-status__retry',
+    isQuietRetry ? 'worker-health-status__retry--quiet' : '',
+  ]
+    .filter(Boolean)
+    .join(' ');
 
   return (
     <section
@@ -106,12 +116,12 @@ export function WorkerHealthStatusNotice({
         <button
           aria-busy={isFetching}
           aria-label="서비스 상태 다시 확인"
-          className="secondary-button worker-health-status__retry"
+          className={retryClassName}
           disabled={isFetching}
           type="button"
           onClick={onRetry}
         >
-          <AppIcon name="processing" />
+          {isQuietRetry ? null : <AppIcon name="processing" />}
           다시 확인
         </button>
       </div>

@@ -28,8 +28,14 @@ export function SettingsPage() {
         </h2>
       </div>
       <p className="settings-description">
-        시스템 설정을 따르거나 라이트·다크 중 하나를 선택합니다. 설정에는 요청과 파일
-        정보를 저장하지 않습니다.
+        이 설정의 화면 표시 선택만 이 브라우저에 저장하며, 요청 URL과 파일 정보는
+        저장하지 않습니다.
+      </p>
+      <p className="settings-context">
+        <AppIcon name="download" />
+        <span>
+          영상·오디오·영어 SRT 요청을 접수하고 결과를 확인하는 개인 추출 콘솔입니다.
+        </span>
       </p>
       <ThemePreferenceControl
         value={themePreference}

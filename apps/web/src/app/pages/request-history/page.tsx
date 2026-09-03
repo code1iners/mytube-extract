@@ -365,6 +365,7 @@ function HistoryEmptyState() {
   return (
     <div className="history-empty">
       <h3 className="history-empty__prompt">시작할 작업을 선택하세요.</h3>
+      <RequestFlow current="source" />
       <div className="history-empty__links">
         <NavLink className="history-empty__link" to={ROUTE_PATHS.video}>
           <AppIcon name="video" />

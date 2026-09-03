@@ -71,6 +71,9 @@
   /* Layout */
   --layout-content-max-width: 760px;
   --layout-content-gutter: 16px;
+  --layout-route-top-gap: 32px;
+  --layout-bottom-nav-height: 61px;
+  --layout-bottom-nav-clearance: 12px;
 
   --font-ui: 'Pretendard Variable', ui-sans-serif, system-ui, -apple-system,
     BlinkMacSystemFont, 'Segoe UI', sans-serif;
@@ -228,11 +231,119 @@ a {
 }
 
 .hero-utilities {
+  position: relative;
   grid-area: utilities;
   display: flex;
   align-items: center;
   justify-content: flex-end;
   gap: 12px;
+}
+
+/* 전역 사용 안내는 보조 영역에 두고, 열었을 때만 제품 운영 모델을 펼친다. */
+.usage-guide {
+  position: relative;
+  z-index: 3;
+}
+
+.usage-guide summary {
+  position: relative;
+  display: inline-flex;
+  min-width: 44px;
+  min-height: 44px;
+  align-items: center;
+  gap: 7px;
+  padding: 0 8px;
+  border-radius: var(--radius-md);
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 600;
+  list-style: none;
+  white-space: nowrap;
+}
+
+.usage-guide summary::-webkit-details-marker {
+  display: none;
+}
+
+.usage-guide summary::after {
+  width: 7px;
+  height: 7px;
+  margin-top: -4px;
+  border-right: 1px solid currentColor;
+  border-bottom: 1px solid currentColor;
+  content: '';
+  transform: rotate(45deg);
+  transition: transform 150ms ease;
+}
+
+.usage-guide[open] summary {
+  background: var(--color-surface-alt);
+  color: var(--color-text-primary);
+}
+
+.usage-guide[open] summary::after {
+  margin-top: 4px;
+  transform: rotate(225deg);
+}
+
+.usage-guide summary:focus-visible {
+  outline: 2px solid var(--color-focus);
+  outline-offset: 2px;
+}
+
+.usage-guide__content {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  width: min(320px, calc(100vw - 32px));
+  padding: 16px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  box-shadow: var(--shadow-soft);
+}
+
+.usage-guide__content ul {
+  display: grid;
+  gap: 12px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.usage-guide__content li {
+  display: grid;
+  gap: 4px;
+}
+
+.usage-guide__content strong {
+  color: var(--color-text-primary);
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.4;
+}
+
+.usage-guide__content li span {
+  color: var(--color-text-secondary);
+  font-size: 14px;
+  line-height: 1.4;
+}
+
+.usage-guide__content kbd {
+  display: inline-flex;
+  min-width: 24px;
+  min-height: 24px;
+  align-items: center;
+  justify-content: center;
+  margin: 0 2px;
+  padding: 0 5px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface-alt);
+  color: var(--color-text-primary);
+  font-size: 14px;
+  font-weight: 600;
 }
 
 .settings-link {
@@ -529,6 +640,23 @@ a {
   line-height: 1.6;
 }
 
+.settings-context {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin: 0;
+  color: var(--color-text-primary);
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.settings-context .app-icon {
+  width: 20px;
+  height: 20px;
+  flex: 0 0 auto;
+  color: var(--color-action-primary);
+}
+
 /* 영상·자막 요청은 입력 흐름을 먼저 읽도록 외곽 카드 표면을 사용하지 않는다. */
 .video-request-panel,
 .subtitle-request-panel {
@@ -728,13 +856,48 @@ a {
 }
 
 .subtitle-processing-method__details summary {
+  position: relative;
   display: flex;
   min-height: 44px;
   align-items: center;
+  justify-content: space-between;
+  padding-right: 24px;
   color: var(--color-text-primary);
   cursor: pointer;
   font-size: 14px;
   font-weight: 600;
+  list-style: none;
+}
+
+.subtitle-processing-method__details summary::-webkit-details-marker {
+  display: none;
+}
+
+.subtitle-processing-method__details summary::after {
+  position: absolute;
+  top: 17px;
+  right: 4px;
+  width: 7px;
+  height: 7px;
+  border-right: 1px solid currentColor;
+  border-bottom: 1px solid currentColor;
+  content: '';
+  transform: rotate(45deg);
+  transition: transform 150ms ease;
+}
+
+.subtitle-processing-method__details[open] {
+  padding-bottom: 8px;
+  background: var(--color-surface-alt);
+}
+
+.subtitle-processing-method__details[open] summary {
+  color: var(--color-text-primary);
+}
+
+.subtitle-processing-method__details[open] summary::after {
+  top: 20px;
+  transform: rotate(225deg);
 }
 
 .subtitle-processing-method__details .subtitle-processing-method__technical {
@@ -1023,6 +1186,17 @@ input:focus-visible,
   gap: 8px;
   padding: 0 12px;
   font-size: 14px;
+}
+
+.worker-health-status__retry--quiet {
+  min-width: 44px;
+  border-color: transparent;
+  background: transparent;
+  color: var(--color-text-secondary);
+  text-decoration: underline;
+  text-decoration-color: var(--color-text-secondary);
+  text-underline-offset: 3px;
+  box-shadow: none;
 }
 
 .worker-health-status__retry .app-icon {
@@ -1621,6 +1795,7 @@ input:focus-visible,
   bottom: 0;
   left: 0;
   display: none;
+  min-height: var(--layout-bottom-nav-height);
   grid-template-columns: repeat(3, minmax(0, 1fr));
   border: 0;
   border-top: 1px solid var(--color-border);
@@ -1649,7 +1824,10 @@ input:focus-visible,
 
   .app-shell {
     padding: 14px var(--layout-content-gutter)
-      calc(80px + env(safe-area-inset-bottom));
+      calc(
+        var(--layout-bottom-nav-height) + var(--layout-bottom-nav-clearance) +
+          env(safe-area-inset-bottom)
+      );
   }
 
   .workspace {
@@ -1725,7 +1903,11 @@ input:focus-visible,
 
 @media (max-width: 560px) {
   .app-shell {
-    padding: 10px 10px calc(68px + env(safe-area-inset-bottom));
+    padding: 10px 10px
+      calc(
+        var(--layout-bottom-nav-height) + var(--layout-bottom-nav-clearance) +
+          env(safe-area-inset-bottom)
+      );
   }
 
   .app-header {
@@ -1750,6 +1932,19 @@ input:focus-visible,
   .video-request-panel,
   .subtitle-request-panel {
     gap: 16px;
+  }
+
+  /* 320px 폭에서도 submit이 fixed navigation 뒤로 밀리지 않도록 밀도를 조정한다. */
+  .subtitle-request-panel {
+    gap: 12px;
+  }
+
+  .subtitle-request-panel .subtitle-form {
+    gap: 8px;
+  }
+
+  .subtitle-dropzone {
+    min-height: 140px;
   }
 
   .worker-health-status--compact {
@@ -1809,15 +2004,17 @@ input:focus-visible,
 
 @media (min-width: 821px) {
   .workspace {
-    min-height: calc(100vh - 60px);
-    grid-template-rows: auto minmax(0, 1fr);
+    gap: var(--layout-route-top-gap);
   }
 
-  .workspace > .phase-panel:not(.history-panel) {
-    align-self: center;
-  }
-
-  .workspace > .history-panel {
+  .workspace > .phase-panel {
     align-self: start;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .usage-guide summary::after,
+  .subtitle-processing-method__details summary::after {
+    transition: none;
   }
 }

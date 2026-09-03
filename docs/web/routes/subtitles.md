@@ -11,7 +11,7 @@
 
 1. 앱은 먼저 `GET /health`를 확인한다. `checking`·`failed`·`unavailable`이면 상태 우선 화면과 재확인을 보여주고, `ready`일 때만 파일·처리 방식 입력을 연다.
 2. 준비된 상태에서 사용자는 `mp4`, `mov`, `webm` 로컬 영상 파일을 선택한다. 화면에는 `원본 → 추출 → 파일 수령` 흐름을 표시한다.
-3. 사용자는 속도 우선(`base_en`) 또는 정확도 우선(`small_en`) 처리 방식을 비교한 뒤 영어 SRT 생성을 요청한다. 사용자 중심 결과 설명은 바로 보이고, 모델 식별자·로컬 Whisper·worker 정보는 닫힌 native `처리 정보` disclosure에서 필요할 때 확인한다.
+3. 사용자는 속도 우선(`base_en`) 또는 정확도 우선(`small_en`) 처리 방식을 비교한 뒤 영어 SRT 생성을 요청한다. 사용자 중심 결과 설명은 바로 보이고, 모델 식별자·로컬 Whisper·worker 정보는 닫힌 native `기술적인 처리 정보` disclosure에서 필요할 때 확인한다.
 4. `POST /subtitles/uploads`로 multipart session을 만들고 presigned URL로 파일 part를 직접 업로드한다. session·part·complete 중 사용자가 `요청 취소`를 누르면 브라우저 요청을 중단하고 abort cleanup을 best-effort로 시도한다.
 5. `POST /subtitles/uploads/complete` 성공 응답의 UUID와 접수 시각을 자막 접수증으로 저장한다. 응답 경쟁으로 job이 생성되면 접수증을 보존하고 서버 job 취소로 표시하지 않는다.
 6. 현재 route에서 `GET /subtitles/jobs/:jobId`를 polling해 처리·완료·실패·만료 상태를 표시한다.
@@ -48,4 +48,4 @@
 - `pnpm --filter web run lint`
 - `pnpm run test:web:browser`
 - Browser: 새로고침 후 빈 form, 업로드 중 navigation lock, complete 성공 뒤 in-place 결과·SRT 다운로드, failed/expired·상태 조회 오류의 상세와 재요청
-- Browser: readiness 네 상태와 background checking 파일/model 보존, `F` 단축키의 focus와 text editing/modifier 안전성, session·part 중단 및 `/subtitles/uploads/abort` cleanup, 응답 경쟁 접수증 보존·서버 job cancel 미호출, 닫힌 `처리 정보` disclosure의 click/Enter/Space, 흐름 trail과 320/390 geometry
+- Browser: readiness 네 상태와 background checking 파일/model 보존, `F` 단축키의 focus와 text editing/modifier 안전성, session·part 중단 및 `/subtitles/uploads/abort` cleanup, 응답 경쟁 접수증 보존·서버 job cancel 미호출, 닫힌 `기술적인 처리 정보` disclosure의 click/Enter/Space, 흐름 trail과 320/390 geometry
