@@ -21,6 +21,7 @@ import {
   buildApiUrl,
   completeSubtitleUpload,
   createSubtitleUpload,
+  isAbortError,
   uploadSubtitleFileParts,
 } from '../../../../api/mytube-extract.api';
 import { useNavigation } from '../../../components/navigation-context';
@@ -42,6 +43,7 @@ import {
 import {
   getWorkerHealthSubmitReason,
 } from '../../../utils/worker-health-notice.util';
+import { isUnmodifiedShortcut } from '../../../utils/keyboard-shortcut.util';
 
 /** worker 미가용 안내 문구. */
 const WORKER_UNAVAILABLE_MESSAGE =
@@ -55,11 +57,26 @@ const WORKER_UNAVAILABLE_DETAIL: UserVisibleErrorDetail = {
   requestPath: '/health',
 };
 
+/** worker health 조회 실패 상세 원인. */
+const WORKER_HEALTH_FAILED_DETAIL: UserVisibleErrorDetail = {
+  code: 'SERVICE_STATUS_CHECK_FAILED',
+  guidance: '서비스 상태를 확인할 수 없습니다.',
+  location: '서비스 상태 확인',
+  requestPath: '/health',
+};
+
 /** 기본 Whisper 모델. */
 const DEFAULT_WHISPER_MODEL: SubtitleWhisperModel = 'base_en';
 
 /** 화면에 표시하는 자막 처리 단계. */
 export type SubtitleStepKey = 'file_select' | SubtitleJobResponse['stage'];
+
+type SubtitleRequestAttempt = {
+  /** 이번 요청을 중단할 controller. */
+  controller: AbortController;
+  /** 사용자가 서버 job 생성 전에 중단을 눌렀는지 여부. */
+  cancelled: boolean;
+};
 
 /** 자막 추출 route의 file upload, polling, 표시 상태를 조합한다. */
 export function useSubtitlesExtractLogic() {
@@ -75,7 +92,7 @@ export function useSubtitlesExtractLogic() {
   /** 접근 가능한 파일 선택 버튼 DOM 참조. */
   const filePickerButtonRef = useRef<HTMLButtonElement | null>(null);
   /** 현재 upload/job 생성 요청을 중단하기 위한 컨트롤러. */
-  const requestAbortControllerRef = useRef<AbortController | null>(null);
+  const requestAttemptRef = useRef<SubtitleRequestAttempt | null>(null);
 
   // States.
 
@@ -88,6 +105,10 @@ export function useSubtitlesExtractLogic() {
     );
   /** 요청 실패 메시지. */
   const [requestError, setRequestError] = useState('');
+  /** 요청 중단 또는 늦은 접수 결과를 보조 기술에 알릴 문구. */
+  const [requestNotice, setRequestNotice] = useState('');
+  /** 중단 직후 mutation이 정리되기 전에도 navigation을 unlock할지 여부. */
+  const [requestCancelled, setRequestCancelled] = useState(false);
   /** R2 direct upload 진행률. */
   const [uploadProgress, setUploadProgress] = useState<number | null>(null);
   /** 이 화면에서 상태를 확인할 직전 접수 자막 job. */
@@ -148,7 +169,7 @@ export function useSubtitlesExtractLogic() {
           signal: input.signal,
         });
       } catch (error) {
-        if (upload && !input.signal.aborted) {
+        if (upload) {
           void abortSubtitleUpload(upload, { apiBaseUrl }).catch(() => {
             // 실패한 multipart upload 정리는 best-effort로만 수행한다.
           });
@@ -176,7 +197,8 @@ export function useSubtitlesExtractLogic() {
   /** 현재 파일 입력 검증 결과. */
   const validation = validateSubtitleFile(selectedFile);
   /** route를 벗어나면 안 되는 자막 요청/진행 상태 여부. */
-  const subtitleNavigationLocked = subtitleJobMutation.isPending;
+  const subtitleNavigationLocked =
+    subtitleJobMutation.isPending && !requestCancelled;
   /** R2 업로드 session 생성부터 자막 job 생성까지의 요청 처리 여부. */
   const isSubmitting = subtitleJobMutation.isPending;
   /** 오른쪽 status panel에 표시할 job. */
@@ -220,15 +242,20 @@ export function useSubtitlesExtractLogic() {
   );
   /** 활성 job이 없어 worker health가 현재 화면을 결정하는지 여부. */
   const workerHealthAffectsView = activeJob === null;
+  /** 현재 readiness gate에서 열어 볼 health 상세 원인. */
+  const workerHealthDetail = workerHealthAffectsView
+    ? workerHealthStatus.kind === 'unavailable'
+      ? WORKER_UNAVAILABLE_DETAIL
+      : workerHealthStatus.kind === 'failed'
+        ? workerHealthErrorDetail ?? WORKER_HEALTH_FAILED_DETAIL
+        : undefined
+    : undefined;
   /** 현재 상태 패널 상세 원인. */
   const statusErrorDetail =
     jobStatusRequestErrorDetail ??
     terminalJobErrorDetail ??
     requestErrorDetail ??
-    (workerHealthAffectsView && workerUnavailable
-      ? WORKER_UNAVAILABLE_DETAIL
-      : undefined) ??
-    (workerHealthAffectsView ? workerHealthErrorDetail : undefined);
+    workerHealthDetail;
   /** 자막 생성 요청 가능 여부. */
   const canSubmit =
     validation.kind === 'ready' &&
@@ -274,9 +301,9 @@ export function useSubtitlesExtractLogic() {
   /** 현재 상태 문구. */
   const statusMessage =
     (uploadProgress !== null
-      ? `R2로 원본 영상을 직접 업로드 중입니다. (${uploadProgress}%)`
+      ? `원본 영상을 준비하고 있습니다. (${uploadProgress}%)`
       : '') ||
-    (isSubmitting ? '추출 서버 상태를 확인하고 업로드를 준비 중입니다.' : '') ||
+    (isSubmitting ? '영어 SRT 생성 요청을 준비하고 있습니다.' : '') ||
     requestError ||
     jobStatusRequestErrorDetail?.guidance ||
     (workerHealthAffectsView && workerHealthStatus.kind !== 'ready'
@@ -332,14 +359,16 @@ export function useSubtitlesExtractLogic() {
 
   /** 현재 upload/job 생성 요청만 중단한다. */
   function stopRequest() {
-    requestAbortControllerRef.current?.abort();
-    requestAbortControllerRef.current = null;
+    requestAttemptRef.current?.controller.abort();
+    requestAttemptRef.current = null;
   }
 
   /** 선택 파일과 이전 실패 상태를 초기화한다. */
   function clearSelectedFile() {
     setSelectedFile(null);
     setRequestError('');
+    setRequestNotice('');
+    setRequestCancelled(false);
     setUploadProgress(null);
     setActiveJob(null);
     subtitleJobMutation.reset();
@@ -356,6 +385,8 @@ export function useSubtitlesExtractLogic() {
   function selectFile(file: File | null) {
     setSelectedFile(file);
     setRequestError('');
+    setRequestNotice('');
+    setRequestCancelled(false);
     setUploadProgress(null);
     setActiveJob(null);
     subtitleJobMutation.reset();
@@ -364,10 +395,51 @@ export function useSubtitlesExtractLogic() {
   /** 요청 오류에서 선택 파일을 유지한 채 요청 화면으로 돌아간다. */
   function returnToRequest() {
     stopRequest();
+    setRequestCancelled(false);
     setRequestError('');
+    setRequestNotice('');
     setUploadProgress(null);
     setActiveJob(null);
     subtitleJobMutation.reset();
+  }
+
+  /** 요청 중단 뒤 현재 화면의 파일 선택 또는 상태 재확인 control로 focus를 돌린다. */
+  function focusRequestStart() {
+    window.requestAnimationFrame(() => {
+      const filePickerButton = filePickerButtonRef.current;
+
+      if (filePickerButton) {
+        filePickerButton.focus();
+        return;
+      }
+
+      document
+        .querySelector<HTMLButtonElement>('.worker-health-status__retry')
+        ?.focus();
+    });
+  }
+
+  /** 서버 job 생성 전 현재 요청만 중단하고 선택 파일을 유지한다. */
+  function cancelRequest() {
+    const attempt = requestAttemptRef.current;
+
+    if (!attempt) {
+      return;
+    }
+
+    attempt.cancelled = true;
+    attempt.controller.abort();
+    requestAttemptRef.current = null;
+    setRequestCancelled(true);
+    setRequestError('');
+    setRequestNotice(
+      '요청을 중단했습니다. 선택한 파일과 처리 방식은 그대로입니다. 다시 요청할 수 있습니다.',
+    );
+    setUploadProgress(null);
+    setActiveJob(null);
+    subtitleJobMutation.reset();
+    setNavigationLocked(false);
+    focusRequestStart();
   }
 
   // Effects.
@@ -394,6 +466,28 @@ export function useSubtitlesExtractLogic() {
       setSubtitleWhisperModelPreference(selectedWhisperModel);
     },
     [selectedWhisperModel],
+  );
+
+  useEffect(
+    function registerSubtitleRequestShortcut() {
+      function handleShortcut(event: KeyboardEvent) {
+        if (!isUnmodifiedShortcut(event, 'KeyF')) {
+          return;
+        }
+
+        const filePickerButton = filePickerButtonRef.current;
+
+        if (!filePickerButton) {
+          return;
+        }
+
+        event.preventDefault();
+        filePickerButton.focus();
+      }
+
+      window.addEventListener('keydown', handleShortcut);
+      return () => window.removeEventListener('keydown', handleShortcut);
+    },
   );
 
   // Handlers.
@@ -428,13 +522,21 @@ export function useSubtitlesExtractLogic() {
     }
 
     stopRequest();
+    setRequestCancelled(false);
     setRequestError('');
+    setRequestNotice('');
     subtitleJobMutation.reset();
+    /** 새 자막 job 생성 요청 시도. */
+    let attempt: SubtitleRequestAttempt | undefined;
 
     try {
       /** 새 자막 job 생성 요청 컨트롤러. */
       const abortController = new AbortController();
-      requestAbortControllerRef.current = abortController;
+      attempt = {
+        cancelled: false,
+        controller: abortController,
+      };
+      requestAttemptRef.current = attempt;
 
       /** 생성된 자막 job. */
       const job = await subtitleJobMutation.mutateAsync({
@@ -442,17 +544,30 @@ export function useSubtitlesExtractLogic() {
         signal: abortController.signal,
       });
 
-      requestAbortControllerRef.current = null;
       /** 접수증 저장 결과와 해당 job의 요청 내역 deep link. */
       const receiptDestination = acceptJobReceipt('subtitle', job.jobId);
-      setHistoryDestination(
-        receiptDestination.storageFailed
-          ? receiptDestination.to
-          : ROUTE_PATHS.history,
-      );
-      setActiveJob(job);
+      const isCurrentAttempt = requestAttemptRef.current === attempt;
+
+      if (attempt && (isCurrentAttempt || attempt.cancelled)) {
+        setHistoryDestination(
+          receiptDestination.storageFailed
+            ? receiptDestination.to
+            : ROUTE_PATHS.history,
+        );
+        setRequestCancelled(false);
+        setRequestNotice(
+          attempt.cancelled
+            ? '요청을 중단하는 동안 서버 작업이 접수되어 요청 내역에 보존했습니다.'
+            : '',
+        );
+        setActiveJob(job);
+      }
     } catch (error) {
-      if (error instanceof DOMException && error.name === 'AbortError') {
+      if (
+        attempt?.cancelled ||
+        requestAttemptRef.current !== attempt ||
+        isAbortError(error)
+      ) {
         return;
       }
 
@@ -466,7 +581,9 @@ export function useSubtitlesExtractLogic() {
               : '영어 SRT 생성 요청에 실패했습니다. 다시 시도해 주세요.',
       );
     } finally {
-      requestAbortControllerRef.current = null;
+      if (attempt && requestAttemptRef.current?.controller === attempt.controller) {
+        requestAttemptRef.current = null;
+      }
     }
   }
 
@@ -504,11 +621,14 @@ export function useSubtitlesExtractLogic() {
     statusTitle,
     statusTone,
     submitDisabledReason,
+    cancelRequest,
+    requestNotice,
     returnToRequest,
     validation,
     viewPhase,
     workerHealthFailed: workerHealthAffectsView && workerHealthFailed,
     workerHealthCheckedAt,
+    workerHealthDetail,
     workerHealthIsFetching: workerHealthQuery.isFetching,
     workerHealthStatus,
   };
@@ -655,7 +775,7 @@ function createWorkerHealthErrorDetail(
 
   return {
     code: 'SERVICE_STATUS_CHECK_FAILED',
-    guidance: '서비스 상태 확인 중 문제가 발생했습니다.',
+    guidance: '서비스 상태를 확인할 수 없습니다.',
     location: '서비스 상태 확인',
     requestPath: '/health',
   };

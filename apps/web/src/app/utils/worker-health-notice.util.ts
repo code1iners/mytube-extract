@@ -43,7 +43,16 @@ export type WorkerHealthStatusInput = {
 export function getWorkerHealthStatus(
   input: WorkerHealthStatusInput,
 ): WorkerHealthStatus {
-  // 직전 정상 응답이 있으면 백그라운드 재확인 중에도 준비 상태를 유지한다.
+  // 재확인 중에는 요청 form을 숨겨 현재 확인 중인 상태를 먼저 알린다.
+  if (input.isFetching) {
+    return {
+      kind: 'checking',
+      label: '확인 중',
+      message: '서비스 상태를 확인하고 있습니다.',
+      role: 'status',
+    };
+  }
+
   if (
     !input.hasError &&
     input.apiReady === true &&
@@ -52,16 +61,7 @@ export function getWorkerHealthStatus(
     return {
       kind: 'ready',
       label: '준비됨',
-      message: '서버 연결됨 · worker가 작업을 받을 준비가 되었습니다.',
-      role: 'status',
-    };
-  }
-
-  if (input.isFetching) {
-    return {
-      kind: 'checking',
-      label: '확인 중',
-      message: '서버 연결과 worker 준비 상태를 확인하고 있습니다.',
+      message: '요청을 시작할 수 있습니다.',
       role: 'status',
     };
   }
@@ -78,8 +78,8 @@ export function getWorkerHealthStatus(
   if (input.workerAvailable === false) {
     return {
       kind: 'unavailable',
-      label: 'worker 중단',
-      message: `API는 응답했지만 worker가 작업을 받을 수 없습니다. ${input.unavailableMessage}`,
+      label: '작업 준비 안 됨',
+      message: '서비스가 응답했지만 지금은 요청을 시작할 수 없습니다. 다시 확인해 주세요.',
       role: 'alert',
     };
   }
@@ -87,7 +87,7 @@ export function getWorkerHealthStatus(
   return {
     kind: 'checking',
     label: '확인 중',
-    message: '서버 연결과 worker 준비 상태를 확인하고 있습니다.',
+    message: '서비스 상태를 확인하고 있습니다.',
     role: 'status',
   };
 }
@@ -108,15 +108,15 @@ export function getWorkerHealthSubmitReason(input: {
   }
 
   if (input.healthStatus === 'checking') {
-    return '서버 연결과 worker 준비 상태를 확인하는 동안 요청할 수 없습니다.';
+    return '서비스 상태를 확인하는 동안 요청할 수 없습니다.';
   }
 
   if (input.healthStatus === 'unavailable') {
-    return 'worker가 준비되지 않아 요청할 수 없습니다.';
+    return '지금은 요청을 시작할 수 없습니다.';
   }
 
   if (input.healthStatus === 'failed') {
-    return '서버 상태를 확인하지 못해 요청할 수 없습니다.';
+    return '서비스 상태를 확인하지 못해 요청할 수 없습니다.';
   }
 
   return input.validationReady ? '' : input.validationMessage;

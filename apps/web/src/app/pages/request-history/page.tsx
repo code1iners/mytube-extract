@@ -8,6 +8,7 @@ import {
 import type { DownloadResponse } from '../../../domain/download-request/download-request';
 import type { SubtitleJobResponse } from '../../../domain/subtitle-request/subtitle-request';
 import { AppIcon, type AppIconName } from '../../components/app-icon';
+import { RequestFlow } from '../../components/request-flow';
 import { ROUTE_PATHS } from '../../constants/route-paths.constant';
 import {
   type JobReceipt,
@@ -25,6 +26,7 @@ import {
   parseHistoryDeepLink,
   updateDismissedReceiptKeys,
 } from './request-history.logic';
+import { getRequestFlowStage } from '../../utils/request-flow.util';
 
 type JobStatus = DownloadResponse | SubtitleJobResponse;
 
@@ -422,6 +424,7 @@ function HistoryItem(props: {
             {query.isPending ? '상태 확인 중' : formatStatus(job?.displayStatus)}
           </span>
         </div>
+        <RequestFlow current={getRequestFlowStage(job?.displayStatus)} />
         {job?.progress !== null && job?.progress !== undefined ? (
           <div className="history-progress">
             <progress max={100} value={job.progress}>{job.progress}%</progress>

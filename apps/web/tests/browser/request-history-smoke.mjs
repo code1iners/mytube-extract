@@ -38,8 +38,11 @@ try {
   await run('request routes expose worker readiness and guarded refresh', verifyRequestReadinessStatus);
   await run('video request keeps the task flow first across viewports', verifyVideoTaskFirstLayout);
   await run('video in-place success, failure, navigation lock, and download', verifyVideoRequestFlows);
+  await run('video request cancellation restores input and navigation', verifyVideoRequestCancellation);
   await run('receipt storage failure keeps the accepted job history destination', verifyAcceptedJobStorageFallback);
   await run('subtitle in-place success and navigation lock', verifySubtitleRequestFlow);
+  await run('subtitle request cancellation cleans upload and restores file input', verifySubtitleRequestCancellation);
+  await run('request shortcuts focus only their own action', verifyRequestShortcuts);
   await run('subtitle task-first mobile density and processing choices', verifySubtitleProcessingChoice);
   await run('accessible subtitle file picker keeps one control and all input paths', verifySubtitleFilePicker);
   await run('active request status errors stay actionable', verifyActiveRequestStatusErrors);
@@ -112,30 +115,25 @@ async function verifyRequestReadinessStatus() {
         let submitCalls = 0;
         /** 최초 health 응답을 해제하는 함수. */
         let releaseInitialHealth;
-        /** 수동 재확인 응답을 해제하는 함수. */
+        /** 첫 번째 재확인 응답을 해제하는 함수. */
         let releaseRefreshHealth;
         /** 최초 확인을 대기시키는 gate. */
         const initialHealthGate = new Promise((resolve) => {
           releaseInitialHealth = resolve;
         });
-        /** 수동 재확인을 대기시키는 gate. */
+        /** 첫 번째 재확인을 대기시키는 gate. */
         const refreshHealthGate = new Promise((resolve) => {
           releaseRefreshHealth = resolve;
         });
 
         try {
           await page.addInitScript((preference) => {
-            localStorage.setItem(
-              'mytube-extract-theme-preference',
-              preference,
-            );
+            localStorage.setItem('mytube-extract-theme-preference', preference);
           }, theme);
           await routeApi(page, async ({ request, route, url }) => {
             if (
               url.pathname ===
-                (routePath === '/video'
-                  ? '/downloads'
-                  : '/subtitles/uploads') &&
+                (routePath === '/video' ? '/downloads' : '/subtitles/uploads') &&
               request.method() === 'POST'
             ) {
               submitCalls += 1;
@@ -160,18 +158,51 @@ async function verifyRequestReadinessStatus() {
               return fulfillJson(route, healthResponse(false));
             }
 
-            return fulfillJson(route, {}, 503);
+            if (healthCalls === 4) {
+              return fulfillJson(route, {}, 503);
+            }
+
+            return fulfillJson(route, healthResponse());
           });
 
           await page.goto(staticServer.origin + routePath);
-          await page
-            .getByRole('heading', { name: '서버 연결·worker 준비 상태' })
-            .waitFor();
+          await page.getByRole('heading', { name: '서비스 상태' }).waitFor();
           await page.getByText('확인 중', { exact: true }).waitFor();
+
+          assert.equal(
+            await page.evaluate(() => document.documentElement.dataset.theme),
+            theme,
+          );
+          assert.equal(healthCalls, 1);
+          assert.equal(await page.locator('.readiness-panel').count(), 1);
+          assert.equal(
+            await page.locator(routePath === '/video' ? 'input[type="url"]' : 'form').count(),
+            0,
+          );
+          assert.equal(
+            await page.getByRole('button', { name: '서비스 상태 다시 확인' }).isDisabled(),
+            true,
+          );
+          assert.equal(await page.locator('.submit-disabled-reason').count(), 0);
+          assert.match(
+            await page.locator('.worker-health-status__message').textContent(),
+            /서비스 상태를 확인하고 있습니다/,
+          );
+          assert.equal(submitCalls, 0);
+          await assertRequestReadinessLayout(page, width);
+
+          releaseInitialHealth();
+          await page.getByText('준비됨', { exact: true }).waitFor();
+          await page.locator(routePath === '/video' ? 'input[type="url"]' : 'form').waitFor();
+          assert.equal(await page.locator('.readiness-panel').count(), 0);
+          assert.equal(
+            await page.locator('.worker-health-status__last-checked').count(),
+            1,
+          );
+          await assertRequestReadinessLayout(page, width);
+
           if (routePath === '/video') {
-            await page
-              .getByLabel('YouTube URL')
-              .fill('https://youtu.be/abc123_DEF0');
+            await page.getByLabel('YouTube URL').fill('https://youtu.be/abc123_DEF0');
           } else {
             await page.locator('input[type="file"]').setInputFiles({
               buffer: Buffer.from('fake-video'),
@@ -180,141 +211,78 @@ async function verifyRequestReadinessStatus() {
             });
           }
 
-          /** readiness 확인 중 상태에서 제출할 수 없는 button. */
-          const submitButton = page.locator('.primary-button').first();
-          /** route별 health 상태 설명 id. */
-          const workerHealthMessageId =
-            routePath === '/video'
-              ? 'video-worker-health-title-message'
-              : 'subtitle-worker-health-title-message';
-          assert.equal(
-            await page.evaluate(
-              () => document.documentElement.dataset.theme,
-            ),
-            theme,
-          );
-          assert.equal(healthCalls, 1);
-          assert.equal(await submitButton.isDisabled(), true);
-          assert.equal(
-            await page.locator('[data-health-presentation="compact"]').count(),
-            1,
-          );
-          assert.equal(
-            await page.locator('.worker-health-status__last-checked').count(),
-            0,
-          );
-          assert.equal(
-            await page.getByRole('button', {
-              name: '서버와 worker 상태 다시 확인',
-            }).isDisabled(),
-            true,
-          );
-          assert.equal(
-            await submitButton.getAttribute('aria-describedby'),
-            workerHealthMessageId,
-          );
-          assert.equal(await page.locator('.submit-disabled-reason').count(), 0);
-          assert.match(
-            await page.locator('.worker-health-status__message').textContent(),
-            /서버 연결과 worker 준비 상태를 확인하고 있습니다/,
-          );
-          assert.equal(submitCalls, 0);
-          await assertRequestReadinessLayout(page, width);
-
-          releaseInitialHealth();
-          await page.getByText('준비됨', { exact: true }).waitFor();
-          assert.equal(
-            await page.locator('[data-health-presentation="compact"]').count(),
-            1,
-          );
-          assert.equal(await submitButton.isDisabled(), false);
-          assert.equal(
-            await page.locator('.worker-health-status__last-checked').count(),
-            1,
-          );
-          await assertRequestReadinessLayout(page, width);
-
           /** readiness 상태를 수동으로 다시 확인하는 button. */
           const refreshButton = page.getByRole('button', {
-            name: '서버와 worker 상태 다시 확인',
+            name: '서비스 상태 다시 확인',
           });
           await refreshButton.focus();
           assert.equal(
-            await refreshButton.evaluate(
-              (element) => document.activeElement === element,
-            ),
+            await refreshButton.evaluate((element) => document.activeElement === element),
             true,
           );
           assert.equal(
-            await refreshButton.evaluate((element) =>
-              element.matches(':focus-visible'),
-            ),
+            await refreshButton.evaluate((element) => element.matches(':focus-visible')),
             true,
           );
           await page.keyboard.press('Enter');
           await waitForCondition(async () => healthCalls === 2);
           await waitForCondition(async () => refreshButton.isDisabled());
-          assert.equal(
-            await page.locator('[data-health-status="ready"]').count(),
-            1,
-          );
-          assert.equal(await submitButton.isDisabled(), false);
-          assert.equal(
-            await submitButton.getAttribute('aria-describedby'),
-            null,
-          );
+          assert.equal(await page.locator('.readiness-panel').count(), 1);
+          assert.equal(await page.locator('form').count(), 0);
+          assert.equal(submitCalls, 0);
+          await assertRequestReadinessLayout(page, width);
           await refreshButton.dispatchEvent('click');
           await refreshButton.dispatchEvent('click');
           assert.equal(healthCalls, 2);
           releaseRefreshHealth();
           await page.getByText('준비됨', { exact: true }).waitFor();
-          assert.equal(healthCalls, 2);
+          if (routePath === '/video') {
+            assert.equal(await page.getByLabel('YouTube URL').inputValue(), 'https://youtu.be/abc123_DEF0');
+          } else {
+            assert.equal(await page.getByText('sample.mp4', { exact: true }).count(), 1);
+          }
 
           await refreshButton.click();
-          await page.getByText('worker 중단', { exact: true }).waitFor();
-          assert.equal(
-            await page.locator('[data-health-presentation="expanded"]').count(),
-            1,
-          );
-          assert.equal(
-            await page.locator('.worker-health-status__last-checked').count(),
-            0,
-          );
-          assert.equal(await submitButton.isDisabled(), true);
-          assert.equal(await page.locator('.submit-disabled-reason').count(), 0);
-          assert.equal(
-            await submitButton.getAttribute('aria-describedby'),
-            workerHealthMessageId,
-          );
+          await page.getByText('작업 준비 안 됨', { exact: true }).waitFor();
+          assert.equal(await page.locator('.readiness-panel').count(), 1);
+          assert.equal(await page.locator('form, input[type="url"]').count(), 0);
+          assert.equal(await page.locator('.error-details').count(), 1);
           assert.match(
             await page.locator('.worker-health-status__message').textContent(),
-            /API는 응답했지만 worker가 작업을 받을 수 없습니다/,
+            /서비스가 응답했지만 지금은 요청을 시작할 수 없습니다/,
           );
           assert.equal(submitCalls, 0);
           await assertRequestReadinessLayout(page, width);
 
-          await refreshButton.click();
-          await page.getByText('확인 실패', { exact: true }).waitFor();
+          await page.getByRole('button', { name: '상세 원인 보기' }).focus();
+          await page.keyboard.press('Enter');
+          await page.getByText(/오류 코드: WORKER_UNAVAILABLE/, { exact: true }).waitFor();
           assert.equal(
-            await page.locator('[data-health-presentation="expanded"]').count(),
+            await page.getByRole('button', { name: '상세 원인 숨기기' }).count(),
             1,
           );
-          assert.equal(
-            await page.locator('.worker-health-status__last-checked').count(),
-            0,
-          );
-          assert.equal(await submitButton.isDisabled(), true);
-          assert.equal(await page.locator('.submit-disabled-reason').count(), 0);
-          assert.equal(
-            await submitButton.getAttribute('aria-describedby'),
-            workerHealthMessageId,
-          );
+          await page.getByRole('button', { name: '상세 원인 숨기기' }).press('Space');
+
+          await refreshButton.click();
+          await page.getByText('확인 실패', { exact: true }).waitFor();
+          assert.equal(await page.locator('.readiness-panel').count(), 1);
+          assert.equal(await page.locator('form, input[type="url"]').count(), 0);
+          assert.equal(await page.locator('.error-details').count(), 1);
           assert.match(
             await page.locator('.worker-health-status__message').textContent(),
             /API 상태를 확인하지 못했습니다\. 다시 확인해 주세요\./,
           );
-          assert.equal(submitCalls, 0);
           await assertRequestReadinessLayout(page, width);
+
+          await page.getByRole('button', { name: '상세 원인 보기' }).press('Space');
+          await page.getByText(/오류 코드: SERVICE_STATUS_CHECK_FAILED/, { exact: true }).waitFor();
+          await refreshButton.click();
+          await page.getByText('준비됨', { exact: true }).waitFor();
+          if (routePath === '/video') {
+            assert.equal(await page.getByLabel('YouTube URL').inputValue(), 'https://youtu.be/abc123_DEF0');
+          } else {
+            assert.equal(await page.getByText('sample.mp4', { exact: true }).count(), 1);
+          }
           assertNoRuntimeErrors();
         } finally {
           await context.close();
@@ -432,6 +400,8 @@ async function verifyVideoRequestFlows() {
     await waitForEnabled(submit);
     await submit.click();
     await createStartedPromise;
+    await page.getByRole('heading', { name: '요청 접수 중' }).waitFor();
+    assert.equal(await page.locator('.request-flow[data-flow-stage="extract"]').count(), 1);
 
     const historyLink = page.getByRole('link', { name: '요청 내역' });
     const videoLink = page.getByRole('link', { name: '영상 추출' });
@@ -452,6 +422,8 @@ async function verifyVideoRequestFlows() {
     releaseCreate();
     assert.equal(new URL(page.url()).pathname, '/video');
     await page.getByRole('heading', { name: '추출 완료' }).waitFor();
+    assert.equal(await page.locator('.request-flow[data-flow-stage="receipt"]').count(), 1);
+    assert.equal(await page.getByRole('button', { name: '요청 취소' }).count(), 0);
     assert.equal(await page.locator('.worker-health-status').count(), 0);
     const storedReceipt = await page.evaluate(
       (key) => JSON.parse(localStorage.getItem(key) ?? 'null'),
@@ -500,6 +472,76 @@ async function verifyVideoRequestFlows() {
   }
 }
 
+/** 영상 job 생성 POST를 취소하고 입력·navigation·receipt 경계를 확인한다. */
+async function verifyVideoRequestCancellation() {
+  const context = await createContext({ viewport: { height: 844, width: 390 } });
+  const { page, assertNoRuntimeErrors } = await createPage(context);
+  let releaseCreate;
+  let createStarted;
+  let cancelCalls = 0;
+  const createStartedPromise = new Promise((resolve) => {
+    createStarted = resolve;
+  });
+  const createGate = new Promise((resolve) => {
+    releaseCreate = resolve;
+  });
+
+  try {
+    await routeApi(page, async ({ request, route, url }) => {
+      if (url.pathname === '/health') return fulfillJson(route, healthResponse());
+      if (url.pathname === '/downloads' && request.method() === 'POST') {
+        createStarted();
+        await createGate;
+        try {
+          await fulfillJson(route, videoJob(VIDEO_OTHER_ID, 'queued'));
+        } catch {
+          // 취소된 browser fetch가 route 응답을 무시하는 것은 정상적인 경계다.
+        }
+        return;
+      }
+      if (url.pathname.includes('/cancel')) {
+        cancelCalls += 1;
+      }
+      return fulfillJson(route, {}, 404);
+    });
+
+    await page.goto(`${staticServer.origin}/video`);
+    const sourceUrl = page.getByLabel('YouTube URL');
+    await sourceUrl.fill('https://youtu.be/abc123_DEF0');
+    const submit = page.getByRole('button', { name: '추출 요청' });
+    await waitForEnabled(submit);
+    await submit.click();
+    await createStartedPromise;
+    await page.getByRole('heading', { name: '요청 접수 중' }).waitFor();
+
+    await page.getByRole('button', { name: '요청 취소' }).click();
+    await page.getByRole('heading', { name: '추출 요청' }).waitFor();
+    await waitForCondition(async () =>
+      sourceUrl.evaluate((element) => document.activeElement === element),
+    );
+    assert.equal(await sourceUrl.inputValue(), 'https://youtu.be/abc123_DEF0');
+    await page
+      .getByText('요청을 중단했습니다. 입력한 설정은 그대로입니다. 다시 요청할 수 있습니다.', {
+        exact: true,
+      })
+      .waitFor();
+    assert.equal(await receiptCount(page), 0);
+    assert.equal(cancelCalls, 0);
+    for (const link of await page.locator('nav[aria-label="주요 메뉴"]:visible a').all()) {
+      assert.equal(await link.getAttribute('aria-disabled'), null);
+    }
+    assert.equal(await page.getByRole('button', { name: '요청 취소' }).count(), 0);
+
+    releaseCreate();
+    await page.waitForTimeout(100);
+    assert.equal(await receiptCount(page), 0);
+    assertNoRuntimeErrors();
+  } finally {
+    releaseCreate?.();
+    await context.close();
+  }
+}
+
 /** 영상 요청의 작업 순서와 반응형 표면 계층을 viewport·theme별로 검증한다. */
 async function verifyVideoTaskFirstLayout() {
   /** 작업 흐름을 확인할 responsive viewport 폭. */
@@ -528,6 +570,8 @@ async function verifyVideoTaskFirstLayout() {
         await page.goto(`${staticServer.origin}/video`);
         await page.getByRole('heading', { name: '추출 요청' }).waitFor();
         await page.getByLabel('YouTube URL').waitFor();
+        assert.equal(await page.locator('.request-flow[data-flow-stage="source"]').count(), 1);
+        assert.deepEqual(await page.locator('.request-flow__step').allTextContents(), ['원본', '추출', '파일 수령']);
 
         /** 작업 입력과 보조 readiness의 DOM 위치. */
         const documentOrder = await page.evaluate(() => {
@@ -575,9 +619,11 @@ async function verifyVideoTaskFirstLayout() {
           const submit = document.querySelector('button[type="submit"]');
           /** form 뒤의 readiness 안내. */
           const readiness = document.querySelector('.worker-health-status');
-          /** 현재 viewport에서 보이는 주요 navigation. */
-          const visibleNavigation = [...document.querySelectorAll('nav[aria-label="주요 메뉴"]')]
-            .find((element) => getComputedStyle(element).display !== 'none');
+            /** 현재 viewport에서 보이는 주요 navigation. */
+            const visibleNavigation = [...document.querySelectorAll('nav[aria-label="주요 메뉴"]')]
+              .find((element) => getComputedStyle(element).display !== 'none');
+            /** 데스크톱 수직 리듬의 기준이 되는 헤더. */
+            const header = document.querySelector('.app-header');
           /** 주 작업 영역의 computed surface 값. */
           const panelStyle = requestPanel ? getComputedStyle(requestPanel) : null;
           /** 요소의 viewport 영역을 직렬화한다. */
@@ -595,6 +641,7 @@ async function verifyVideoTaskFirstLayout() {
               scrollWidth: document.documentElement.scrollWidth,
             },
             navigation: toBox(visibleNavigation),
+            header: toBox(header),
             panel: {
               backgroundColor: panelStyle?.backgroundColor,
               borderTopWidth: panelStyle?.borderTopWidth,
@@ -624,6 +671,11 @@ async function verifyVideoTaskFirstLayout() {
         if (width <= 820) {
           assert.ok(layoutMetrics.navigation);
           assert.ok(layoutMetrics.submit.bottom <= layoutMetrics.navigation.top);
+        } else {
+          assert.ok(layoutMetrics.header);
+          assert.ok(layoutMetrics.panel.box);
+          assert.ok(layoutMetrics.panel.box.top - layoutMetrics.header.bottom >= 24);
+          assert.ok(layoutMetrics.panel.box.bottom <= 900 - 24);
         }
 
         assert.equal(await page.getByRole('button', { name: '리셋' }).count(), 0);
@@ -761,6 +813,8 @@ async function verifySubtitleRequestFlow() {
     await waitForEnabled(submit);
     await submit.click();
     await uploadStartedPromise;
+    await page.getByRole('heading', { name: '요청 접수 중' }).waitFor();
+    assert.equal(await page.locator('.request-flow[data-flow-stage="extract"]').count(), 1);
 
     const historyLink = page.getByRole('link', { name: '요청 내역' });
     const videoTab = page.getByRole('link', { name: '영상 추출' });
@@ -778,6 +832,8 @@ async function verifySubtitleRequestFlow() {
 
     releaseUpload();
     await page.getByRole('heading', { name: '영어 SRT 준비 완료' }).waitFor();
+    assert.equal(await page.locator('.request-flow[data-flow-stage="receipt"]').count(), 1);
+    assert.equal(await page.getByRole('button', { name: '요청 취소' }).count(), 0);
     assert.equal(new URL(page.url()).pathname, '/subtitles');
     assert.equal(await page.locator('.worker-health-status').count(), 0);
     assert.equal(await receiptCount(page), 1);
@@ -787,6 +843,173 @@ async function verifySubtitleRequestFlow() {
         .getAttribute('href'),
       `${API_ORIGINS[0]}/subtitles/jobs/${SUBTITLE_ID}/file`,
     );
+    assertNoRuntimeErrors();
+  } finally {
+    await context.close();
+  }
+}
+
+/** 자막 multipart 업로드를 취소하고 cleanup·파일 유지·navigation 경계를 확인한다. */
+async function verifySubtitleRequestCancellation() {
+  const context = await createContext({ viewport: { height: 844, width: 390 } });
+  const { page, assertNoRuntimeErrors } = await createPage(context, {
+    ignoreHttpErrors: true,
+  });
+  let releaseUpload;
+  let uploadStarted;
+  let completeCalls = 0;
+  let abortCalls = 0;
+  let cancelCalls = 0;
+  const uploadStartedPromise = new Promise((resolve) => {
+    uploadStarted = resolve;
+  });
+  const uploadGate = new Promise((resolve) => {
+    releaseUpload = resolve;
+  });
+
+  try {
+    await page.route('https://upload.example/**', async (route) => {
+      uploadStarted();
+      await uploadGate;
+      try {
+        await route.fulfill({
+          body: '',
+          headers: {
+            'Access-Control-Allow-Origin': '*',
+            'Access-Control-Expose-Headers': 'ETag',
+            ETag: '"part-1"',
+          },
+          status: 200,
+        });
+      } catch {
+        // 취소된 browser fetch가 route 응답을 무시하는 것은 정상적인 경계다.
+      }
+    });
+    await routeApi(page, async ({ request, route, url }) => {
+      if (url.pathname === '/health') return fulfillJson(route, healthResponse());
+      if (url.pathname === '/subtitles/uploads' && request.method() === 'POST') {
+        return fulfillJson(route, {
+          expiresAt: '2026-08-13T12:00:00.000Z',
+          objectKey: 'source/video.mp4',
+          partSizeBytes: 1024,
+          parts: [{ partNumber: 1, uploadUrl: 'https://upload.example/part-1' }],
+          uploadId: 'upload-1',
+          uploadToken: 'token-1',
+        });
+      }
+      if (url.pathname === '/subtitles/uploads/complete') {
+        completeCalls += 1;
+        return fulfillJson(route, subtitleJob(SUBTITLE_OTHER_ID, 'queued'));
+      }
+      if (url.pathname === '/subtitles/uploads/abort') {
+        abortCalls += 1;
+        return fulfillJson(route, {});
+      }
+      if (url.pathname.includes('/cancel')) {
+        cancelCalls += 1;
+      }
+      return fulfillJson(route, {}, 404);
+    });
+
+    await page.goto(`${staticServer.origin}/subtitles`);
+    await page.locator('input[type="file"]').setInputFiles({
+      buffer: Buffer.from('fake-video'),
+      mimeType: 'video/mp4',
+      name: 'cancel-video.mp4',
+    });
+    const submit = page.getByRole('button', { name: '영어 SRT 생성' });
+    await waitForEnabled(submit);
+    await submit.click();
+    await uploadStartedPromise;
+    await page.getByRole('heading', { name: '요청 접수 중' }).waitFor();
+
+    await page.getByRole('button', { name: '요청 취소' }).click();
+    await page.getByRole('heading', { name: '영어 SRT 생성' }).waitFor();
+    const picker = page.getByRole('button', {
+      name: '영상 선택 또는 드래그 (로컬 영상 파일)',
+    });
+    await waitForCondition(async () =>
+      picker.evaluate((element) => document.activeElement === element),
+    );
+    assert.equal(await page.getByText('cancel-video.mp4', { exact: true }).count(), 1);
+    await page
+      .getByText('요청을 중단했습니다. 선택한 파일과 처리 방식은 그대로입니다. 다시 요청할 수 있습니다.', {
+        exact: true,
+      })
+      .waitFor();
+    await waitForCondition(async () => abortCalls === 1);
+    assert.equal(completeCalls, 0);
+    assert.equal(cancelCalls, 0);
+    assert.equal(await receiptCount(page), 0);
+    for (const link of await page.locator('nav[aria-label="주요 메뉴"]:visible a').all()) {
+      assert.equal(await link.getAttribute('aria-disabled'), null);
+    }
+    assert.equal(await page.getByRole('button', { name: '요청 취소' }).count(), 0);
+
+    releaseUpload();
+    await page.waitForTimeout(100);
+    assertNoRuntimeErrors();
+  } finally {
+    releaseUpload?.();
+    await context.close();
+  }
+}
+
+/** U/F 단축키가 입력 중에는 개입하지 않고 브라우저 기본 조합과 겹치지 않는지 확인한다. */
+async function verifyRequestShortcuts() {
+  const context = await createContext({ viewport: { height: 844, width: 390 } });
+  const { page, assertNoRuntimeErrors } = await createPage(context);
+
+  try {
+    await routeApi(page, async ({ route, url }) => {
+      if (url.pathname === '/health') return fulfillJson(route, healthResponse());
+      return fulfillJson(route, {}, 404);
+    });
+
+    await page.goto(`${staticServer.origin}/video`);
+    const sourceUrl = page.getByLabel('YouTube URL');
+    await sourceUrl.waitFor();
+    await page.evaluate(() => {
+      document.body.tabIndex = -1;
+      document.body.focus();
+    });
+    await page.keyboard.press('u');
+    assert.equal(
+      await sourceUrl.evaluate((element) => document.activeElement === element),
+      true,
+    );
+    await sourceUrl.fill('https://youtu.be/abc123_DEF0');
+    await page.keyboard.press('u');
+    assert.equal(await sourceUrl.inputValue(), 'https://youtu.be/abc123_DEF0u');
+    await page.evaluate(() => document.body.focus());
+    await page.keyboard.press('Control+u');
+    assert.equal(
+      await sourceUrl.evaluate((element) => document.activeElement === element),
+      false,
+    );
+    assert.equal(new URL(page.url()).pathname, '/video');
+
+    await page.goto(`${staticServer.origin}/subtitles`);
+    const picker = page.getByRole('button', {
+      name: '영상 선택 또는 드래그 (로컬 영상 파일)',
+    });
+    await picker.waitFor();
+    await page.evaluate(() => {
+      document.body.tabIndex = -1;
+      document.body.focus();
+    });
+    await page.keyboard.press('f');
+    assert.equal(
+      await picker.evaluate((element) => document.activeElement === element),
+      true,
+    );
+    await page.evaluate(() => document.body.focus());
+    await page.keyboard.press('Control+f');
+    assert.equal(
+      await picker.evaluate((element) => document.activeElement === element),
+      false,
+    );
+    assert.equal(new URL(page.url()).pathname, '/subtitles');
     assertNoRuntimeErrors();
   } finally {
     await context.close();
@@ -885,21 +1108,34 @@ async function verifySubtitleProcessingChoice() {
       await accuracyOption.check();
       assert.equal(await accuracyOption.isChecked(), true);
       assert.equal(await page.getByText('파일의 음성을 영어 SRT 자막으로 만들 처리 방향을 선택하세요.', { exact: true }).count(), 1);
-      assert.equal(await page.getByText('영어 전용 자막은 로컬 Whisper로 처리합니다.', { exact: true }).count(), 1);
       assert.equal(await page.getByText('파일을 빠르게 영어 자막으로 만들고 싶을 때', { exact: true }).count(), 1);
       assert.equal(await page.getByText('음성을 더 꼼꼼하게 영어 자막으로 옮기고 싶을 때', { exact: true }).count(), 1);
-      assert.equal(await page.getByText('base.en · 상대적으로 빠른 처리', { exact: true }).count(), 1);
-      assert.equal(await page.getByText('small.en · 인식 정확도를 우선하는 처리', { exact: true }).count(), 1);
       assert.equal(await page.getByText(/예상 처리 시간/, { exact: false }).count(), 0);
+      assert.equal(await page.getByText(/R2/, { exact: false }).count(), 0);
+      /** 접힌 기술 처리 정보 disclosure. */
+      const processingDetails = page.locator('.subtitle-processing-method__details');
+      const processingSummary = processingDetails.locator('summary');
+      assert.equal(await processingDetails.getAttribute('open'), null);
+      assert.equal(await processingDetails.getByText('속도 우선: base.en · 상대적으로 빠른 처리', { exact: true }).isVisible(), false);
+      assert.equal(await processingDetails.getByText('정확도 우선: small.en · 인식 정확도를 우선하는 처리', { exact: true }).isVisible(), false);
+      await processingSummary.focus();
+      await page.keyboard.press('Enter');
+      await processingDetails.getByText('영어 전용 자막은 로컬 Whisper로 처리합니다.', { exact: true }).waitFor();
+      assert.equal(await processingDetails.getAttribute('open'), '');
+      assert.equal(await processingDetails.getByText('속도 우선: base.en · 상대적으로 빠른 처리', { exact: true }).isVisible(), true);
+      await processingSummary.press('Space');
+      assert.equal(await processingDetails.getAttribute('open'), null);
+      await processingSummary.click();
+      assert.equal(await processingDetails.getAttribute('open'), '');
       assert.ok(
         await page.evaluate(() => {
           /** 첫 처리 방식의 사용자 중심 설명. */
           const description = document.querySelector(
             '.subtitle-processing-option__description',
           );
-          /** 첫 처리 방식의 기술 정보. */
+          /** 처리 방식 disclosure. */
           const technical = document.querySelector(
-            '.subtitle-processing-option__technical',
+            '.subtitle-processing-method__details',
           );
 
           return Boolean(
@@ -910,6 +1146,8 @@ async function verifySubtitleProcessingChoice() {
           );
         }),
       );
+      await processingSummary.click();
+      assert.equal(await processingDetails.getAttribute('open'), null);
       /** 처리 방식 선택지의 실제 grid 열 위치. */
       const processingOptionLefts = await processingOptions.evaluateAll((options) =>
         options.map((option) => Math.round(option.getBoundingClientRect().left)),
@@ -997,6 +1235,7 @@ async function verifySubtitleProcessingChoice() {
       await waitForEnabled(submit);
       await submit.click();
       await page.locator('.subtitle-step-tabs').waitFor();
+      assert.equal(await page.locator('.request-flow[data-flow-stage="extract"]').count(), 1);
 
       /** 실제 자막 처리 단계 네 개. */
       const stepTabs = page.locator('.subtitle-step-tabs .step-tab');
@@ -1926,7 +2165,10 @@ async function verifyPopulatedHistoryResponsiveLayout() {
         await page.goto(`${staticServer.origin}/history`);
         const detail = page.locator('.history-item__header p');
         await detail.waitFor();
-        assert.ok((await detail.textContent())?.includes(longFileName));
+        await waitForCondition(
+          async () => (await detail.textContent())?.includes(longFileName),
+        );
+        assert.equal(await page.locator('.request-flow[data-flow-stage="receipt"]').count(), 1);
 
         const layoutMetrics = await page.evaluate(() => {
           /** 목록과 항목의 실제 viewport 및 scroll 영역. */
@@ -1965,6 +2207,16 @@ async function verifyPopulatedHistoryResponsiveLayout() {
                   scrollWidth: article.scrollWidth,
                 }
               : null,
+            actions: [...document.querySelectorAll('.history-actions a, .history-actions button')].map((action) => {
+              const rect = action.getBoundingClientRect();
+              return {
+                bottom: rect.bottom,
+                height: rect.height,
+                left: rect.left,
+                right: rect.right,
+                width: rect.width,
+              };
+            }),
           };
         });
 
@@ -1987,6 +2239,16 @@ async function verifyPopulatedHistoryResponsiveLayout() {
         assert.ok(
           layoutMetrics.article &&
             layoutMetrics.article.scrollWidth <= layoutMetrics.article.clientWidth,
+        );
+        assert.ok(
+          layoutMetrics.actions.length > 0 &&
+            layoutMetrics.actions.every(
+              (action) =>
+                action.width >= 44 &&
+                action.height >= 44 &&
+                action.left >= 0 &&
+                action.right <= width,
+            ),
         );
         assertNoRuntimeErrors();
       } finally {
@@ -2188,6 +2450,67 @@ async function verifyResponsiveNavigationLayout(page, width, routePath) {
     );
   } else {
     assert.equal(await visibleNavigation.locator('a[aria-current="page"]').count(), 1);
+  }
+  /** 현재 목적지 label의 본문 대비와 설정 secondary marker를 측정한다. */
+  const activeLabelContrast = await page.evaluate((isSettingsRoute) => {
+    /** CSS 색상을 RGB 배열로 바꾼다. */
+    const parseColor = (value) => {
+      const channels = value.match(/[\d.]+/g)?.map(Number) ?? [];
+      return channels.length >= 3 ? channels.slice(0, 3) : null;
+    };
+    /** 투명 배경이면 상위 surface를 사용한다. */
+    const isTransparent = (value) => {
+      const channels = value.match(/[\d.]+/g)?.map(Number) ?? [];
+      return channels.length >= 4 && channels[3] === 0;
+    };
+    /** sRGB channel의 상대 휘도 입력값을 만든다. */
+    const linearize = (channel) => {
+      const normalized = channel / 255;
+      return normalized <= 0.03928
+        ? normalized / 12.92
+        : ((normalized + 0.055) / 1.055) ** 2.4;
+    };
+    /** 두 RGB 색상의 WCAG 대비를 계산한다. */
+    const contrastRatio = (foreground, background) => {
+      if (!foreground || !background) return 0;
+      const foregroundLuminance =
+        0.2126 * linearize(foreground[0]) +
+        0.7152 * linearize(foreground[1]) +
+        0.0722 * linearize(foreground[2]);
+      const backgroundLuminance =
+        0.2126 * linearize(background[0]) +
+        0.7152 * linearize(background[1]) +
+        0.0722 * linearize(background[2]);
+      const lighter = Math.max(foregroundLuminance, backgroundLuminance);
+      const darker = Math.min(foregroundLuminance, backgroundLuminance);
+      return (lighter + 0.05) / (darker + 0.05);
+    };
+    /** route의 현재 목적지 link. */
+    const link = isSettingsRoute
+      ? document.querySelector('.settings-link[aria-current="page"]')
+      : document.querySelector('nav[aria-label="주요 메뉴"]:not([style*="display: none"]) a[aria-current="page"]');
+    if (!link) return null;
+    const linkStyle = getComputedStyle(link);
+    const rootStyle = getComputedStyle(document.documentElement);
+    const bodyStyle = getComputedStyle(document.body);
+    const background = isTransparent(linkStyle.backgroundColor)
+      ? parseColor(bodyStyle.backgroundColor)
+      : parseColor(linkStyle.backgroundColor);
+    const foreground = parseColor(linkStyle.color);
+    return {
+      background,
+      foreground,
+      ratio: contrastRatio(foreground, background),
+      textColor: rootStyle.color,
+      linkColor: linkStyle.color,
+      textDecorationLine: linkStyle.textDecorationLine,
+    };
+  }, routePath === '/settings');
+  assert.ok(activeLabelContrast);
+  assert.equal(activeLabelContrast.linkColor, activeLabelContrast.textColor);
+  assert.ok(activeLabelContrast.ratio >= 4.5);
+  if (routePath === '/settings') {
+    assert.match(activeLabelContrast.textDecorationLine, /underline/);
   }
   assert.deepEqual(
     await page.evaluate(() => ({

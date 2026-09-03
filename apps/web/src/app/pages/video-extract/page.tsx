@@ -1,8 +1,9 @@
 import { type DownloadDisplayStatus } from '../../../domain/download-request/download-request';
 import { ErrorDetailsDisclosure } from '../../components/error-details-disclosure';
 import { AppIcon, type AppIconName } from '../../components/app-icon';
+import { RequestFlow } from '../../components/request-flow';
+import { RequestReadinessPanel } from '../../components/request-readiness-panel';
 import { WorkerHealthStatusNotice } from '../../components/worker-health-status';
-import { getWorkerHealthStatusMessageId } from '../../utils/worker-health-notice.util';
 import { useVideoExtractLogic } from './_hooks/use-video-extract-logic';
 
 /** 처리 화면에서 표시할 영상 추출 단계. */
@@ -24,10 +25,6 @@ const VIDEO_ERROR_DETAIL_SUMMARY =
   '영상 추출 요청이 정상적으로 처리되지 않았습니다.';
 /** 영상 route worker health 제목 id. */
 const VIDEO_WORKER_HEALTH_TITLE_ID = 'video-worker-health-title';
-/** 영상 route worker health 설명 id. */
-const VIDEO_WORKER_HEALTH_MESSAGE_ID = getWorkerHealthStatusMessageId(
-  VIDEO_WORKER_HEALTH_TITLE_ID,
-);
 
 /** 영상 추출 route page. */
 export function VideoExtractPage() {
@@ -36,6 +33,7 @@ export function VideoExtractPage() {
   /** 영상 추출 form, job 상태, 사용자 동작. */
   const {
     canSubmit,
+    cancelRequest,
     clearRequestError,
     createdTime,
     downloadHref,
@@ -48,6 +46,7 @@ export function VideoExtractPage() {
     progressLabel,
     qualityOptions,
     register,
+    requestNotice,
     retryWorkerHealth,
     returnToRequest,
     statusErrorDetail,
@@ -63,17 +62,36 @@ export function VideoExtractPage() {
     viewPhase,
     workerHealthFailed,
     workerHealthCheckedAt,
+    workerHealthDetail,
     workerHealthIsFetching,
     workerHealthStatus,
   } = useVideoExtractLogic();
 
-  if (viewPhase === 'request') {
-    /** readiness 상태가 제출을 막고 있는지 여부. */
-    const workerHealthBlocksSubmit = workerHealthStatus.kind !== 'ready';
+  if (
+    viewPhase === 'request' &&
+    workerHealthStatus.kind !== 'ready'
+  ) {
+    return (
+      <RequestReadinessPanel
+        healthId={VIDEO_WORKER_HEALTH_TITLE_ID}
+        icon="download"
+        id="request-title"
+        isFetching={workerHealthIsFetching}
+        lastCheckedAt={workerHealthCheckedAt}
+        status={workerHealthStatus}
+        technicalDetail={workerHealthDetail}
+        title="추출 요청"
+        onRetry={retryWorkerHealth}
+      />
+    );
+  }
 
+  if (viewPhase === 'request') {
     return (
       <section className="phase-panel video-request-panel" aria-labelledby="request-title">
         <PanelTitle icon="download" id="request-title">추출 요청</PanelTitle>
+        <RequestFlow current="source" />
+        {requestNotice ? <RequestNotice message={requestNotice} /> : null}
 
         <form className="download-form" onSubmit={handleDownloadFormSubmit}>
           <label className={validation.kind === 'invalid' ? 'field field--wide has-error' : 'field field--wide'}>
@@ -99,6 +117,7 @@ export function VideoExtractPage() {
               ) : null}
             </span>
             {validation.kind !== 'ready' ? <p className={validation.kind === 'invalid' ? 'field-feedback field-feedback--error' : 'field-feedback'} id="video-source-url-feedback" role={validation.kind === 'invalid' ? 'alert' : undefined}>{validation.message}</p> : null}
+            <p className="keyboard-shortcut-hint"><kbd>U</kbd> 키로 URL 입력에 바로 포커스</p>
           </label>
 
           <fieldset className="segmented-control">
@@ -127,11 +146,9 @@ export function VideoExtractPage() {
 
           <button
             aria-describedby={
-              workerHealthBlocksSubmit
-                ? VIDEO_WORKER_HEALTH_MESSAGE_ID
-                : !canSubmit && submitDisabledReason
-                  ? 'video-submit-disabled-reason'
-                  : undefined
+              !canSubmit && submitDisabledReason
+                ? 'video-submit-disabled-reason'
+                : undefined
             }
             className="primary-button"
             disabled={!canSubmit}
@@ -140,7 +157,7 @@ export function VideoExtractPage() {
             <AppIcon name="download" />
             {isDownloadPending ? '요청 중' : '추출 요청'}
           </button>
-          {!canSubmit && submitDisabledReason && !workerHealthBlocksSubmit ? (
+          {!canSubmit && submitDisabledReason ? (
             <p className="submit-disabled-reason" id="video-submit-disabled-reason">
               {submitDisabledReason}
             </p>
@@ -151,6 +168,7 @@ export function VideoExtractPage() {
           isFetching={workerHealthIsFetching}
           lastCheckedAt={workerHealthCheckedAt}
           status={workerHealthStatus}
+          technicalDetail={workerHealthDetail}
           onRetry={retryWorkerHealth}
         />
       </section>
@@ -161,6 +179,8 @@ export function VideoExtractPage() {
     return (
       <section className="console-panel phase-panel status-panel" aria-labelledby="status-title">
         <PanelTitle icon="processing" id="status-title">처리 상태</PanelTitle>
+        <RequestFlow current="extract" />
+        {requestNotice ? <RequestNotice message={requestNotice} /> : null}
         <StatusHead icon={statusIconName} tone={statusTone} title={statusTitle} message={statusMessage} />
         <div className="step-tabs" aria-label="작업 단계">
           {STATUS_ITEMS.map((item) => (
@@ -189,7 +209,12 @@ export function VideoExtractPage() {
     return (
       <section className="console-panel phase-panel status-panel" aria-labelledby="accepting-title">
         <PanelTitle icon="processing" id="accepting-title">요청 접수 중</PanelTitle>
+        <RequestFlow current="extract" />
         <StatusHead icon={statusIconName} tone={statusTone} title={statusTitle} message={statusMessage} />
+        <button className="secondary-button request-cancel-button" type="button" onClick={cancelRequest}>
+          요청 취소
+        </button>
+        <p className="request-cancel-boundary">서버 작업이 생성되기 전 요청만 중단합니다.</p>
       </section>
     );
   }
@@ -198,6 +223,8 @@ export function VideoExtractPage() {
     return (
       <section className="console-panel phase-panel status-panel" aria-labelledby="result-title">
         <PanelTitle icon="completed" id="result-title">추출 완료</PanelTitle>
+        <RequestFlow current="receipt" />
+        {requestNotice ? <RequestNotice message={requestNotice} /> : null}
         <StatusHead icon="completed" tone="completed" title={statusTitle} message={statusMessage} />
         <dl className="status-details">
           <div><dt>형식</dt><dd>{statusTypeLabel}</dd></div>
@@ -215,6 +242,7 @@ export function VideoExtractPage() {
   return (
     <section className="console-panel phase-panel status-panel" aria-labelledby="error-title">
       <PanelTitle icon="failed" id="error-title">요청을 완료하지 못했습니다</PanelTitle>
+      <RequestFlow current="extract" />
       <StatusHead icon="failed" tone="failed" title={statusTitle} message={statusMessage} isAlert />
       {workerHealthFailed ? (
         <button className="secondary-button" disabled={workerHealthIsFetching} type="button" onClick={retryWorkerHealth}>다시 확인</button>
@@ -241,4 +269,9 @@ function StatusHead(props: { /** 상태 아이콘. */ icon: AppIconName; /** 상
 /** 10칸 진행률과 보조 텍스트를 렌더링한다. */
 function ProgressMeter(props: { /** 채울 pixel cell 수. */ filledCells: number; /** 진행률 라벨. */ label: string; /** API 진행률 값. */ value: number | null }) {
   return <><div className="progress-meter" aria-label="진행률" aria-valuemax={100} aria-valuemin={0} aria-valuenow={props.value ?? undefined} role="progressbar">{Array.from({ length: 10 }).map((_, index) => <span className={index < props.filledCells ? 'is-filled' : ''} key={index} />)}</div><p className="progress-label">{props.label}</p></>;
+}
+
+/** 요청 중단·접수 경쟁 결과를 현재 화면에 알린다. */
+function RequestNotice(props: { /** 사용자에게 전달할 안내 문구. */ message: string }) {
+  return <p className="request-notice" role="status" aria-live="polite">{props.message}</p>;
 }

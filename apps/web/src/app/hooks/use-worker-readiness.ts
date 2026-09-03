@@ -21,7 +21,8 @@ export function useWorkerReadiness(input: WorkerReadinessInput) {
   /** worker health query. */
   const workerHealthQuery = useQuery({
     queryKey: ['worker-health', input.apiBaseUrl],
-    queryFn: () => getWorkerHealth({ apiBaseUrl: input.apiBaseUrl }),
+    queryFn: ({ signal }) =>
+      getWorkerHealth({ apiBaseUrl: input.apiBaseUrl, signal }),
     refetchInterval: WORKER_HEALTH_REFETCH_INTERVAL_MS,
     retry: false,
   });

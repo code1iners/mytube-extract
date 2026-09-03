@@ -33,37 +33,28 @@ describe('subtitles extract page', () => {
       selectedFile: null,
       selectedFileMeta: '',
       selectedWhisperModel: 'base_en',
-      submitDisabledReason: 'worker가 준비되지 않아 요청할 수 없습니다.',
+      submitDisabledReason: '영상 파일을 선택해 주세요.',
       validation: { kind: 'empty', message: '영상 파일을 선택해 주세요.' },
       viewPhase: 'request',
       workerHealthCheckedAt: Date.parse('2026-08-19T05:32:14.000Z'),
       workerHealthIsFetching: false,
       workerHealthStatus: {
-        kind: 'unavailable',
-        label: 'worker 중단',
-        message:
-          'API는 응답했지만 worker가 작업을 받을 수 없습니다. 현재 자막 추출 서버가 준비되지 않았습니다. 잠시 후 다시 시도해 주세요.',
-        role: 'alert',
+        kind: 'ready',
+        label: '준비됨',
+        message: '요청을 시작할 수 있습니다.',
+        role: 'status',
       },
     });
 
     /** 요청 화면의 readiness 상태와 제출 안내 마크업. */
     const markup = renderToStaticMarkup(<SubtitlesExtractPage />);
 
-    expect(markup).toContain('data-health-status="unavailable"');
-    expect(markup).toContain('data-health-presentation="expanded"');
+    expect(markup).toContain('data-health-status="ready"');
+    expect(markup).toContain('data-health-presentation="compact"');
     expect(markup).toContain('class="phase-panel subtitle-request-panel"');
     expect(markup).toContain('class="subtitle-form"');
     expect(markup).toContain('type="submit"');
-    expect(markup).toContain('role="alert"');
     expect(markup).toContain('다시 확인');
-    expect(markup).toContain(
-      'aria-describedby="subtitle-worker-health-title-message"',
-    );
-    expect(markup).not.toContain('class="submit-disabled-reason"');
-    expect(markup).toContain(
-      'API는 응답했지만 worker가 작업을 받을 수 없습니다. 현재 자막 추출 서버가 준비되지 않았습니다. 잠시 후 다시 시도해 주세요.',
-    );
     expect(markup.indexOf('로컬 영상 파일')).toBeLessThan(
       markup.indexOf('<legend>처리 방식</legend>'),
     );
@@ -73,6 +64,30 @@ describe('subtitles extract page', () => {
     expect(markup).toMatch(
       /class="subtitle-form">[\s\S]*<\/form><section[^>]*class="worker-health-status/,
     );
+  });
+
+  it('shows readiness before the form when the service is unavailable', () => {
+    subtitlesExtractLogic.mockReturnValue({
+      canSubmit: false,
+      retryWorkerHealth: () => undefined,
+      viewPhase: 'request',
+      workerHealthCheckedAt: 0,
+      workerHealthIsFetching: false,
+      workerHealthStatus: {
+        kind: 'unavailable',
+        label: '작업 준비 안 됨',
+        message: '서비스가 응답했지만 지금은 요청을 시작할 수 없습니다. 다시 확인해 주세요.',
+        role: 'alert',
+      },
+    });
+
+    const markup = renderToStaticMarkup(<SubtitlesExtractPage />);
+
+    expect(markup).toContain('class="phase-panel readiness-panel"');
+    expect(markup).not.toContain('class="subtitle-form"');
+    expect(markup).toContain('data-flow-stage="source"');
+    expect(markup).toContain('작업 준비 안 됨');
+    expect(markup).toContain('서비스가 응답했지만 지금은 요청을 시작할 수 없습니다. 다시 확인해 주세요.');
   });
 
   it('uses the expanded API-failure guidance as the submit description', () => {
@@ -111,9 +126,8 @@ describe('subtitles extract page', () => {
     const markup = renderToStaticMarkup(<SubtitlesExtractPage />);
 
     expect(markup).toContain('data-health-presentation="expanded"');
-    expect(markup).toContain(
-      'aria-describedby="subtitle-worker-health-title-message"',
-    );
+    expect(markup).not.toContain('class="subtitle-form"');
+    expect(markup).toContain('aria-label="서비스 상태 다시 확인"');
     expect(markup).not.toContain('class="submit-disabled-reason"');
     expect(
       markup.match(/API 상태를 확인하지 못했습니다\. 다시 확인해 주세요\./g),
@@ -214,7 +228,7 @@ describe('subtitles extract page', () => {
     expect(markup).toContain('<legend>처리 방식</legend>');
     expect(markup).toContain('속도 우선');
     expect(markup).toContain('파일을 빠르게 영어 자막으로 만들고 싶을 때');
-    expect(markup).toContain('base.en');
+    expect(markup).toContain('<details class="subtitle-processing-method__details">');
     expect(markup).toContain('정확도 우선');
     expect(markup).toContain('음성을 더 꼼꼼하게 영어 자막으로 옮기고 싶을 때');
     expect(markup).toContain('small.en');
@@ -225,6 +239,7 @@ describe('subtitles extract page', () => {
     expect(markup).toContain('checked=""');
     expect(markup).not.toContain('Whisper 모델');
     expect(markup).not.toContain('예상 처리 시간');
+    expect(markup).not.toContain('class="subtitle-processing-option__technical"');
     expect(markup.indexOf('파일을 빠르게 영어 자막으로 만들고 싶을 때')).toBeLessThan(
       markup.indexOf('base.en'),
     );

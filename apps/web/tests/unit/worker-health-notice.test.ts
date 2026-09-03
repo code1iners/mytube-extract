@@ -59,7 +59,7 @@ describe('worker health status', () => {
       expected: {
         kind: 'checking',
         label: '확인 중',
-        message: '서버 연결과 worker 준비 상태를 확인하고 있습니다.',
+        message: '서비스 상태를 확인하고 있습니다.',
         role: 'status',
       },
       input: {
@@ -75,7 +75,7 @@ describe('worker health status', () => {
       expected: {
         kind: 'ready',
         label: '준비됨',
-        message: '서버 연결됨 · worker가 작업을 받을 준비가 되었습니다.',
+        message: '요청을 시작할 수 있습니다.',
         role: 'status',
       },
       input: {
@@ -90,9 +90,9 @@ describe('worker health status', () => {
     {
       expected: {
         kind: 'unavailable',
-        label: 'worker 중단',
+        label: '작업 준비 안 됨',
         message:
-          'API는 응답했지만 worker가 작업을 받을 수 없습니다. 현재 추출 서버가 준비되지 않았습니다.',
+          '서비스가 응답했지만 지금은 요청을 시작할 수 없습니다. 다시 확인해 주세요.',
         role: 'alert',
       },
       input: {
@@ -124,7 +124,7 @@ describe('worker health status', () => {
     expect(getWorkerHealthStatus(input)).toEqual(expected);
   });
 
-  it('keeps the ready state while a background refresh is fetching', () => {
+  it('returns to the checking state while a background refresh is fetching', () => {
     expect(
       getWorkerHealthStatus({
         apiReady: true,
@@ -133,7 +133,7 @@ describe('worker health status', () => {
         unavailableMessage: '현재 추출 서버가 준비되지 않았습니다.',
         workerAvailable: true,
       }).kind,
-    ).toBe('ready');
+    ).toBe('checking');
   });
 
   it('treats an unhealthy API response as a failed status', () => {
@@ -151,9 +151,9 @@ describe('worker health status', () => {
 
 describe('worker health submit reason', () => {
   it.each([
-    ['checking', '서버 연결과 worker 준비 상태를 확인하는 동안 요청할 수 없습니다.'],
-    ['unavailable', 'worker가 준비되지 않아 요청할 수 없습니다.'],
-    ['failed', '서버 상태를 확인하지 못해 요청할 수 없습니다.'],
+    ['checking', '서비스 상태를 확인하는 동안 요청할 수 없습니다.'],
+    ['unavailable', '지금은 요청을 시작할 수 없습니다.'],
+    ['failed', '서비스 상태를 확인하지 못해 요청할 수 없습니다.'],
   ] as const)('explains why the %s state blocks submit', (kind, expected) => {
     expect(
       getWorkerHealthSubmitReason({

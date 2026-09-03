@@ -9,7 +9,7 @@ describe('worker health status notice', () => {
     const status: WorkerHealthStatus = {
       kind: 'ready',
       label: '준비됨',
-      message: '서버 연결됨 · worker가 작업을 받을 준비가 되었습니다.',
+      message: '요청을 시작할 수 있습니다.',
       role: 'status',
     };
 
@@ -27,7 +27,8 @@ describe('worker health status notice', () => {
     expect(markup).toContain('data-health-status="ready"');
     expect(markup).toContain('data-health-presentation="compact"');
     expect(markup).toContain('준비됨');
-    expect(markup).toContain('서버 연결됨 · worker가 작업을 받을 준비가 되었습니다.');
+    expect(markup).toContain('서비스 상태');
+    expect(markup).toContain('요청을 시작할 수 있습니다.');
     expect(markup).toContain('id="video-worker-health-message"');
     expect(markup).toContain('마지막 확인');
     expect(markup).toContain('다시 확인');
@@ -39,7 +40,7 @@ describe('worker health status notice', () => {
     const status: WorkerHealthStatus = {
       kind: 'checking',
       label: '확인 중',
-      message: '서버 연결과 worker 준비 상태를 확인하고 있습니다.',
+      message: '서비스 상태를 확인하고 있습니다.',
       role: 'status',
     };
 
@@ -71,9 +72,9 @@ describe('worker health status notice', () => {
     },
     {
       kind: 'unavailable',
-      label: 'worker 중단',
+      label: '작업 준비 안 됨',
       message:
-        'API는 응답했지만 worker가 작업을 받을 수 없습니다. 현재 추출 서버가 준비되지 않았습니다.',
+        '서비스가 응답했지만 지금은 요청을 시작할 수 없습니다. 다시 확인해 주세요.',
     },
   ])('expands the $kind status guidance with a retry action', ({ kind, label, message }) => {
     /** 장애 상태 health 안내. */
@@ -102,5 +103,32 @@ describe('worker health status notice', () => {
     expect(markup).toContain('aria-live="assertive"');
     expect(markup).toContain('다시 확인');
     expect(markup).not.toContain('마지막 확인');
+  });
+
+  it('keeps verified technical health detail behind an explicit disclosure', () => {
+    const markup = renderToStaticMarkup(
+      <WorkerHealthStatusNotice
+        id="video-worker-health"
+        isFetching={false}
+        lastCheckedAt={0}
+        status={{
+          kind: 'failed',
+          label: '확인 실패',
+          message: '서비스 상태를 확인하지 못했습니다. 다시 확인해 주세요.',
+          role: 'alert',
+        }}
+        technicalDetail={{
+          code: 'SERVICE_STATUS_CHECK_FAILED',
+          guidance: '서비스 상태를 확인할 수 없습니다.',
+          location: '서비스 상태 확인',
+          requestPath: '/health',
+        }}
+        onRetry={() => undefined}
+      />,
+    );
+
+    expect(markup).toContain('상태 확인 정보');
+    expect(markup).toContain('aria-expanded="false"');
+    expect(markup).not.toContain('오류 코드: SERVICE_STATUS_CHECK_FAILED');
   });
 });

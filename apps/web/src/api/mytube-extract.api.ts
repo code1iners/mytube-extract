@@ -581,7 +581,7 @@ async function uploadSubtitlePart(
 
     return etag;
   } catch (error) {
-    if (error instanceof DOMException) {
+    if (isAbortError(error)) {
       throw error;
     }
 
@@ -721,7 +721,7 @@ function sanitizeErrorText(value: string) {
 }
 
 /** 브라우저와 query에서 전달된 중단 오류인지 확인한다. */
-function isAbortError(error: unknown) {
+export function isAbortError(error: unknown) {
   return (
     error instanceof DOMException && error.name === 'AbortError'
   ) || (

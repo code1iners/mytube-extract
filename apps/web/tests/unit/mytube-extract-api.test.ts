@@ -12,6 +12,7 @@ import {
   getJobStatusRetryDelay,
   getSubtitleJob,
   getWorkerHealth,
+  isAbortError,
   shouldRetryJobStatus,
   uploadSubtitleFileParts,
 } from '../../src/api/mytube-extract.api';
@@ -158,6 +159,12 @@ describe('mytube extract api client', () => {
     expect(shouldRetryJobStatus(0, new SyntaxError('Invalid JSON'))).toBe(false);
     expect(getJobStatusRetryDelay(0)).toBe(1000);
     expect(getJobStatusRetryDelay(10)).toBe(30_000);
+  });
+
+  it('recognizes browser and fetcher-shaped abort errors', () => {
+    expect(isAbortError(new DOMException('Aborted', 'AbortError'))).toBe(true);
+    expect(isAbortError({ name: 'AbortError' })).toBe(true);
+    expect(isAbortError(new Error('ordinary failure'))).toBe(false);
   });
 
   it('queries the subtitle job endpoint', async () => {

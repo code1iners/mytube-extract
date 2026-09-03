@@ -19,6 +19,7 @@ import {
   assertWorkerAvailable,
   buildApiUrl,
   createDownloadJob,
+  isAbortError,
 } from '../../../../api/mytube-extract.api';
 import { useNavigation } from '../../../components/navigation-context';
 import { type AppIconName } from '../../../components/app-icon';
@@ -39,6 +40,7 @@ import {
 import {
   getWorkerHealthSubmitReason,
 } from '../../../utils/worker-health-notice.util';
+import { isUnmodifiedShortcut } from '../../../utils/keyboard-shortcut.util';
 
 /** worker 미가용 안내 문구. */
 const WORKER_UNAVAILABLE_MESSAGE =
@@ -52,6 +54,21 @@ const WORKER_UNAVAILABLE_DETAIL: UserVisibleErrorDetail = {
   requestPath: '/health',
 };
 
+/** worker health 조회 실패 상세 원인. */
+const WORKER_HEALTH_FAILED_DETAIL: UserVisibleErrorDetail = {
+  code: 'SERVICE_STATUS_CHECK_FAILED',
+  guidance: '서비스 상태를 확인할 수 없습니다.',
+  location: '서비스 상태 확인',
+  requestPath: '/health',
+};
+
+type DownloadRequestAttempt = {
+  /** 이번 요청을 중단할 controller. */
+  controller: AbortController;
+  /** 사용자가 서버 job 생성 전에 중단을 눌렀는지 여부. */
+  cancelled: boolean;
+};
+
 /** 영상 추출 route의 form, polling, 표시 상태를 조합한다. */
 export function useVideoExtractLogic() {
   // Variables.
@@ -62,12 +79,16 @@ export function useVideoExtractLogic() {
   // Refs.
 
   /** 현재 job 생성 요청을 중단하기 위한 컨트롤러. */
-  const requestAbortControllerRef = useRef<AbortController | null>(null);
+  const requestAttemptRef = useRef<DownloadRequestAttempt | null>(null);
 
   // States.
 
   /** 요청 실패 메시지. */
   const [requestError, setRequestError] = useState('');
+  /** 요청 중단 또는 늦은 접수 결과를 보조 기술에 알릴 문구. */
+  const [requestNotice, setRequestNotice] = useState('');
+  /** 중단 직후 mutation이 정리되기 전에도 navigation을 unlock할지 여부. */
+  const [requestCancelled, setRequestCancelled] = useState(false);
   /** 이 화면에서 상태를 확인할 직전 접수 job. */
   const [activeJob, setActiveJob] = useState<DownloadResponse | null>(null);
 
@@ -147,7 +168,8 @@ export function useVideoExtractLogic() {
   const qualityOptions =
     draft.mode === 'audio' ? AUDIO_QUALITY_OPTIONS : VIDEO_QUALITY_OPTIONS;
   /** route를 벗어나면 안 되는 추출 요청 접수 상태 여부. */
-  const extractionNavigationLocked = downloadJobMutation.isPending;
+  const extractionNavigationLocked =
+    downloadJobMutation.isPending && !requestCancelled;
   /** API job 생성 전 요청 처리 중인지 여부. */
   const isSubmitting = downloadJobMutation.isPending;
   /** 오른쪽 status panel에 표시할 최신 job. */
@@ -174,15 +196,20 @@ export function useVideoExtractLogic() {
   );
   /** 활성 job이 없어 worker health가 현재 화면을 결정하는지 여부. */
   const workerHealthAffectsView = activeJob === null;
+  /** 현재 readiness gate에서 열어 볼 health 상세 원인. */
+  const workerHealthDetail = workerHealthAffectsView
+    ? workerHealthStatus.kind === 'unavailable'
+      ? WORKER_UNAVAILABLE_DETAIL
+      : workerHealthStatus.kind === 'failed'
+        ? workerHealthErrorDetail ?? WORKER_HEALTH_FAILED_DETAIL
+        : undefined
+    : undefined;
   /** 현재 상태 패널 상세 원인. */
   const statusErrorDetail =
     jobStatusRequestErrorDetail ??
     terminalJobErrorDetail ??
     requestErrorDetail ??
-    (workerHealthAffectsView && workerUnavailable
-      ? WORKER_UNAVAILABLE_DETAIL
-      : undefined) ??
-    (workerHealthAffectsView ? workerHealthErrorDetail : undefined);
+    workerHealthDetail;
   /** 추출 요청 가능 여부. */
   const canSubmit =
     validation.kind === 'ready' &&
@@ -214,7 +241,7 @@ export function useVideoExtractLogic() {
     createStatusTitle(statusJob);
   /** 현재 상태 문구. */
   const statusMessage =
-    (isSubmitting ? '추출 서버 상태를 확인하고 작업을 생성 중입니다.' : '') ||
+    (isSubmitting ? '요청을 접수하고 있습니다.' : '') ||
     requestError ||
     jobStatusRequestErrorDetail?.guidance ||
     (workerHealthAffectsView && workerHealthStatus.kind !== 'ready'
@@ -269,19 +296,62 @@ export function useVideoExtractLogic() {
 
   /** 현재 job 생성 요청만 중단한다. */
   function stopRequest() {
-    requestAbortControllerRef.current?.abort();
-    requestAbortControllerRef.current = null;
+    requestAttemptRef.current?.controller.abort();
+    requestAttemptRef.current = null;
   }
 
   /** 입력 변경 후 이전 실패 상태를 초기화한다. */
   function clearRequestError() {
     setRequestError('');
+    setRequestNotice('');
+  }
+
+  /** 요청 중단 뒤 현재 화면의 첫 입력 또는 상태 재확인 control로 focus를 돌린다. */
+  function focusRequestStart() {
+    window.requestAnimationFrame(() => {
+      const sourceUrlInput = document.querySelector<HTMLInputElement>(
+        'input[name="sourceUrl"]',
+      );
+
+      if (sourceUrlInput) {
+        sourceUrlInput.focus();
+        return;
+      }
+
+      document
+        .querySelector<HTMLButtonElement>('.worker-health-status__retry')
+        ?.focus();
+    });
+  }
+
+  /** 서버 job 생성 전 현재 요청만 중단하고 입력 상태를 유지한다. */
+  function cancelRequest() {
+    const attempt = requestAttemptRef.current;
+
+    if (!attempt) {
+      return;
+    }
+
+    attempt.cancelled = true;
+    attempt.controller.abort();
+    requestAttemptRef.current = null;
+    setRequestCancelled(true);
+    setRequestError('');
+    setRequestNotice(
+      '요청을 중단했습니다. 입력한 설정은 그대로입니다. 다시 요청할 수 있습니다.',
+    );
+    setActiveJob(null);
+    downloadJobMutation.reset();
+    setNavigationLocked(false);
+    focusRequestStart();
   }
 
   /** 요청 오류에서 기존 입력을 유지한 채 요청 화면으로 돌아간다. */
   function returnToRequest() {
     stopRequest();
+    setRequestCancelled(false);
     setRequestError('');
+    setRequestNotice('');
     setActiveJob(null);
     downloadJobMutation.reset();
   }
@@ -312,6 +382,30 @@ export function useVideoExtractLogic() {
     [draft.mode, draft.quality],
   );
 
+  useEffect(
+    function registerVideoRequestShortcut() {
+      function handleShortcut(event: KeyboardEvent) {
+        if (!isUnmodifiedShortcut(event, 'KeyU')) {
+          return;
+        }
+
+        const sourceUrlInput = document.querySelector<HTMLInputElement>(
+          'input[name="sourceUrl"]',
+        );
+
+        if (!sourceUrlInput) {
+          return;
+        }
+
+        event.preventDefault();
+        sourceUrlInput.focus();
+      }
+
+      window.addEventListener('keydown', handleShortcut);
+      return () => window.removeEventListener('keydown', handleShortcut);
+    },
+  );
+
   // Handlers.
 
   /** 다운로드 형식 변경 이벤트를 처리한다. */
@@ -340,12 +434,20 @@ export function useVideoExtractLogic() {
   /** 다운로드 실행 submit 이벤트를 처리한다. */
   async function handleDownloadSubmit(validDraft: DownloadDraft) {
     stopRequest();
+    setRequestCancelled(false);
     setRequestError('');
+    setRequestNotice('');
+    /** 새 다운로드 job 생성 요청 시도. */
+    let attempt: DownloadRequestAttempt | undefined;
 
     try {
       /** 새 다운로드 job 생성 요청 컨트롤러. */
       const abortController = new AbortController();
-      requestAbortControllerRef.current = abortController;
+      attempt = {
+        cancelled: false,
+        controller: abortController,
+      };
+      requestAttemptRef.current = attempt;
 
       /** 생성된 다운로드 job. */
       const job = await downloadJobMutation.mutateAsync({
@@ -353,17 +455,30 @@ export function useVideoExtractLogic() {
         signal: abortController.signal,
       });
 
-      requestAbortControllerRef.current = null;
       /** 접수증 저장 결과와 해당 job의 요청 내역 deep link. */
       const receiptDestination = acceptJobReceipt('video', job.jobId);
-      setHistoryDestination(
-        receiptDestination.storageFailed
-          ? receiptDestination.to
-          : ROUTE_PATHS.history,
-      );
-      setActiveJob(job);
+      const isCurrentAttempt = requestAttemptRef.current === attempt;
+
+      if (attempt && (isCurrentAttempt || attempt.cancelled)) {
+        setHistoryDestination(
+          receiptDestination.storageFailed
+            ? receiptDestination.to
+            : ROUTE_PATHS.history,
+        );
+        setRequestCancelled(false);
+        setRequestNotice(
+          attempt.cancelled
+            ? '요청을 중단하는 동안 서버 작업이 접수되어 요청 내역에 보존했습니다.'
+            : '',
+        );
+        setActiveJob(job);
+      }
     } catch (error) {
-      if (error instanceof DOMException && error.name === 'AbortError') {
+      if (
+        attempt?.cancelled ||
+        requestAttemptRef.current !== attempt ||
+        isAbortError(error)
+      ) {
         return;
       }
 
@@ -373,7 +488,9 @@ export function useVideoExtractLogic() {
           : '추출 요청에 실패했습니다. 다시 시도해 주세요.',
       );
     } finally {
-      requestAbortControllerRef.current = null;
+      if (attempt && requestAttemptRef.current?.controller === attempt.controller) {
+        requestAttemptRef.current = null;
+      }
     }
   }
 
@@ -401,11 +518,14 @@ export function useVideoExtractLogic() {
     statusTone,
     statusTypeLabel,
     submitDisabledReason,
+    cancelRequest,
+    requestNotice,
     returnToRequest,
     validation,
     viewPhase,
     workerHealthFailed: workerHealthAffectsView && workerHealthFailed,
     workerHealthCheckedAt,
+    workerHealthDetail,
     workerHealthIsFetching: workerHealthQuery.isFetching,
     workerHealthStatus,
   };

@@ -1,4 +1,6 @@
 import { AppIcon, type AppIconName } from './app-icon';
+import { ErrorDetailsDisclosure } from './error-details-disclosure';
+import type { UserVisibleErrorDetail } from '../../api/mytube-extract.api';
 import {
   formatWorkerHealthCheckedAt,
   getWorkerHealthStatusMessageId,
@@ -27,6 +29,8 @@ type WorkerHealthStatusNoticeProps = {
   lastCheckedAt: number;
   /** 화면에 표시할 worker health 상태. */
   status: WorkerHealthStatus;
+  /** 필요할 때 열어 볼 검증된 기술 상세. */
+  technicalDetail?: UserVisibleErrorDetail;
   /** health 상태 재확인 동작. */
   onRetry: () => void;
 };
@@ -37,6 +41,7 @@ export function WorkerHealthStatusNotice({
   isFetching,
   lastCheckedAt,
   status,
+  technicalDetail,
   onRetry,
 }: WorkerHealthStatusNoticeProps) {
   /** 상태에 대응하는 아이콘 이름. */
@@ -68,7 +73,7 @@ export function WorkerHealthStatusNotice({
           <AppIcon name={iconName} />
         </span>
         <div>
-          <h3 id={id}>서버 연결·worker 준비 상태</h3>
+          <h3 id={id}>서비스 상태</h3>
           <p
             aria-atomic="true"
             aria-live={status.role === 'alert' ? 'assertive' : 'polite'}
@@ -83,6 +88,12 @@ export function WorkerHealthStatusNotice({
           </p>
         </div>
       </div>
+      {technicalDetail ? (
+        <ErrorDetailsDisclosure
+          detail={technicalDetail}
+          summary="상태 확인 정보"
+        />
+      ) : null}
       <div className="worker-health-status__meta">
         {status.kind === 'ready' ? (
           <p className="worker-health-status__last-checked">
@@ -94,7 +105,7 @@ export function WorkerHealthStatusNotice({
         ) : null}
         <button
           aria-busy={isFetching}
-          aria-label="서버와 worker 상태 다시 확인"
+          aria-label="서비스 상태 다시 확인"
           className="secondary-button worker-health-status__retry"
           disabled={isFetching}
           type="button"

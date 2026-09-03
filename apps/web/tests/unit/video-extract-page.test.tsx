@@ -29,7 +29,7 @@ describe('video extract page', () => {
       workerHealthStatus: {
         kind: 'ready',
         label: '준비됨',
-        message: '서버 연결됨 · worker가 작업을 받을 준비가 되었습니다.',
+        message: '요청을 시작할 수 있습니다.',
         role: 'status',
       },
     });
@@ -86,11 +86,9 @@ describe('video extract page', () => {
     const markup = renderToStaticMarkup(<VideoExtractPage />);
 
     expect(markup).toContain('data-health-presentation="expanded"');
-    expect(markup).toContain(
-      'aria-describedby="video-worker-health-title-message"',
-    );
+    expect(markup).not.toContain('class="download-form"');
+    expect(markup).toContain('aria-label="서비스 상태 다시 확인"');
     expect(markup).toContain('API 상태를 확인하지 못했습니다. 다시 확인해 주세요.');
-    expect(markup).not.toContain('class="submit-disabled-reason"');
     expect(
       markup.match(/API 상태를 확인하지 못했습니다\. 다시 확인해 주세요\./g),
     ).toHaveLength(1);
@@ -118,7 +116,7 @@ describe('video extract page', () => {
       workerHealthStatus: {
         kind: 'ready',
         label: '준비됨',
-        message: '서버 연결됨 · worker가 작업을 받을 준비가 되었습니다.',
+        message: '요청을 시작할 수 있습니다.',
         role: 'status',
       },
     });
