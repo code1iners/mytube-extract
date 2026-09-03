@@ -20,8 +20,9 @@ describe('app hero theme control', () => {
     expect(markup).toContain('설정');
     expect(markup).toContain('class="usage-guide"');
     expect(markup).toContain('더보기');
-    expect(markup).toContain('aria-haspopup="menu"');
-    expect(markup).toContain('role="menu"');
+    expect(markup).not.toContain('aria-haspopup="menu"');
+    expect(markup).not.toContain('role="menu"');
+    expect(markup).not.toContain('role="menuitem"');
     expect(markup).toContain('API 응답을 기준으로 표시합니다.');
     expect(markup).toContain('현재 브라우저에만 남습니다.');
     expect(markup).toContain('기본 7일 보관됩니다.');

@@ -111,7 +111,6 @@ export function UsageGuideDisclosure() {
       onToggle={handleToggle}
     >
       <summary
-        aria-haspopup="menu"
         aria-controls={contentId}
         aria-expanded={isOpen}
         id={summaryId}
@@ -147,7 +146,7 @@ export function UsageGuideDisclosure() {
             </span>
           </li>
         </ul>
-        <div aria-label="더보기 메뉴" className="usage-guide__menu" role="menu">
+        <div className="usage-guide__menu">
           <NavLink
             aria-disabled={navigationLocked || undefined}
             aria-describedby={
@@ -158,7 +157,6 @@ export function UsageGuideDisclosure() {
                 ? 'settings-link usage-guide__settings is-disabled'
                 : 'settings-link usage-guide__settings'
             }
-            role="menuitem"
             to={ROUTE_PATHS.settings}
             onClick={handleSettingsClick}
           >

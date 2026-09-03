@@ -177,6 +177,9 @@ export function RequestHistoryPage() {
         return;
       }
 
+      /** 같은 render 주기에 확인된 모든 요청 상태 전환 공지. */
+      const transitionMessages: string[] = [];
+
       queries.forEach((query, index) => {
         const receipt = visibleReceipts[index];
 
@@ -189,11 +192,15 @@ export function RequestHistoryPage() {
         previousStatuses.current.set(key, query.data.displayStatus);
 
         if (previous && previous !== query.data.displayStatus) {
-          announce(
-            `요청 상태가 ${formatStatus(query.data.displayStatus)}(으)로 변경되었습니다.`,
+          transitionMessages.push(
+            `${formatKind(receipt.kind)} 요청, 접수 ${formatDate(receipt.acceptedAt)} 상태가 ${formatStatus(query.data.displayStatus)}(으)로 변경되었습니다.`,
           );
         }
       });
+
+      if (transitionMessages.length > 0) {
+        announce(transitionMessages.join(' '));
+      }
     },
     [statusSignature],
   );

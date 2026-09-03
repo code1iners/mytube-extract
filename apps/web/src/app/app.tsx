@@ -1,10 +1,32 @@
+import { lazy } from 'react';
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router';
 import { ROUTE_PATHS, ROUTE_SEGMENTS } from './constants/route-paths.constant';
 import { AppLayout } from './components/app-layout';
-import { VideoExtractPage } from './pages/video-extract/page';
-import { SubtitlesExtractPage } from './pages/subtitles-extract/page';
-import { RequestHistoryPage } from './pages/request-history/page';
-import { SettingsPage } from './pages/settings/page';
+
+/** 영상 추출 route 화면. */
+const VideoExtractPage = lazy(() =>
+  import('./pages/video-extract/page').then((module) => ({
+    default: module.VideoExtractPage,
+  })),
+);
+/** 자막 추출 route 화면. */
+const SubtitlesExtractPage = lazy(() =>
+  import('./pages/subtitles-extract/page').then((module) => ({
+    default: module.SubtitlesExtractPage,
+  })),
+);
+/** 요청 내역 route 화면. */
+const RequestHistoryPage = lazy(() =>
+  import('./pages/request-history/page').then((module) => ({
+    default: module.RequestHistoryPage,
+  })),
+);
+/** 설정 route 화면. */
+const SettingsPage = lazy(() =>
+  import('./pages/settings/page').then((module) => ({
+    default: module.SettingsPage,
+  })),
+);
 
 /** MyTube Extract web router shell. */
 export function App() {

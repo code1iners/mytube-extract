@@ -4,6 +4,14 @@ export type ThemePreference = 'system' | 'light' | 'dark';
 /** 테마 선택을 보관하는 browser storage key. */
 const THEME_PREFERENCE_KEY = 'mytube-extract-theme-preference';
 
+/** 문서 theme별 browser chrome 색. */
+const THEME_COLORS = {
+  /** 어두운 화면의 canvas 색. */
+  dark: '#18191b',
+  /** 밝은 화면의 canvas 색. */
+  light: '#ffffff',
+} as const;
+
 /** 저장된 사용자 선택을 읽고 손상된 값은 system으로 되돌린다. */
 export function getThemePreference(): ThemePreference {
   /** 저장소에서 읽은 값. */
@@ -47,5 +55,13 @@ export function resolveTheme(preference: ThemePreference) {
 
 /** CSS semantic token이 참조할 document theme를 적용한다. */
 export function applyTheme(preference: ThemePreference) {
-  document.documentElement.dataset.theme = resolveTheme(preference);
+  /** 사용자 선택과 운영체제 설정을 반영한 실제 theme. */
+  const resolvedTheme = resolveTheme(preference);
+
+  document.documentElement.dataset.theme = resolvedTheme;
+
+  // 정적 light/dark meta를 같은 값으로 맞춰 명시적 사용자 선택도 browser chrome에 반영한다.
+  document
+    .querySelectorAll<HTMLMetaElement>('meta[name="theme-color"]')
+    .forEach((meta) => meta.setAttribute('content', THEME_COLORS[resolvedTheme]));
 }

@@ -25,6 +25,10 @@ if (!indexHtml.includes('manifest.webmanifest')) {
   throw new Error('Built HTML does not reference the web manifest.');
 }
 
+if (!indexHtml.includes('viewport-fit=cover')) {
+  throw new Error('Built HTML must opt into safe-area viewport coverage.');
+}
+
 if (manifest.display !== 'standalone') {
   throw new Error('Web manifest must use standalone display mode.');
 }

@@ -21,15 +21,23 @@ describe('web theme preference', () => {
     };
     /** 테스트용 document theme target. */
     const documentElement = { dataset: {} as Record<string, string> };
+    /** theme-color 갱신을 확인할 meta element. */
+    const themeColorMeta = {
+      setAttribute: vi.fn(),
+    };
 
     vi.stubGlobal('window', {
       localStorage: unavailableStorage,
       matchMedia: () => ({ matches: false }),
     });
-    vi.stubGlobal('document', { documentElement });
+    vi.stubGlobal('document', {
+      documentElement,
+      querySelectorAll: () => [themeColorMeta],
+    });
 
     expect(getThemePreference()).toBe('system');
     expect(() => setThemePreference('dark')).not.toThrow();
     expect(documentElement.dataset.theme).toBe('dark');
+    expect(themeColorMeta.setAttribute).toHaveBeenCalledWith('content', '#18191b');
   });
 });

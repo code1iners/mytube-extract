@@ -428,7 +428,7 @@ async function verifyUsageGuideDisclosure() {
         assert.equal(await guide.getAttribute('open'), null);
         const summaryBox = await summary.boundingBox();
         assert.ok(summaryBox && summaryBox.width >= 44 && summaryBox.height >= 44);
-        assert.equal(await summary.getAttribute('aria-haspopup'), 'menu');
+        assert.equal(await summary.getAttribute('aria-haspopup'), null);
         assert.equal(await summary.getAttribute('aria-expanded'), 'false');
         assert.equal(await guide.locator('.usage-guide__settings').count(), 1);
         assert.equal(await guide.getByText('API 응답을 기준으로 표시합니다.', { exact: true }).count(), 1);
@@ -449,10 +449,10 @@ async function verifyUsageGuideDisclosure() {
         assert.equal(await guide.getAttribute('open'), '');
         assert.equal(await summary.getAttribute('aria-expanded'), 'true');
         assert.equal(await guide.locator('.usage-guide__content').isVisible(), true);
-        /** 더보기 메뉴에서 보조 설정으로 이동하는 menuitem. */
-        const settingsLink = guide.getByRole('menuitem', { name: '설정' });
+        /** 더보기 disclosure에서 보조 설정으로 이동하는 link. */
+        const settingsLink = guide.getByRole('link', { name: '설정' });
         assert.equal(await settingsLink.isVisible(), true);
-        /** 설정 menuitem의 실제 touch target. */
+        /** 설정 link의 실제 touch target. */
         const settingsBox = await settingsLink.boundingBox();
         assert.ok(settingsBox && settingsBox.width >= 44 && settingsBox.height >= 44);
         await page.waitForTimeout(200);
@@ -606,7 +606,7 @@ async function verifyVideoRequestFlows() {
     const historyLink = page.getByRole('link', { name: '요청 내역' });
     const videoLink = page.getByRole('link', { name: '영상 추출' });
     await page.locator('.usage-guide summary').click();
-    const settingsLink = page.getByRole('menuitem', { name: '설정' });
+    const settingsLink = page.getByRole('link', { name: '설정' });
     assert.equal(await historyLink.getAttribute('aria-disabled'), 'true');
     assert.equal(await videoLink.getAttribute('aria-disabled'), null);
     assert.equal(await settingsLink.getAttribute('aria-disabled'), 'true');
@@ -903,7 +903,7 @@ async function verifyVideoTaskFirstLayout() {
         const resetButton = page.getByRole('button', { name: '지우기' });
         await page.locator('.usage-guide summary').click();
         /** 더보기 메뉴 안의 설정 navigation link. */
-        const settingsLink = page.getByRole('menuitem', { name: '설정' });
+        const settingsLink = page.getByRole('link', { name: '설정' });
         /** URL 지우기 button의 viewport 영역. */
         const resetBox = await resetButton.boundingBox();
         /** 설정 link의 viewport 영역. */
@@ -1044,7 +1044,7 @@ async function verifySubtitleRequestFlow() {
     const videoTab = page.getByRole('link', { name: '영상 추출' });
     const subtitleTab = page.getByRole('link', { name: '자막 추출' });
     await page.locator('.usage-guide summary').click();
-    const settingsLink = page.getByRole('menuitem', { name: '설정' });
+    const settingsLink = page.getByRole('link', { name: '설정' });
     assert.equal(await historyLink.getAttribute('aria-disabled'), 'true');
     assert.equal(await videoTab.getAttribute('aria-disabled'), 'true');
     assert.equal(await subtitleTab.getAttribute('aria-disabled'), null);
@@ -1298,6 +1298,7 @@ async function verifySubtitleProcessingChoice() {
 
       await page.goto(`${staticServer.origin}/subtitles`);
       await page.getByRole('heading', { name: '자막 추출' }).waitFor();
+      await page.locator('.subtitle-form').waitFor();
 
       /** 자막 입력 흐름과 readiness 보조 영역의 DOM 위치. */
       const documentOrder = await page.evaluate(() => {
@@ -1818,26 +1819,53 @@ async function verifyActiveRequestStatusErrors() {
 async function verifyTerminalPolling() {
   const context = await createContext();
   const { page, assertNoRuntimeErrors } = await createPage(context);
-  let statusCalls = 0;
+  /** 영상 상태 API 호출 수. */
+  let videoStatusCalls = 0;
+  /** 자막 상태 API 호출 수. */
+  let subtitleStatusCalls = 0;
 
   try {
-    await seedReceipts(page, [['video', VIDEO_ID, '2026-08-11T00:00:00.000Z']]);
+    await seedReceipts(page, [
+      ['video', VIDEO_ID, '2026-08-11T00:00:00.000Z'],
+      ['subtitle', SUBTITLE_ID, '2026-08-11T00:01:00.000Z'],
+    ]);
     await routeApi(page, async ({ route, url }) => {
       if (url.pathname === `/downloads/${VIDEO_ID}`) {
-        statusCalls += 1;
-        const status = statusCalls === 1 ? 'queued' : statusCalls === 2 ? 'processing' : 'completed';
+        videoStatusCalls += 1;
+        const status = videoStatusCalls === 1 ? 'queued' : videoStatusCalls === 2 ? 'processing' : 'completed';
         return fulfillJson(route, videoJob(VIDEO_ID, status));
+      }
+      if (url.pathname === `/subtitles/jobs/${SUBTITLE_ID}`) {
+        subtitleStatusCalls += 1;
+        const status = subtitleStatusCalls === 1 ? 'queued' : subtitleStatusCalls === 2 ? 'transcribing' : 'completed';
+        return fulfillJson(route, subtitleJob(SUBTITLE_ID, status));
       }
       if (url.pathname === '/health') return fulfillJson(route, healthResponse());
       return fulfillJson(route, {}, 404);
     });
 
     await page.goto(`${staticServer.origin}/history`);
-    await page.locator('.history-status').getByText('완료', { exact: true }).waitFor({ timeout: 10_000 });
-    const terminalCallCount = statusCalls;
+    await waitForCondition(
+      async () =>
+        (await page.locator('.history-status').getByText('완료', { exact: true }).count()) === 2,
+    );
+    const statusAnnouncement = page.locator('.history-panel > .visually-hidden');
+    await waitForCondition(async () => {
+      const message = await statusAnnouncement.innerText();
+      return message.includes('영상 요청') && message.includes('자막 요청');
+    });
+    /** terminal 상태에 도달했을 때 종류별 API 호출 수. */
+    const terminalCallCounts = {
+      subtitle: subtitleStatusCalls,
+      video: videoStatusCalls,
+    };
     await page.waitForTimeout(3_000);
-    assert.equal(statusCalls, terminalCallCount);
-    assert.ok(statusCalls >= 3);
+    assert.deepEqual(
+      { subtitle: subtitleStatusCalls, video: videoStatusCalls },
+      terminalCallCounts,
+    );
+    assert.ok(videoStatusCalls >= 3);
+    assert.ok(subtitleStatusCalls >= 3);
     assertNoRuntimeErrors();
   } finally {
     await context.close();
@@ -2612,6 +2640,28 @@ async function verifyThemePreference(page, theme) {
       await page.evaluate(() => document.documentElement.dataset.theme),
     ),
   );
+  /** 현재 system 해석과 반대인 운영체제 theme. */
+  const changedSystemTheme =
+    (await page.evaluate(() => document.documentElement.dataset.theme)) === 'dark'
+      ? 'light'
+      : 'dark';
+  await page.emulateMedia({ colorScheme: changedSystemTheme });
+  await waitForCondition(
+    async () =>
+      (await page.evaluate(() => document.documentElement.dataset.theme)) ===
+      changedSystemTheme,
+  );
+  assert.ok(
+    await page
+      .locator('meta[name="theme-color"]')
+      .evaluateAll((metas, expectedColor) =>
+        metas.every(
+          (meta) =>
+            meta.getAttribute('content') ===
+            (expectedColor === 'dark' ? '#18191b' : '#ffffff'),
+        ),
+      changedSystemTheme),
+  );
   await page.reload();
   assert.equal(
     await page.evaluate(() =>
@@ -2628,12 +2678,13 @@ async function verifyThemePreference(page, theme) {
 
 /** 설정 route가 flat 표면·테마 조작·focus 계약을 지키는지 확인한다. */
 async function verifySettingsSurface(page, width) {
+  await page.locator('.settings-panel').waitFor();
   /** 설정 route로 이동하기 전에 여는 더보기 summary. */
   const moreSummary = page.locator('.usage-guide summary');
   await moreSummary.focus();
   await page.keyboard.press('Enter');
   /** 설정 route의 실제 조작 대상. */
-  const settingsLink = page.getByRole('menuitem', { name: '설정' });
+  const settingsLink = page.getByRole('link', { name: '설정' });
   /** 설정 화면의 테마 선택 label 영역. */
   const themeOptions = page.locator('.theme-toggle__option');
   /** 설정 surface와 radio geometry를 한 번에 읽는다. */
@@ -2726,7 +2777,7 @@ async function verifyResponsiveNavigationLayout(page, width, routePath) {
   if (routePath === '/settings') {
     assert.equal(await visibleNavigation.locator('a[aria-current="page"]').count(), 0);
     assert.equal(
-      await page.getByRole('menuitem', { name: '설정' }).getAttribute('aria-current'),
+      await page.getByRole('link', { name: '설정' }).getAttribute('aria-current'),
       'page',
     );
   } else {
