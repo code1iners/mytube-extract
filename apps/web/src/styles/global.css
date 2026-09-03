@@ -346,6 +346,14 @@ a {
   font-weight: 600;
 }
 
+.usage-guide__settings {
+  width: 100%;
+  justify-content: flex-start;
+  margin-top: 16px;
+  border-top: 1px solid var(--color-border);
+  padding-top: 12px;
+}
+
 .settings-link {
   display: inline-flex;
   min-height: 44px;
@@ -553,8 +561,11 @@ a {
 }
 
 .request-flow__step {
-  position: relative;
+  display: inline-flex;
   min-width: 0;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
   color: var(--color-text-secondary);
   font-size: 14px;
   font-weight: 600;
@@ -567,19 +578,42 @@ a {
   color: var(--color-text-primary);
 }
 
-.request-flow__step.is-current::before {
-  display: inline-block;
-  width: 8px;
-  height: 8px;
-  margin: 0 6px 1px 0;
+.request-flow__marker {
+  display: inline-grid;
+  width: 24px;
+  height: 24px;
+  flex: 0 0 auto;
+  place-items: center;
+  border: 1px solid var(--color-border);
   border-radius: var(--radius-full);
+  background: var(--color-surface-alt);
+  color: var(--color-text-secondary);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.request-flow__step.is-current .request-flow__marker {
+  border-color: var(--color-action-primary);
   background: var(--color-action-primary);
-  content: '';
+  color: var(--color-on-primary);
+}
+
+.request-flow__step.is-complete {
+  color: var(--color-text-primary);
+}
+
+.request-flow__step.is-complete .request-flow__marker {
+  border-color: var(--color-status-completed);
+  color: var(--color-status-completed);
 }
 
 .request-flow__connector {
   height: 1px;
   background: var(--color-border);
+}
+
+.request-flow__connector.is-complete {
+  background: var(--color-status-completed);
 }
 
 .readiness-panel {
@@ -589,6 +623,7 @@ a {
 }
 
 .readiness-panel__next,
+.readiness-panel__preserved,
 .request-notice,
 .request-cancel-boundary,
 .keyboard-shortcut-hint {
@@ -706,6 +741,19 @@ a {
   font-size: 21px;
   font-weight: 600;
   line-height: 1.4;
+}
+
+.panel-title__refresh {
+  display: inline-grid;
+  width: 20px;
+  height: 20px;
+  place-items: center;
+  color: var(--color-status-processing);
+}
+
+.panel-title__refresh .app-icon {
+  width: 16px;
+  height: 16px;
 }
 
 .download-form,
@@ -1058,9 +1106,12 @@ input:focus-visible,
 }
 
 .worker-health-status--compact {
-  grid-template-columns: minmax(0, 1fr) auto;
+  display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  padding: 4px 0;
+  justify-content: space-between;
+  gap: 8px 12px;
+  padding: 0;
 }
 
 .worker-health-status--expanded {
@@ -1083,6 +1134,10 @@ input:focus-visible,
   align-items: start;
   gap: 8px;
   grid-template-columns: 28px minmax(0, 1fr);
+}
+
+.worker-health-status--compact .worker-health-status__main {
+  flex: 1 1 180px;
 }
 
 .worker-health-status__icon {
@@ -1168,6 +1223,11 @@ input:focus-visible,
   gap: 8px 12px;
 }
 
+.worker-health-status__actions {
+  display: grid;
+  gap: 12px;
+}
+
 .worker-health-status__last-checked {
   margin: 0;
   color: var(--color-text-secondary);
@@ -1186,6 +1246,12 @@ input:focus-visible,
   gap: 8px;
   padding: 0 12px;
   font-size: 14px;
+}
+
+.worker-health-status--expanded .worker-health-status__retry {
+  width: 100%;
+  min-height: 48px;
+  justify-content: center;
 }
 
 .worker-health-status__retry--quiet {
@@ -1350,9 +1416,18 @@ input:focus-visible,
 }
 
 .status-details dd {
+  min-width: 0;
+  overflow-wrap: anywhere;
   color: var(--color-text-primary);
   font-weight: 600;
   text-align: right;
+}
+
+.result-context {
+  margin: 0;
+  color: var(--color-text-secondary);
+  font-size: 14px;
+  line-height: 1.4;
 }
 
 .error-details {
@@ -1498,7 +1573,9 @@ input:focus-visible,
 }
 
 .selected-file-row button {
+  min-width: 44px;
   min-height: 44px;
+  padding: 0 8px;
   border: 1px solid var(--color-border);
   border-radius: var(--radius-sm);
   background: var(--color-surface);
@@ -1700,6 +1777,7 @@ input:focus-visible,
 .history-message {
   margin-top: 4px;
   font-size: 14px;
+  overflow-wrap: anywhere;
 }
 
 .history-message--error {
@@ -1822,6 +1900,13 @@ input:focus-visible,
     --layout-content-gutter: 10px;
   }
 
+  html {
+    scroll-padding-bottom: calc(
+      var(--layout-bottom-nav-height) + var(--layout-bottom-nav-clearance) +
+        env(safe-area-inset-bottom)
+    );
+  }
+
   .app-shell {
     padding: 14px var(--layout-content-gutter)
       calc(
@@ -1934,13 +2019,22 @@ input:focus-visible,
     gap: 16px;
   }
 
+  /* 단계 번호와 긴 라벨은 고정하고 연결선만 좁은 폭에 맞춰 줄인다. */
+  .request-flow {
+    grid-template-columns: auto minmax(16px, 1fr) auto minmax(16px, 1fr) auto;
+  }
+
   /* 320px 폭에서도 submit이 fixed navigation 뒤로 밀리지 않도록 밀도를 조정한다. */
   .subtitle-request-panel {
-    gap: 12px;
+    gap: 8px;
   }
 
   .subtitle-request-panel .subtitle-form {
-    gap: 8px;
+    gap: 4px;
+  }
+
+  .subtitle-request-panel .subtitle-processing-method {
+    gap: 4px;
   }
 
   .subtitle-dropzone {
@@ -1948,11 +2042,7 @@ input:focus-visible,
   }
 
   .worker-health-status--compact {
-    grid-template-columns: minmax(0, 1fr);
-  }
-
-  .worker-health-status--compact .worker-health-status__meta {
-    justify-content: flex-end;
+    justify-content: flex-start;
   }
 
   .worker-health-status--expanded {
@@ -1961,8 +2051,8 @@ input:focus-visible,
   }
 
   .hero-utilities {
-    flex-direction: column;
-    align-items: flex-end;
+    flex-direction: row;
+    align-items: center;
   }
 
   .history-item__header {

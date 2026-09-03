@@ -115,6 +115,7 @@ export function useVideoExtractLogic() {
     retryWorkerHealth,
     workerHealthCheckedAt,
     workerHealthFailed,
+    workerHealthIsRefreshing,
     workerHealthQuery,
     workerHealthStatus,
     workerUnavailable,
@@ -524,6 +525,7 @@ export function useVideoExtractLogic() {
     workerHealthCheckedAt,
     workerHealthDetail,
     workerHealthIsFetching: workerHealthQuery.isFetching,
+    workerHealthIsRefreshing,
     workerHealthStatus,
   };
 }

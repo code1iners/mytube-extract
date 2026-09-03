@@ -55,9 +55,11 @@ export function WorkerHealthStatusNotice({
   const messageId = getWorkerHealthStatusMessageId(id);
   /** 정상 상태에서 낮은 강조도로 보여 줄 재확인 동작인지 여부. */
   const isQuietRetry = status.kind === 'ready';
+  /** 기존 응답을 유지한 채 백그라운드에서 상태를 갱신하는지 여부. */
+  const isBackgroundRefreshing = isFetching && status.kind === 'ready';
   /** health 상태에 맞춘 재확인 control className. */
   const retryClassName = [
-    'secondary-button',
+    isExpandedStatus ? 'primary-button' : 'secondary-button',
     'worker-health-status__retry',
     isQuietRetry ? 'worker-health-status__retry--quiet' : '',
   ]
@@ -86,10 +88,16 @@ export function WorkerHealthStatusNotice({
           <h3 id={id}>서비스 상태</h3>
           <p
             aria-atomic="true"
-            aria-live={status.role === 'alert' ? 'assertive' : 'polite'}
+            aria-live={
+              isBackgroundRefreshing
+                ? 'off'
+                : status.role === 'alert'
+                  ? 'assertive'
+                  : 'polite'
+            }
             className="worker-health-status__message"
             id={messageId}
-            role={status.role}
+            role={isBackgroundRefreshing ? undefined : status.role}
           >
             <strong>{status.label}</strong>
             <span className={isExpandedStatus ? undefined : 'visually-hidden'}>
@@ -98,13 +106,13 @@ export function WorkerHealthStatusNotice({
           </p>
         </div>
       </div>
-      {technicalDetail ? (
-        <ErrorDetailsDisclosure
-          detail={technicalDetail}
-          summary="상태 확인 정보"
-        />
-      ) : null}
-      <div className="worker-health-status__meta">
+      <div
+        className={
+          isExpandedStatus
+            ? 'worker-health-status__actions'
+            : 'worker-health-status__meta'
+        }
+      >
         {status.kind === 'ready' ? (
           <p className="worker-health-status__last-checked">
             마지막 확인:{' '}
@@ -124,6 +132,12 @@ export function WorkerHealthStatusNotice({
           {isQuietRetry ? null : <AppIcon name="processing" />}
           다시 확인
         </button>
+        {isExpandedStatus && technicalDetail ? (
+          <ErrorDetailsDisclosure
+            detail={technicalDetail}
+            summary="상태 확인 정보"
+          />
+        ) : null}
       </div>
     </section>
   );

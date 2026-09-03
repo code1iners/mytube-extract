@@ -66,6 +66,29 @@ describe('worker health status notice', () => {
     expect(markup).toContain('aria-busy="true"');
   });
 
+  it('silences repeated announcements during a ready background refresh', () => {
+    /** 백그라운드 갱신 중에도 유지할 준비 완료 상태. */
+    const markup = renderToStaticMarkup(
+      <WorkerHealthStatusNotice
+        id="video-worker-health"
+        isFetching
+        lastCheckedAt={Date.parse('2026-08-19T05:32:14.000Z')}
+        status={{
+          kind: 'ready',
+          label: '준비됨',
+          message: '요청을 시작할 수 있습니다.',
+          role: 'status',
+        }}
+        onRetry={() => undefined}
+      />,
+    );
+
+    expect(markup).toContain('data-health-status="ready"');
+    expect(markup).toContain('aria-busy="true"');
+    expect(markup).toContain('aria-live="off"');
+    expect(markup).not.toContain('role="status"');
+  });
+
   it.each([
     {
       kind: 'failed',
@@ -94,6 +117,12 @@ describe('worker health status notice', () => {
         isFetching={false}
         lastCheckedAt={Date.parse('2026-08-19T05:32:14.000Z')}
         status={status}
+        technicalDetail={{
+          code: 'SERVICE_STATUS_CHECK_FAILED',
+          guidance: '서비스 상태를 확인할 수 없습니다.',
+          location: '서비스 상태 확인',
+          requestPath: '/health',
+        }}
         onRetry={() => undefined}
       />,
     );
@@ -103,6 +132,10 @@ describe('worker health status notice', () => {
     expect(markup).toContain(message);
     expect(markup).toContain('role="alert"');
     expect(markup).toContain('aria-live="assertive"');
+    expect(markup).toContain('class="primary-button worker-health-status__retry"');
+    expect(markup.indexOf('다시 확인')).toBeLessThan(
+      markup.indexOf('상세 원인 보기'),
+    );
     expect(markup).toContain('다시 확인');
     expect(markup).not.toContain('마지막 확인');
   });

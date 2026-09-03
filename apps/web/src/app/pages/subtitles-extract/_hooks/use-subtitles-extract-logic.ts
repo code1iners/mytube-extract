@@ -121,6 +121,7 @@ export function useSubtitlesExtractLogic() {
     retryWorkerHealth,
     workerHealthCheckedAt,
     workerHealthFailed,
+    workerHealthIsRefreshing,
     workerHealthQuery,
     workerHealthStatus,
     workerUnavailable,
@@ -627,6 +628,7 @@ export function useSubtitlesExtractLogic() {
     workerHealthCheckedAt,
     workerHealthDetail,
     workerHealthIsFetching: workerHealthQuery.isFetching,
+    workerHealthIsRefreshing,
     workerHealthStatus,
   };
 }
@@ -682,7 +684,7 @@ function createStatusTitle(job: SubtitleJobResponse) {
   }
 
   if (job.displayStatus === 'completed') {
-    return '영어 SRT가 준비되었습니다';
+    return '영어 자막 파일이 준비되었습니다';
   }
 
   if (job.displayStatus === 'failed') {

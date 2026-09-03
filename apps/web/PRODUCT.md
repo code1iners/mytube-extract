@@ -23,7 +23,7 @@ MyTube Extract Web은 브라우저에서 YouTube 영상 URL을 비디오(mp4)·�
 - Docker Compose로 자체 호스팅하는 NestJS API, FIFO worker, Cloudflare tunnel 뒤에서 동작한다. 웹앱은 이 API를 호출하는 Vite CSR 클라이언트다.
 - 요청 흐름은 두 종류: `/video`에서 YouTube URL·형식(비디오/오디오)·품질을 선택해 `POST /downloads` job을 접수하거나, `/subtitles`에서 로컬 mp4/mov/webm을 업로드해 영어 SRT job을 접수한다.
 - `/history`는 같은 브라우저가 접수한 요청을 최신순 최대 20건 조회하며, API 응답을 상태·진행률·다운로드 링크의 유일한 source of truth로 쓴다. 진행 중 job만 polling하고 terminal 상태(완료·실패·만료)는 polling을 멈춘다.
-- 요청 접수 전 `GET /health`로 worker 가용성을 확인한다. `checking`·`failed`·`unavailable`에서는 상태 우선 화면을 보여주고, `ready`일 때만 요청 form을 연다. 접수 중에는 상단 요청 내역 링크와 하단 영상·자막 탭의 route 이동을 막는다.
+- 요청 접수 전 `GET /health`로 worker 가용성을 확인한다. 최초 응답이 없는 동안에는 상태 우선 화면을 보여주고, `ready`가 확인되면 요청 form을 연다. 이미 `ready`인 form은 15초 주기 백그라운드 확인 중에도 유지하며, 완료된 확인 응답이 API 실패 또는 worker 미가용을 알릴 때만 상태 우선 화면으로 전환한다. 백그라운드 갱신은 제목 옆 작은 표시와 `aria-busy`로만 알리고 반복 live announcement는 만들지 않는다. 접수 중에는 상단 요청 내역 링크와 하단 영상·자막 탭의 route 이동을 막는다.
 - 사용자가 영상 POST 또는 자막 upload/complete가 끝나기 전에 `요청 취소`를 선택하면 해당 브라우저 요청을 `AbortController`로 중단하고 입력값·선택 파일을 보존한다. 서버 job이 이미 생성된 경쟁 상태에서는 접수증을 보존하고 서버 job이 취소됐다고 표시하지 않는다. 서버 job 취소 API는 제공하지 않는다.
 - 요청·처리·완료·요청 내역에는 API 상태에 대응하는 `원본 → 추출 → 파일 수령` 흐름 trail을 표시하며, 실제 API가 제공하지 않은 진행률은 만들지 않는다.
 - 같은 제품의 자매 표면으로 Chrome 확장 프로그램(popup + YouTube 페이지 오버레이)이 있으며 같은 API 계약을 공유하지만 별도 앱(`apps/chrome-extension`)이고 이번 PRODUCT.md 범위 밖이다.

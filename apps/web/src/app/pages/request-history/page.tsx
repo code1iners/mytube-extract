@@ -306,7 +306,7 @@ export function RequestHistoryPage() {
         </h2>
       </div>
       <p className="history-description">
-        최근 요청 20건을 서버의 최신 상태로 확인합니다.
+        이 브라우저가 접수한 최근 요청 20건을 API 응답의 최신 상태로 확인합니다.
       </p>
       {storageFailed ? (
         <div className="notice-box" role="status">
@@ -380,7 +380,7 @@ function HistoryEmptyState() {
           <AppIcon name="subtitle" />
           <span className="history-empty__link-copy">
             <strong>자막 추출</strong>
-            <span>로컬 영상으로 영어 SRT 자막을 만듭니다.</span>
+            <span>로컬 영상으로 영어 자막 파일(SRT)을 만듭니다.</span>
           </span>
         </NavLink>
       </div>

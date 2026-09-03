@@ -14,7 +14,7 @@ vi.mock(
 import { SubtitlesExtractPage } from '../../src/app/pages/subtitles-extract/page';
 
 describe('subtitles extract page', () => {
-  it('keeps the subtitle task order and places readiness after the form', () => {
+  it('keeps the subtitle task order and places readiness near the title', () => {
     subtitlesExtractLogic.mockReturnValue({
       canChangeWhisperModel: true,
       canSubmit: false,
@@ -51,6 +51,7 @@ describe('subtitles extract page', () => {
 
     expect(markup).toContain('data-health-status="ready"');
     expect(markup).toContain('data-health-presentation="compact"');
+    expect(markup).toContain('>자막 추출</h2>');
     expect(markup).toContain('class="phase-panel subtitle-request-panel"');
     expect(markup).toContain('class="subtitle-form"');
     expect(markup).toContain('type="submit"');
@@ -62,8 +63,8 @@ describe('subtitles extract page', () => {
     expect(markup.indexOf('<legend>처리 방식</legend>')).toBeLessThan(
       markup.indexOf('영어 SRT 생성</button>'),
     );
-    expect(markup).toMatch(
-      /class="subtitle-form">[\s\S]*<\/form><section[^>]*class="worker-health-status/,
+    expect(markup.indexOf('data-health-status="ready"')).toBeLessThan(
+      markup.indexOf('로컬 영상 파일'),
     );
   });
 
@@ -235,7 +236,7 @@ describe('subtitles extract page', () => {
     expect(markup).toContain('정확도 우선');
     expect(markup).toContain('음성을 더 꼼꼼하게 영어 자막으로 옮기고 싶을 때');
     expect(markup).toContain('small.en');
-    expect(markup).toContain('파일의 음성을 영어 SRT 자막으로 만들 처리 방향을 선택하세요.');
+    expect(markup).toContain('파일의 음성을 영어 자막 파일(SRT)로 만들 처리 방향을 선택하세요.');
     expect(markup).toContain('영어 전용 자막은 로컬 Whisper로 처리합니다.');
     expect(markup).toContain('로컬 Whisper');
     expect(markup).toContain('value="small_en"');
@@ -263,7 +264,7 @@ describe('subtitles extract page', () => {
     /** 접수 중 화면을 정적 HTML로 렌더링한 결과. */
     const markup = renderToStaticMarkup(<SubtitlesExtractPage />);
 
-    expect(markup).toContain('요청 접수 중');
+    expect(markup).toContain('>자막 추출</h2>');
     expect(markup).toContain('자막 요청을 접수하고 있습니다');
     expect(markup).not.toContain('progress-meter');
     expect(markup).not.toContain('subtitle-step-tabs');
@@ -294,6 +295,10 @@ describe('subtitles extract page', () => {
   it('renders the completed job download URL in the in-place result panel', () => {
     subtitlesExtractLogic.mockReturnValue({
       downloadHref: 'https://api.example.test/subtitles/job-1/file.srt',
+      statusJob: {
+        fileName: 'sample-video.mp4',
+        retentionDays: 7,
+      },
       statusMessage: '영어 SRT가 준비되었습니다.',
       statusTitle: '영어 SRT가 준비되었습니다',
       viewPhase: 'result',
@@ -302,7 +307,11 @@ describe('subtitles extract page', () => {
     /** 완료 결과 화면을 정적 HTML로 렌더링한 결과. */
     const markup = renderToStaticMarkup(<SubtitlesExtractPage />);
 
-    expect(markup).toContain('영어 SRT 준비 완료');
+    expect(markup).toContain('자막 추출');
+    expect(markup).toContain('원본 파일');
+    expect(markup).toContain('sample-video.mp4');
+    expect(markup).toContain('결과 형식');
+    expect(markup).toContain('완료 후 7일');
     expect(markup).toContain(
       'href="https://api.example.test/subtitles/job-1/file.srt"',
     );

@@ -9,8 +9,8 @@
 
 ## 사용자 흐름
 
-1. 앱은 먼저 `GET /health`를 확인한다. `checking`·`failed`·`unavailable`이면 상태 우선 화면과 재확인을 보여주고, `ready`일 때만 요청 입력을 연다.
-2. 준비된 상태에서 사용자는 `YouTube URL → 추출 형식 → 품질 → 추출 요청` 순서로 작업을 진행한다. 화면에는 `원본 → 추출 → 파일 수령` 흐름이 현재 상태와 함께 표시된다.
+1. 앱은 먼저 `GET /health`를 확인한다. 최초 응답이 없는 동안에는 상태 우선 화면과 재확인을 보여주고, `ready`가 확인되면 `영상 추출` 요청 입력을 연다. 이미 열린 form은 백그라운드 health 확인 중에도 유지한다.
+2. 준비된 상태에서 사용자는 `YouTube URL → 추출 형식 → 품질 → 추출 요청` 순서로 작업을 진행한다. page H2와 navigation은 `영상 추출`이며, 화면에는 `원본 → 추출 → 파일 수령` 흐름이 현재 상태와 함께 표시된다.
 3. 앱은 `POST /downloads`를 호출한다. 요청이 서버 job을 만들기 전에 사용자가 `요청 취소`를 누르면 AbortController로 브라우저 요청을 중단한다.
 4. 성공 응답의 UUID와 접수 시각을 영상 접수증으로 저장한다. 취소 응답 경쟁으로 이미 job이 생성되면 접수증을 보존하고 서버 job 취소로 표시하지 않는다.
 5. 현재 route에서 `GET /downloads/:jobId`를 polling해 처리·완료·실패·만료 상태를 표시한다.
@@ -20,11 +20,12 @@
 ## 상태와 오류
 
 - mount 시 과거 접수증을 읽거나 상태 조회를 시작하지 않는다. 현재 화면에서 새로 접수한 job만 조회한다.
-- `checking`·`failed`·`unavailable`에서는 readiness panel이 form을 대체하고, `ready`에서만 `YouTube URL` 입력과 validation을 표시한다. 백그라운드 확인으로 form이 사라져도 URL과 선택값은 hook state에 보존한다.
+- 최초 health 응답이 없는 `checking`에서 readiness panel이 form을 대체하고, `ready`에서 `YouTube URL` 입력과 validation을 표시한다. 기존 `ready` form은 백그라운드 확인 중 유지하며, 완료된 응답이 `failed` 또는 `unavailable`이면 readiness panel로 전환한다. 이때 URL과 선택값은 hook state에 보존한다.
 - readiness는 상태 텍스트·아이콘·`status`/`alert` live semantics·`aria-busy`·재확인 accessible name을 유지한다. API 확인 실패와 worker 미가용은 구분하고, 확인 가능한 사실만 안내한다.
-- URL 입력값이 있을 때만 `리셋` control을 표시하고, 비어 있을 때는 해당 control을 DOM에 렌더링하지 않는다.
+- 정상 form health 갱신은 제목 옆 작은 표시와 `aria-busy`로만 전달하며 반복 live announcement를 만들지 않는다. 장애 readiness panel은 재확인을 먼저 보여주고 기술 상세를 그 아래에 둔다.
+- URL 입력값이 있을 때만 `지우기` control을 표시하고, 비어 있을 때는 해당 control을 DOM에 렌더링하지 않는다.
 - URL 검증 또는 POST 실패 시 route를 유지하며 접수증을 저장하지 않는다.
-- POST가 진행되는 동안 주요 navigation의 현재 목적지를 제외한 route와 상단 `설정` 링크의 이동을 막는다. 링크는 계속 표시하며 비활성 목적지에는 `aria-disabled="true"`와 잠금 사유를 제공한다. `요청 취소` 뒤에는 lock을 해제하고 입력을 유지한다.
+- POST가 진행되는 동안 주요 navigation의 현재 목적지를 제외한 route와 `더보기` 안의 `설정` 링크 이동을 막는다. 링크는 계속 표시하며 비활성 목적지에는 `aria-disabled="true"`와 잠금 사유를 제공한다. `요청 취소` 뒤에는 lock을 해제하고 입력을 유지한다.
 - 접수 이후에는 공유 polling 정책으로 현재 job을 조회하고, terminal 상태나 재시도 불가 조회 오류에서 polling을 멈춘다.
 - 접수 뒤 worker health 상태가 바뀌어도 현재 job의 API 상태와 메시지를 우선한다.
 

@@ -65,7 +65,7 @@ describe('worker health status', () => {
       input: {
         apiReady: undefined,
         hasError: false,
-        isFetching: true,
+        isInitialChecking: true,
         unavailableMessage: '현재 추출 서버가 준비되지 않았습니다.',
         workerAvailable: undefined,
       },
@@ -81,7 +81,7 @@ describe('worker health status', () => {
       input: {
         apiReady: true,
         hasError: false,
-        isFetching: false,
+        isInitialChecking: false,
         unavailableMessage: '현재 추출 서버가 준비되지 않았습니다.',
         workerAvailable: true,
       },
@@ -98,7 +98,7 @@ describe('worker health status', () => {
       input: {
         apiReady: true,
         hasError: false,
-        isFetching: false,
+        isInitialChecking: false,
         unavailableMessage: '현재 추출 서버가 준비되지 않았습니다.',
         workerAvailable: false,
       },
@@ -114,7 +114,7 @@ describe('worker health status', () => {
       input: {
         apiReady: undefined,
         hasError: true,
-        isFetching: false,
+        isInitialChecking: false,
         unavailableMessage: '현재 추출 서버가 준비되지 않았습니다.',
         workerAvailable: undefined,
       },
@@ -124,16 +124,16 @@ describe('worker health status', () => {
     expect(getWorkerHealthStatus(input)).toEqual(expected);
   });
 
-  it('returns to the checking state while a background refresh is fetching', () => {
+  it('keeps ready while a background refresh is fetching', () => {
     expect(
       getWorkerHealthStatus({
         apiReady: true,
         hasError: false,
-        isFetching: true,
+        isInitialChecking: false,
         unavailableMessage: '현재 추출 서버가 준비되지 않았습니다.',
         workerAvailable: true,
       }).kind,
-    ).toBe('checking');
+    ).toBe('ready');
   });
 
   it('treats an unhealthy API response as a failed status', () => {
@@ -141,7 +141,7 @@ describe('worker health status', () => {
       getWorkerHealthStatus({
         apiReady: false,
         hasError: false,
-        isFetching: false,
+        isInitialChecking: false,
         unavailableMessage: '현재 추출 서버가 준비되지 않았습니다.',
         workerAvailable: true,
       }).kind,

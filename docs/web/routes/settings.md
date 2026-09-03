@@ -4,7 +4,7 @@
 
 - path: `/settings`
 - source: `apps/web/src/app/pages/settings/page.tsx`
-- navigation: 모든 route의 상단 보조 `설정` 링크
+- navigation: 모든 route의 상단 `더보기` disclosure 안 보조 `설정` 링크
 - data source: browser `localStorage` 테마 선호
 - surface: 외곽 card 없이 workspace에 정렬된 `화면 표시` preference group
 
@@ -18,9 +18,9 @@
 
 - 테마 선택은 하나의 native radio group으로 제공한다.
 - `화면 표시` 설명과 세 radio label은 workspace의 flat 세로 흐름에 놓이며 실제 조작 영역은 가로·세로 44px 이상이다.
-- 요청 접수 중에는 `설정` route 이동을 막고, 링크에 `aria-disabled`와 이동 잠금 사유를 제공한다.
+- 요청 접수 중에는 `더보기` 안의 `설정` route 이동을 막고, 링크에 `aria-disabled`와 이동 잠금 사유를 제공한다.
 - 설정은 영상·자막·요청 내역의 주요 navigation에 포함되지 않는 보조 영역이다.
-- `/settings`의 현재 route는 상단 보조 링크에 `aria-current="page"`와 본문색 active label,
+- `/settings`의 현재 route는 상단 `더보기` 안 보조 링크에 `aria-current="page"`와 본문색 active label,
   Nintendo red 밑줄로 함께 표시한다. 모바일 하단 3탭에는 설정을 추가하지 않는다.
 
 ## 범위

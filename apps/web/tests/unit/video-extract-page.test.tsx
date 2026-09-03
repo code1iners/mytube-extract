@@ -11,7 +11,7 @@ vi.mock('../../src/app/pages/video-extract/_hooks/use-video-extract-logic', () =
 import { VideoExtractPage } from '../../src/app/pages/video-extract/page';
 
 describe('video extract page', () => {
-  it('keeps the request fields in task order and places readiness after the form', () => {
+  it('keeps the request fields in task order and places readiness near the title', () => {
     videoExtractLogic.mockReturnValue({
       canSubmit: false,
       draft: { mode: 'audio', quality: '320', sourceUrl: '' },
@@ -39,6 +39,7 @@ describe('video extract page', () => {
 
     expect(markup).toContain('data-health-status="ready"');
     expect(markup).toContain('data-health-presentation="compact"');
+    expect(markup).toContain('>영상 추출</h2>');
     expect(markup).toContain('role="status"');
     expect(markup).toContain('마지막 확인');
     expect(markup).toContain('다시 확인');
@@ -54,8 +55,11 @@ describe('video extract page', () => {
     expect(markup.indexOf('<legend>품질</legend>')).toBeLessThan(
       markup.indexOf('추출 요청</button>'),
     );
-    expect(markup.indexOf('</form>')).toBeLessThan(
-      markup.indexOf('data-health-status="ready"'),
+    expect(markup.indexOf('data-health-status="ready"')).toBeLessThan(
+      markup.indexOf('YouTube URL'),
+    );
+    expect(markup.indexOf('YouTube URL')).toBeLessThan(
+      markup.indexOf('</form>'),
     );
     expect(markup).not.toContain('url-reset-button');
   });
@@ -126,6 +130,8 @@ describe('video extract page', () => {
     const markup = renderToStaticMarkup(<VideoExtractPage />);
 
     expect(markup).toContain('class="url-reset-button"');
+    expect(markup).toContain('>지우기</button>');
+    expect(markup).not.toContain('>리셋</button>');
   });
 
   it('shows a lightweight acceptance status without a progress meter', () => {
@@ -198,7 +204,7 @@ describe('video extract page', () => {
     /** 완료 결과 화면을 정적 HTML로 렌더링한 결과. */
     const markup = renderToStaticMarkup(<VideoExtractPage />);
 
-    expect(markup).toContain('추출 완료');
+    expect(markup).toContain('영상 추출');
     expect(markup).toContain(
       'href="https://api.example.test/downloads/job-1/file"',
     );

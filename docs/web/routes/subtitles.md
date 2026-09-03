@@ -9,21 +9,22 @@
 
 ## 사용자 흐름
 
-1. 앱은 먼저 `GET /health`를 확인한다. `checking`·`failed`·`unavailable`이면 상태 우선 화면과 재확인을 보여주고, `ready`일 때만 파일·처리 방식 입력을 연다.
-2. 준비된 상태에서 사용자는 `mp4`, `mov`, `webm` 로컬 영상 파일을 선택한다. 화면에는 `원본 → 추출 → 파일 수령` 흐름을 표시한다.
-3. 사용자는 속도 우선(`base_en`) 또는 정확도 우선(`small_en`) 처리 방식을 비교한 뒤 영어 SRT 생성을 요청한다. 사용자 중심 결과 설명은 바로 보이고, 모델 식별자·로컬 Whisper·worker 정보는 닫힌 native `기술적인 처리 정보` disclosure에서 필요할 때 확인한다.
+1. 앱은 먼저 `GET /health`를 확인한다. 최초 응답이 없는 동안에는 상태 우선 화면과 재확인을 보여주고, `ready`가 확인되면 `자막 추출` 파일·처리 방식 입력을 연다. 이미 열린 form은 백그라운드 health 확인 중에도 유지한다.
+2. 준비된 상태에서 사용자는 `mp4`, `mov`, `webm` 로컬 영상 파일을 선택한다. page H2와 navigation은 `자막 추출`이며, 화면에는 `원본 → 추출 → 파일 수령` 흐름을 표시한다.
+3. 사용자는 속도 우선(`base_en`) 또는 정확도 우선(`small_en`) 처리 방식을 비교한 뒤 영어 자막 파일(SRT) 생성을 요청한다. 사용자 중심 결과 설명은 바로 보이고, 모델 식별자·로컬 Whisper·worker 정보는 닫힌 native `기술적인 처리 정보` disclosure에서 필요할 때 확인한다.
 4. `POST /subtitles/uploads`로 multipart session을 만들고 presigned URL로 파일 part를 직접 업로드한다. session·part·complete 중 사용자가 `요청 취소`를 누르면 브라우저 요청을 중단하고 abort cleanup을 best-effort로 시도한다.
 5. `POST /subtitles/uploads/complete` 성공 응답의 UUID와 접수 시각을 자막 접수증으로 저장한다. 응답 경쟁으로 job이 생성되면 접수증을 보존하고 서버 job 취소로 표시하지 않는다.
 6. 현재 route에서 `GET /subtitles/jobs/:jobId`를 polling해 처리·완료·실패·만료 상태를 표시한다.
-7. 완료되면 실제 SRT `downloadUrl`을 표시하고, 실패·만료·상태 조회 오류에는 상세와 기존 파일을 유지한 재요청 동작을 제공한다.
+7. 완료되면 API 응답의 `fileName`, 결과 형식 `영어 SRT`, `retentionDays`와 실제 SRT `downloadUrl`을 표시하고, 다운로드·새 요청 동작을 제공한다. 실패·만료·상태 조회 오류에는 상세와 기존 파일을 유지한 재요청 동작을 제공한다.
 8. 업로드 실패 시 `POST /subtitles/uploads/abort` 정리를 best-effort로 요청한다.
 
 ## 상태와 오류
 
 - mount 시 과거 접수증을 읽거나 상태 조회를 시작하지 않는다. 현재 화면에서 새로 접수한 job만 조회한다.
-- `checking`·`failed`·`unavailable`에서는 readiness panel이 form을 대체하고, `ready`에서만 파일 picker와 처리 방식을 표시한다. background checking으로 form이 숨겨져도 선택 파일과 model state는 보존한다.
+- 최초 health 응답이 없는 `checking`에서 readiness panel이 form을 대체하고, `ready`에서 파일 picker와 처리 방식을 표시한다. 기존 `ready` form은 background checking으로 숨기지 않으며, 완료된 응답이 `failed` 또는 `unavailable`이면 readiness panel로 전환한다. 선택 파일과 model state는 보존한다.
 - readiness는 상태 텍스트·아이콘·`status`/`alert` live semantics·`aria-busy`·재확인 accessible name을 유지한다. 확인 가능한 API 응답과 worker availability만 안내한다.
-- session 생성부터 part upload와 complete 응답까지 주요 navigation의 현재 목적지를 제외한 route와 상단 `설정` 링크의 이동 및 중복 제출을 막는다. 링크는 계속 표시하며 비활성 목적지에는 `aria-disabled="true"`와 잠금 사유를 제공한다. `요청 취소` 뒤에는 lock을 풀고 파일·선택을 유지한다.
+- 정상 form health 갱신은 제목 옆 작은 표시와 `aria-busy`로만 전달하며 반복 live announcement를 만들지 않는다. 장애 readiness panel은 재확인을 먼저 보여주고 기술 상세를 그 아래에 둔다.
+- session 생성부터 part upload와 complete 응답까지 주요 navigation의 현재 목적지를 제외한 route와 `더보기` 안의 `설정` 링크 이동 및 중복 제출을 막는다. 링크는 계속 표시하며 비활성 목적지에는 `aria-disabled="true"`와 잠금 사유를 제공한다. `요청 취소` 뒤에는 lock을 풀고 파일·선택을 유지한다.
 - complete 성공 뒤 navigation lock을 해제하고 현재 route에서 공유 정책으로 job을 polling한다.
 - 파일 검증, 413, direct upload, complete 실패 시 접수증을 저장하거나 history로 이동하지 않는다.
 - 접수 뒤 worker health 상태가 바뀌어도 현재 job의 API 상태와 메시지를 우선한다.

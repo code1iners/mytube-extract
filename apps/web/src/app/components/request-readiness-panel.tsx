@@ -55,9 +55,16 @@ export function RequestReadinessPanel({
         technicalDetail={technicalDetail}
         onRetry={onRetry}
       />
-      <p className="readiness-panel__next" role="status">
-        서버가 준비되면 요청 입력 화면이 표시됩니다.
-      </p>
+      {status.kind === 'checking' ? (
+        <p className="readiness-panel__next" role="status">
+          서버가 준비되면 요청 입력 화면이 표시됩니다.
+        </p>
+      ) : null}
+      {status.kind === 'failed' || status.kind === 'unavailable' ? (
+        <p className="readiness-panel__preserved" role="status">
+          입력한 내용은 그대로 보존됩니다. 다시 확인 후 이어서 요청할 수 있습니다.
+        </p>
+      ) : null}
     </section>
   );
 }

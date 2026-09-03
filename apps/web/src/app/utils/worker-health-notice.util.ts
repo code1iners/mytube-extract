@@ -31,8 +31,8 @@ export type WorkerHealthStatusInput = {
   apiReady: boolean | undefined;
   /** health 요청 자체가 실패했는지 여부. */
   hasError: boolean;
-  /** 현재 health 요청 또는 재확인 요청 진행 여부. */
-  isFetching: boolean;
+  /** 이전 응답 없이 최초 health 확인을 진행하는지 여부. */
+  isInitialChecking: boolean;
   /** worker가 작업을 받을 수 있는지 여부. */
   workerAvailable: boolean | undefined;
   /** worker 미가용 시 표시할 제품별 안내 문구. */
@@ -43,8 +43,8 @@ export type WorkerHealthStatusInput = {
 export function getWorkerHealthStatus(
   input: WorkerHealthStatusInput,
 ): WorkerHealthStatus {
-  // 재확인 중에는 요청 form을 숨겨 현재 확인 중인 상태를 먼저 알린다.
-  if (input.isFetching) {
+  // 최초 응답이 없을 때만 form을 대신해 확인 중 상태를 보여준다.
+  if (input.isInitialChecking) {
     return {
       kind: 'checking',
       label: '확인 중',

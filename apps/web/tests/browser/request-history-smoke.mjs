@@ -84,9 +84,9 @@ async function verifyRequestRoutesDoNotRestore() {
     });
 
     await page.goto(`${staticServer.origin}/video`);
-    await page.getByRole('heading', { name: '추출 요청' }).waitFor();
+    await page.getByRole('heading', { name: '영상 추출' }).waitFor();
     await page.goto(`${staticServer.origin}/subtitles`);
-    await page.getByRole('heading', { name: '영어 SRT 생성' }).waitFor();
+    await page.getByRole('heading', { name: '자막 추출' }).waitFor();
 
     assert.deepEqual(statusRequests, []);
     assertNoRuntimeErrors();
@@ -240,8 +240,16 @@ async function verifyRequestReadinessStatus() {
           await page.keyboard.press('Enter');
           await waitForCondition(async () => healthCalls === 2);
           await waitForCondition(async () => refreshButton.isDisabled());
-          assert.equal(await page.locator('.readiness-panel').count(), 1);
-          assert.equal(await page.locator('form').count(), 0);
+          assert.equal(await page.locator('.readiness-panel').count(), 0);
+          assert.equal(await page.locator('form').count(), 1);
+          assert.equal(await page.locator('.worker-health-status').getAttribute('aria-busy'), 'true');
+          assert.equal(await page.locator('.worker-health-status__message').getAttribute('aria-live'), 'off');
+          assert.equal(await page.locator('.panel-title__refresh').count(), 1);
+          if (routePath === '/video') {
+            assert.equal(await page.getByLabel('YouTube URL').inputValue(), 'https://youtu.be/abc123_DEF0');
+          } else {
+            assert.equal(await page.getByText('sample.mp4', { exact: true }).count(), 1);
+          }
           assert.equal(submitCalls, 0);
           await assertRequestReadinessLayout(page, width);
           await refreshButton.dispatchEvent('click');
@@ -260,6 +268,19 @@ async function verifyRequestReadinessStatus() {
           assert.equal(await page.locator('.readiness-panel').count(), 1);
           assert.equal(await page.locator('form, input[type="url"]').count(), 0);
           assert.equal(await page.locator('.error-details').count(), 1);
+          assert.equal(await page.getByText('입력한 내용은 그대로 보존됩니다. 다시 확인 후 이어서 요청할 수 있습니다.', { exact: true }).count(), 1);
+          /** 미가용 상태에서 먼저 제공하는 primary 재확인 동작. */
+          const unavailableRetryButton = page.getByRole('button', { name: '서비스 상태 다시 확인' });
+          assert.match((await unavailableRetryButton.getAttribute('class')) ?? '', /primary-button/);
+          /** 미가용 상태 action stack의 실제 너비. */
+          const unavailableRetryBox = await unavailableRetryButton.boundingBox();
+          const unavailableActionBox = await page.locator('.worker-health-status__actions').boundingBox();
+          assert.ok(unavailableRetryBox && unavailableActionBox && unavailableRetryBox.width >= unavailableActionBox.width - 1);
+          assert.ok(
+            await page.locator('.worker-health-status__retry').evaluate((button) =>
+              button.compareDocumentPosition(button.parentElement?.querySelector('.error-details') ?? button) & Node.DOCUMENT_POSITION_FOLLOWING,
+            ),
+          );
           assert.match(
             await page.locator('.worker-health-status__message').textContent(),
             /서비스가 응답했지만 지금은 요청을 시작할 수 없습니다/,
@@ -281,6 +302,15 @@ async function verifyRequestReadinessStatus() {
           assert.equal(await page.locator('.readiness-panel').count(), 1);
           assert.equal(await page.locator('form, input[type="url"]').count(), 0);
           assert.equal(await page.locator('.error-details').count(), 1);
+          assert.equal(await page.getByText('입력한 내용은 그대로 보존됩니다. 다시 확인 후 이어서 요청할 수 있습니다.', { exact: true }).count(), 1);
+          /** API 확인 실패 상태에서 먼저 제공하는 primary 재확인 동작. */
+          const failedRetryButton = page.getByRole('button', { name: '서비스 상태 다시 확인' });
+          assert.match((await failedRetryButton.getAttribute('class')) ?? '', /primary-button/);
+          assert.ok(
+            await page.locator('.worker-health-status__retry').evaluate((button) =>
+              button.compareDocumentPosition(button.parentElement?.querySelector('.error-details') ?? button) & Node.DOCUMENT_POSITION_FOLLOWING,
+            ),
+          );
           assert.match(
             await page.locator('.worker-health-status__message').textContent(),
             /API 상태를 확인하지 못했습니다\. 다시 확인해 주세요\./,
@@ -374,7 +404,7 @@ async function assertRequestReadinessLayout(page, width) {
 /** 헤더의 사용 안내 disclosure가 모든 주요 route에서 열리고 닫히는지 확인한다. */
 async function verifyUsageGuideDisclosure() {
   /** 사용 안내를 확인할 responsive viewport. */
-  for (const width of [390, 1280]) {
+  for (const width of [320, 390, 1280]) {
     /** 사용 안내 viewport 높이. */
     const height = width <= 820 ? 844 : 900;
     /** route별 사용 안내를 격리할 browser context. */
@@ -398,7 +428,9 @@ async function verifyUsageGuideDisclosure() {
         assert.equal(await guide.getAttribute('open'), null);
         const summaryBox = await summary.boundingBox();
         assert.ok(summaryBox && summaryBox.width >= 44 && summaryBox.height >= 44);
+        assert.equal(await summary.getAttribute('aria-haspopup'), 'menu');
         assert.equal(await summary.getAttribute('aria-expanded'), 'false');
+        assert.equal(await guide.locator('.usage-guide__settings').count(), 1);
         assert.equal(await guide.getByText('API 응답을 기준으로 표시합니다.', { exact: true }).count(), 1);
         assert.equal(await guide.getByText('현재 브라우저에만 남습니다.', { exact: true }).count(), 1);
         assert.equal(await guide.getByText('기본 7일 보관됩니다.', { exact: true }).count(), 1);
@@ -417,6 +449,12 @@ async function verifyUsageGuideDisclosure() {
         assert.equal(await guide.getAttribute('open'), '');
         assert.equal(await summary.getAttribute('aria-expanded'), 'true');
         assert.equal(await guide.locator('.usage-guide__content').isVisible(), true);
+        /** 더보기 메뉴에서 보조 설정으로 이동하는 menuitem. */
+        const settingsLink = guide.getByRole('menuitem', { name: '설정' });
+        assert.equal(await settingsLink.isVisible(), true);
+        /** 설정 menuitem의 실제 touch target. */
+        const settingsBox = await settingsLink.boundingBox();
+        assert.ok(settingsBox && settingsBox.width >= 44 && settingsBox.height >= 44);
         await page.waitForTimeout(200);
         /** 열린 chevron transform. */
         const openChevron = await summary.evaluate((element) =>
@@ -428,12 +466,36 @@ async function verifyUsageGuideDisclosure() {
         assert.equal(await summary.getAttribute('aria-expanded'), 'false');
         assert.equal(await summary.evaluate((element) => document.activeElement === element), true);
 
+        if (width <= 560) {
+          const headerMetrics = await page.evaluate(() => {
+            const brand = document.querySelector('.brand-lockup')?.getBoundingClientRect();
+            const utilities = document.querySelector('.hero-utilities')?.getBoundingClientRect();
+            return {
+              brandTop: brand?.top,
+              utilitiesRight: utilities?.right,
+              utilitiesTop: utilities?.top,
+            };
+          });
+          assert.ok(headerMetrics.brandTop !== undefined);
+          assert.ok(headerMetrics.utilitiesTop !== undefined);
+          assert.ok(Math.abs(headerMetrics.brandTop - headerMetrics.utilitiesTop) <= 1);
+          assert.ok(headerMetrics.utilitiesRight !== undefined && headerMetrics.utilitiesRight <= width);
+        }
+
         if (routePath === RESPONSIVE_NAVIGATION_ROUTES[0]) {
           await summary.press('Space');
           assert.equal(await guide.getAttribute('open'), '');
           await summary.press('Space');
           assert.equal(await guide.getAttribute('open'), null);
         }
+
+        await summary.click();
+        await guide.locator('.usage-guide__content').waitFor();
+        await page.mouse.click(1, 1);
+        await waitForCondition(async () =>
+          (await guide.getAttribute('open')) === null &&
+          (await summary.evaluate((element) => document.activeElement === element)),
+        );
       }
       assertNoRuntimeErrors();
     } finally {
@@ -538,12 +600,13 @@ async function verifyVideoRequestFlows() {
     await waitForEnabled(submit);
     await submit.click();
     await createStartedPromise;
-    await page.getByRole('heading', { name: '요청 접수 중' }).waitFor();
+    await page.getByRole('heading', { name: '추출 요청을 준비하고 있습니다' }).waitFor();
     assert.equal(await page.locator('.request-flow[data-flow-stage="extract"]').count(), 1);
 
     const historyLink = page.getByRole('link', { name: '요청 내역' });
     const videoLink = page.getByRole('link', { name: '영상 추출' });
-    const settingsLink = page.getByRole('link', { name: '설정' });
+    await page.locator('.usage-guide summary').click();
+    const settingsLink = page.getByRole('menuitem', { name: '설정' });
     assert.equal(await historyLink.getAttribute('aria-disabled'), 'true');
     assert.equal(await videoLink.getAttribute('aria-disabled'), null);
     assert.equal(await settingsLink.getAttribute('aria-disabled'), 'true');
@@ -559,7 +622,7 @@ async function verifyVideoRequestFlows() {
 
     releaseCreate();
     assert.equal(new URL(page.url()).pathname, '/video');
-    await page.getByRole('heading', { name: '추출 완료' }).waitFor();
+    await page.getByRole('heading', { name: '파일이 준비되었습니다' }).waitFor();
     assert.equal(await page.locator('.request-flow[data-flow-stage="receipt"]').count(), 1);
     assert.equal(await page.getByRole('button', { name: '요청 취소' }).count(), 0);
     assert.equal(await page.locator('.worker-health-status').count(), 0);
@@ -650,10 +713,10 @@ async function verifyVideoRequestCancellation() {
     await waitForEnabled(submit);
     await submit.click();
     await createStartedPromise;
-    await page.getByRole('heading', { name: '요청 접수 중' }).waitFor();
+    await page.getByRole('heading', { name: '추출 요청을 준비하고 있습니다' }).waitFor();
 
     await page.getByRole('button', { name: '요청 취소' }).click();
-    await page.getByRole('heading', { name: '추출 요청' }).waitFor();
+    await page.getByRole('heading', { name: '영상 추출' }).waitFor();
     await waitForCondition(async () =>
       sourceUrl.evaluate((element) => document.activeElement === element),
     );
@@ -706,10 +769,13 @@ async function verifyVideoTaskFirstLayout() {
         });
 
         await page.goto(`${staticServer.origin}/video`);
-        await page.getByRole('heading', { name: '추출 요청' }).waitFor();
+        await page.getByRole('heading', { name: '영상 추출' }).waitFor();
         await page.getByLabel('YouTube URL').waitFor();
         assert.equal(await page.locator('.request-flow[data-flow-stage="source"]').count(), 1);
-        assert.deepEqual(await page.locator('.request-flow__step').allTextContents(), ['원본', '추출', '파일 수령']);
+        assert.deepEqual(
+          await page.locator('.request-flow__step > span:last-child').allTextContents(),
+          ['원본', '추출', '파일 수령'],
+        );
         assert.deepEqual(
           await page.locator('.quality-grid .quality-chip').allTextContents(),
           ['128 kbps', '192 kbps', '320 kbps'],
@@ -744,7 +810,7 @@ async function verifyVideoTaskFirstLayout() {
 
           return {
             formContainsReadiness: Boolean(form && readiness && form.contains(readiness)),
-            indexes: [urlField, formatFieldset, qualityFieldset, submit, readiness].map(
+            indexes: [readiness, urlField, formatFieldset, qualityFieldset, submit].map(
               (element) => (element ? [...document.querySelectorAll('*')].indexOf(element) : -1),
             ),
           };
@@ -811,7 +877,7 @@ async function verifyVideoTaskFirstLayout() {
         assert.equal(layoutMetrics.panel.backgroundColor, 'rgba(0, 0, 0, 0)');
         assert.ok(layoutMetrics.url);
         assert.ok(layoutMetrics.readiness);
-        assert.ok(layoutMetrics.url.top < layoutMetrics.readiness.top);
+        assert.ok(layoutMetrics.readiness.top < layoutMetrics.url.top);
         assert.ok(layoutMetrics.url.left >= 0);
         assert.ok(layoutMetrics.url.right <= width);
         assert.ok(layoutMetrics.submit);
@@ -831,21 +897,26 @@ async function verifyVideoTaskFirstLayout() {
           assert.ok(layoutMetrics.panel.box.bottom <= 900 - 24);
         }
 
-        assert.equal(await page.getByRole('button', { name: '리셋' }).count(), 0);
+        assert.equal(await page.getByRole('button', { name: '지우기' }).count(), 0);
         await page.getByLabel('YouTube URL').fill('https://youtu.be/abc123_DEF0');
-        /** 입력값이 있을 때 표시되는 URL 리셋 button. */
-        const resetButton = page.getByRole('button', { name: '리셋' });
-        /** 상단 설정 navigation link. */
-        const settingsLink = page.getByRole('link', { name: '설정' });
-        /** URL 리셋 button의 viewport 영역. */
+        /** 입력값이 있을 때 표시되는 URL 지우기 button. */
+        const resetButton = page.getByRole('button', { name: '지우기' });
+        await page.locator('.usage-guide summary').click();
+        /** 더보기 메뉴 안의 설정 navigation link. */
+        const settingsLink = page.getByRole('menuitem', { name: '설정' });
+        /** URL 지우기 button의 viewport 영역. */
         const resetBox = await resetButton.boundingBox();
         /** 설정 link의 viewport 영역. */
         const settingsBox = await settingsLink.boundingBox();
         assert.ok(resetBox && resetBox.width >= 44 && resetBox.height >= 44);
         assert.ok(settingsBox && settingsBox.width >= 44 && settingsBox.height >= 44);
+        await page.locator('.usage-guide summary').press('Escape');
+        await waitForCondition(
+          async () => (await page.locator('.usage-guide').getAttribute('open')) === null,
+        );
         await resetButton.click();
         assert.equal(await page.getByLabel('YouTube URL').inputValue(), '');
-        assert.equal(await page.getByRole('button', { name: '리셋' }).count(), 0);
+        assert.equal(await page.getByRole('button', { name: '지우기' }).count(), 0);
         assertNoRuntimeErrors();
       } finally {
         await context.close();
@@ -891,7 +962,7 @@ async function verifyAcceptedJobStorageFallback() {
     const submit = page.getByRole('button', { name: '추출 요청' });
     await waitForEnabled(submit);
     await submit.click();
-    await page.getByRole('heading', { name: '추출 완료' }).waitFor();
+    await page.getByRole('heading', { name: '파일이 준비되었습니다' }).waitFor();
 
     /** 최근 접수 job을 보존해야 하는 요청 내역 링크. */
     const historyLink = page.getByRole('link', { name: '요청 내역' }).first();
@@ -966,13 +1037,14 @@ async function verifySubtitleRequestFlow() {
     await waitForEnabled(submit);
     await submit.click();
     await uploadStartedPromise;
-    await page.getByRole('heading', { name: '요청 접수 중' }).waitFor();
+    await page.getByRole('heading', { name: '원본 영상을 업로드 중입니다' }).waitFor();
     assert.equal(await page.locator('.request-flow[data-flow-stage="extract"]').count(), 1);
 
     const historyLink = page.getByRole('link', { name: '요청 내역' });
     const videoTab = page.getByRole('link', { name: '영상 추출' });
     const subtitleTab = page.getByRole('link', { name: '자막 추출' });
-    const settingsLink = page.getByRole('link', { name: '설정' });
+    await page.locator('.usage-guide summary').click();
+    const settingsLink = page.getByRole('menuitem', { name: '설정' });
     assert.equal(await historyLink.getAttribute('aria-disabled'), 'true');
     assert.equal(await videoTab.getAttribute('aria-disabled'), 'true');
     assert.equal(await subtitleTab.getAttribute('aria-disabled'), null);
@@ -984,12 +1056,21 @@ async function verifySubtitleRequestFlow() {
     assert.equal(new URL(page.url()).pathname, '/subtitles');
 
     releaseUpload();
-    await page.getByRole('heading', { name: '영어 SRT 준비 완료' }).waitFor();
+    await page.getByRole('heading', { name: '영어 자막 파일이 준비되었습니다' }).waitFor();
     assert.equal(await page.locator('.request-flow[data-flow-stage="receipt"]').count(), 1);
     assert.equal(await page.getByRole('button', { name: '요청 취소' }).count(), 0);
     assert.equal(new URL(page.url()).pathname, '/subtitles');
     assert.equal(await page.locator('.worker-health-status').count(), 0);
     assert.equal(await receiptCount(page), 1);
+    assert.equal(await page.getByText('원본 파일', { exact: true }).count(), 1);
+    assert.equal(await page.getByText('sample.mp4', { exact: true }).count(), 1);
+    assert.equal(await page.getByText('결과 형식', { exact: true }).count(), 1);
+    assert.equal(await page.getByText('영어 SRT', { exact: true }).count(), 1);
+    assert.equal(await page.getByText('완료 후 3일', { exact: true }).count(), 1);
+    assert.equal(
+      await page.getByText('완료 파일은 3일 동안 보관되며, 요청 내역은 이 브라우저에만 남습니다.', { exact: true }).count(),
+      1,
+    );
     assert.equal(
       await page
         .getByRole('link', { name: '영어 SRT 다운로드' })
@@ -1074,10 +1155,10 @@ async function verifySubtitleRequestCancellation() {
     await waitForEnabled(submit);
     await submit.click();
     await uploadStartedPromise;
-    await page.getByRole('heading', { name: '요청 접수 중' }).waitFor();
+    await page.getByRole('heading', { name: '원본 영상을 업로드 중입니다' }).waitFor();
 
     await page.getByRole('button', { name: '요청 취소' }).click();
-    await page.getByRole('heading', { name: '영어 SRT 생성' }).waitFor();
+    await page.getByRole('heading', { name: '자막 추출' }).waitFor();
     const picker = page.getByRole('button', {
       name: '영상 선택 또는 드래그 (로컬 영상 파일)',
     });
@@ -1216,7 +1297,7 @@ async function verifySubtitleProcessingChoice() {
       });
 
       await page.goto(`${staticServer.origin}/subtitles`);
-      await page.getByRole('heading', { name: '영어 SRT 생성' }).waitFor();
+      await page.getByRole('heading', { name: '자막 추출' }).waitFor();
 
       /** 자막 입력 흐름과 readiness 보조 영역의 DOM 위치. */
       const documentOrder = await page.evaluate(() => {
@@ -1238,7 +1319,7 @@ async function verifySubtitleProcessingChoice() {
 
         return {
           formContainsReadiness: Boolean(form && readiness && form.contains(readiness)),
-          indexes: [picker, processingMethod, submit, readiness].map(getDocumentIndex),
+          indexes: [readiness, picker, processingMethod, submit].map(getDocumentIndex),
         };
       });
       assert.equal(documentOrder.formContainsReadiness, false);
@@ -1261,7 +1342,7 @@ async function verifySubtitleProcessingChoice() {
       assert.equal(await speedOption.isChecked(), true);
       await accuracyOption.check();
       assert.equal(await accuracyOption.isChecked(), true);
-      assert.equal(await page.getByText('파일의 음성을 영어 SRT 자막으로 만들 처리 방향을 선택하세요.', { exact: true }).count(), 1);
+      assert.equal(await page.getByText('파일의 음성을 영어 자막 파일(SRT)로 만들 처리 방향을 선택하세요.', { exact: true }).count(), 1);
       assert.equal(await page.getByText('파일을 빠르게 영어 자막으로 만들고 싶을 때', { exact: true }).count(), 1);
       assert.equal(await page.getByText('음성을 더 꼼꼼하게 영어 자막으로 옮기고 싶을 때', { exact: true }).count(), 1);
       assert.equal(await page.getByText(/예상 처리 시간/, { exact: false }).count(), 0);
@@ -1381,7 +1462,7 @@ async function verifySubtitleProcessingChoice() {
       assert.ok(layoutMetrics.options.every((option) => option.left >= 0 && option.right <= width));
       assert.ok(layoutMetrics.readiness);
       assert.ok(layoutMetrics.submit);
-      assert.ok(layoutMetrics.submit.bottom <= layoutMetrics.readiness.top);
+      assert.ok(layoutMetrics.readiness.bottom <= layoutMetrics.dropzone.top);
       assert.equal(await page.locator('.submit-disabled-reason').count(), 0);
       assert.equal(
         await page.locator('.subtitle-dropzone').getAttribute('aria-describedby'),
@@ -1389,7 +1470,6 @@ async function verifySubtitleProcessingChoice() {
       );
       if (width <= 820) {
         assert.ok(layoutMetrics.navigation);
-        assert.ok(layoutMetrics.submit.bottom <= layoutMetrics.navigation.top);
         await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
         /** 문서 끝에서 fixed navigation 위로 올라온 제출·readiness 영역. */
         const scrolledMetrics = await page.evaluate(() => {
@@ -1420,6 +1500,10 @@ async function verifySubtitleProcessingChoice() {
         mimeType: 'video/mp4',
         name: 'sample.mp4',
       });
+      /** 선택한 파일을 지우는 실제 조작 영역. */
+      const clearSelectedFileButton = page.locator('.selected-file-row button');
+      const clearSelectedFileBox = await clearSelectedFileButton.boundingBox();
+      assert.ok(clearSelectedFileBox && clearSelectedFileBox.width >= 44 && clearSelectedFileBox.height >= 44);
       await waitForEnabled(submit);
       await submit.click();
       await page.locator('.subtitle-step-tabs').waitFor();
@@ -1475,7 +1559,7 @@ async function verifySubtitleFilePicker() {
     });
 
     await page.goto(`${staticServer.origin}/subtitles`);
-    await page.getByRole('heading', { name: '영어 SRT 생성' }).waitFor();
+    await page.getByRole('heading', { name: '자막 추출' }).waitFor();
     await page.getByText('준비됨', { exact: true }).waitFor();
 
     /** 접근성 트리와 tab 순서에 남아야 하는 유일한 파일 선택 control. */
@@ -1630,7 +1714,7 @@ async function verifySubtitleFilePicker() {
       .getByText(/파일이 너무 큽니다\./, { exact: false })
       .waitFor();
     assert.equal(
-      await page.getByRole('heading', { name: '영어 SRT 생성' }).count(),
+      await page.getByRole('heading', { name: '자막 추출' }).count(),
       1,
     );
     assert.equal(await page.locator('.field.has-error').count(), 1);
@@ -1979,7 +2063,7 @@ async function verifyHistoryDeleteUndo() {
       null,
     );
     await page.getByRole('link', { name: '영상 추출', exact: true }).click();
-    await page.getByRole('heading', { name: '추출 요청' }).waitFor();
+    await page.getByRole('heading', { name: '영상 추출' }).waitFor();
     await page.getByRole('link', { name: '요청 내역', exact: true }).click();
     await page
       .getByRole('heading', { name: '요청 내역' })
@@ -2197,7 +2281,7 @@ async function verifyEmptyHistoryProductModel() {
         assert.equal(await page.getByRole('heading', { name: '요청 내역' }).count(), 1);
         assert.equal(
           await page
-            .getByText('최근 요청 20건을 서버의 최신 상태로 확인합니다.', {
+            .getByText('이 브라우저가 접수한 최근 요청 20건을 API 응답의 최신 상태로 확인합니다.', {
               exact: true,
             })
             .count(),
@@ -2232,7 +2316,7 @@ async function verifyEmptyHistoryProductModel() {
         );
         assert.equal(
           await page
-            .getByText('로컬 영상으로 영어 SRT 자막을 만듭니다.', {
+            .getByText('로컬 영상으로 영어 자막 파일(SRT)을 만듭니다.', {
               exact: true,
             })
             .count(),
@@ -2248,7 +2332,10 @@ async function verifyEmptyHistoryProductModel() {
           1,
         );
         assert.equal(await page.locator('.request-flow[data-flow-stage="source"]').count(), 1);
-        assert.deepEqual(await page.locator('.request-flow__step').allTextContents(), ['원본', '추출', '파일 수령']);
+        assert.deepEqual(
+          await page.locator('.request-flow__step > span:last-child').allTextContents(),
+          ['원본', '추출', '파일 수령'],
+        );
 
         /** 빈 내역 표면과 링크의 실제 viewport 영역. */
         const layoutMetrics = await page.evaluate(() => {
@@ -2541,8 +2628,12 @@ async function verifyThemePreference(page, theme) {
 
 /** 설정 route가 flat 표면·테마 조작·focus 계약을 지키는지 확인한다. */
 async function verifySettingsSurface(page, width) {
+  /** 설정 route로 이동하기 전에 여는 더보기 summary. */
+  const moreSummary = page.locator('.usage-guide summary');
+  await moreSummary.focus();
+  await page.keyboard.press('Enter');
   /** 설정 route의 실제 조작 대상. */
-  const settingsLink = page.getByRole('link', { name: '설정' });
+  const settingsLink = page.getByRole('menuitem', { name: '설정' });
   /** 설정 화면의 테마 선택 label 영역. */
   const themeOptions = page.locator('.theme-toggle__option');
   /** 설정 surface와 radio geometry를 한 번에 읽는다. */
@@ -2614,7 +2705,7 @@ async function verifySettingsSurface(page, width) {
   );
   const settingsBox = await settingsLink.boundingBox();
   assert.ok(settingsBox && settingsBox.width >= 44 && settingsBox.height >= 44);
-  await settingsLink.focus();
+  await page.keyboard.press('Tab');
   assert.equal(
     await settingsLink.evaluate((element) => document.activeElement === element),
     true,
@@ -2635,7 +2726,7 @@ async function verifyResponsiveNavigationLayout(page, width, routePath) {
   if (routePath === '/settings') {
     assert.equal(await visibleNavigation.locator('a[aria-current="page"]').count(), 0);
     assert.equal(
-      await page.getByRole('link', { name: '설정' }).getAttribute('aria-current'),
+      await page.getByRole('menuitem', { name: '설정' }).getAttribute('aria-current'),
       'page',
     );
   } else {

@@ -31,11 +31,17 @@ export function useWorkerReadiness(input: WorkerReadinessInput) {
     workerHealthQuery.data?.worker?.available === false;
   /** worker health 확인에 실패했는지 여부. */
   const workerHealthFailed = workerHealthQuery.isError;
+  /** 이전 응답 없이 최초 health 확인을 진행하는지 여부. */
+  const workerHealthIsInitialChecking =
+    workerHealthQuery.isFetching && workerHealthQuery.data === undefined;
+  /** 마지막 성공 응답을 유지한 채 health를 갱신하는지 여부. */
+  const workerHealthIsRefreshing =
+    workerHealthQuery.isFetching && workerHealthQuery.data !== undefined;
   /** 요청 설정 화면에 표시할 worker health 상태. */
   const workerHealthStatus = getWorkerHealthStatus({
     apiReady: workerHealthQuery.data?.ok,
     hasError: workerHealthFailed,
-    isFetching: workerHealthQuery.isFetching,
+    isInitialChecking: workerHealthIsInitialChecking,
     unavailableMessage: input.unavailableMessage,
     workerAvailable: workerHealthQuery.data?.worker?.available,
   });
@@ -62,6 +68,8 @@ export function useWorkerReadiness(input: WorkerReadinessInput) {
     retryWorkerHealth,
     workerHealthCheckedAt,
     workerHealthFailed,
+    workerHealthIsInitialChecking,
+    workerHealthIsRefreshing,
     workerHealthQuery,
     workerHealthStatus,
     workerUnavailable,

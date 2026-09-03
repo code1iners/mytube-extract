@@ -19,5 +19,7 @@ describe('request flow', () => {
     expect(markup).toContain('원본');
     expect(markup).toContain('추출');
     expect(markup).toContain('파일 수령');
+    expect(markup.match(/class="request-flow__marker"/g)).toHaveLength(3);
+    expect(markup).toContain('request-flow__step is-complete');
   });
 });

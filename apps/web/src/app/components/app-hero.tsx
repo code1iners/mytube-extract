@@ -1,14 +1,5 @@
-import {
-  useEffect,
-  useId,
-  useRef,
-  useState,
-  type MouseEvent,
-} from 'react';
-import { NavLink } from 'react-router';
-import { ROUTE_PATHS } from '../constants/route-paths.constant';
+import { useEffect, useRef, useState } from 'react';
 import { AppMark } from './app-icon';
-import { useNavigation } from './navigation-context';
 import { PrimaryNavigation } from './primary-navigation';
 import { UsageGuideDisclosure } from './usage-guide-disclosure';
 
@@ -17,11 +8,6 @@ const BRAND_LOCKUP_GAP = 12;
 
 /** 모든 route에서 공유하는 앱 상단 브랜드 영역. */
 export function AppHero() {
-  // Hooks.
-
-  /** 추출 요청 중 route 이동 차단 상태. */
-  const { navigationLocked } = useNavigation();
-
   // States.
 
   /** 타이틀이 줄바꿈될 만큼 좁은지 여부. true면 로고만 남기고 텍스트를 시각적으로 숨긴다. */
@@ -35,11 +21,6 @@ export function AppHero() {
   const markRef = useRef<HTMLDivElement>(null);
   /** 줄바꿈 없이 렌더링해 타이틀의 필요 폭을 재는 숨김 측정용 element. */
   const measureRef = useRef<HTMLParagraphElement>(null);
-
-  // Identifiers.
-
-  /** 설정 route의 이동 잠금 사유를 link에 연결할 id. */
-  const settingsLockDescriptionId = useId();
 
   // Effects.
 
@@ -78,15 +59,6 @@ export function AppHero() {
     [],
   );
 
-  // Handlers.
-
-  /** 추출 요청 중 설정 route로 이동하지 않는다. */
-  function handleSettingsClick(event: MouseEvent<HTMLAnchorElement>) {
-    if (navigationLocked) {
-      event.preventDefault();
-    }
-  }
-
   return (
     <header className="app-header">
       <div className="brand-lockup" ref={lockupRef}>
@@ -106,20 +78,6 @@ export function AppHero() {
       </div>
       <div className="hero-utilities">
         <UsageGuideDisclosure />
-        <NavLink
-          aria-disabled={navigationLocked || undefined}
-          aria-describedby={navigationLocked ? settingsLockDescriptionId : undefined}
-          className={navigationLocked ? 'settings-link is-disabled' : 'settings-link'}
-          to={ROUTE_PATHS.settings}
-          onClick={handleSettingsClick}
-        >
-          설정
-        </NavLink>
-        {navigationLocked ? (
-          <span className="visually-hidden" id={settingsLockDescriptionId}>
-            요청 접수 중에는 현재 작업을 마칠 때까지 설정으로 이동할 수 없습니다.
-          </span>
-        ) : null}
       </div>
       <PrimaryNavigation className="primary-navigation--desktop" />
     </header>

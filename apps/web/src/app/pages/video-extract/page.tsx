@@ -64,6 +64,7 @@ export function VideoExtractPage() {
     workerHealthCheckedAt,
     workerHealthDetail,
     workerHealthIsFetching,
+    workerHealthIsRefreshing,
     workerHealthStatus,
   } = useVideoExtractLogic();
 
@@ -80,7 +81,7 @@ export function VideoExtractPage() {
         lastCheckedAt={workerHealthCheckedAt}
         status={workerHealthStatus}
         technicalDetail={workerHealthDetail}
-        title="추출 요청"
+        title="영상 추출"
         onRetry={retryWorkerHealth}
       />
     );
@@ -89,7 +90,21 @@ export function VideoExtractPage() {
   if (viewPhase === 'request') {
     return (
       <section className="phase-panel video-request-panel" aria-labelledby="request-title">
-        <PanelTitle icon="download" id="request-title">추출 요청</PanelTitle>
+        <PanelTitle
+          icon="download"
+          id="request-title"
+          isRefreshing={workerHealthIsRefreshing}
+        >
+          영상 추출
+        </PanelTitle>
+        <WorkerHealthStatusNotice
+          id={VIDEO_WORKER_HEALTH_TITLE_ID}
+          isFetching={workerHealthIsFetching}
+          lastCheckedAt={workerHealthCheckedAt}
+          status={workerHealthStatus}
+          technicalDetail={workerHealthDetail}
+          onRetry={retryWorkerHealth}
+        />
         <RequestFlow current="source" />
         {requestNotice ? <RequestNotice message={requestNotice} /> : null}
 
@@ -112,7 +127,7 @@ export function VideoExtractPage() {
                   type="button"
                   onClick={handleSourceUrlReset}
                 >
-                  리셋
+                  지우기
                 </button>
               ) : null}
             </span>
@@ -163,14 +178,6 @@ export function VideoExtractPage() {
             </p>
           ) : null}
         </form>
-        <WorkerHealthStatusNotice
-          id={VIDEO_WORKER_HEALTH_TITLE_ID}
-          isFetching={workerHealthIsFetching}
-          lastCheckedAt={workerHealthCheckedAt}
-          status={workerHealthStatus}
-          technicalDetail={workerHealthDetail}
-          onRetry={retryWorkerHealth}
-        />
       </section>
     );
   }
@@ -178,7 +185,7 @@ export function VideoExtractPage() {
   if (viewPhase === 'processing') {
     return (
       <section className="console-panel phase-panel status-panel" aria-labelledby="status-title">
-        <PanelTitle icon="processing" id="status-title">처리 상태</PanelTitle>
+        <PanelTitle icon="processing" id="status-title">영상 추출</PanelTitle>
         <RequestFlow current="extract" />
         {requestNotice ? <RequestNotice message={requestNotice} /> : null}
         <StatusHead icon={statusIconName} tone={statusTone} title={statusTitle} message={statusMessage} />
@@ -208,7 +215,7 @@ export function VideoExtractPage() {
   if (viewPhase === 'accepting') {
     return (
       <section className="console-panel phase-panel status-panel" aria-labelledby="accepting-title">
-        <PanelTitle icon="processing" id="accepting-title">요청 접수 중</PanelTitle>
+        <PanelTitle icon="processing" id="accepting-title">영상 추출</PanelTitle>
         <RequestFlow current="extract" />
         <StatusHead icon={statusIconName} tone={statusTone} title={statusTitle} message={statusMessage} />
         <button className="secondary-button request-cancel-button" type="button" onClick={cancelRequest}>
@@ -222,15 +229,18 @@ export function VideoExtractPage() {
   if (viewPhase === 'result') {
     return (
       <section className="console-panel phase-panel status-panel" aria-labelledby="result-title">
-        <PanelTitle icon="completed" id="result-title">추출 완료</PanelTitle>
+        <PanelTitle icon="completed" id="result-title">영상 추출</PanelTitle>
         <RequestFlow current="receipt" />
         {requestNotice ? <RequestNotice message={requestNotice} /> : null}
         <StatusHead icon="completed" tone="completed" title={statusTitle} message={statusMessage} />
         <dl className="status-details">
-          <div><dt>형식</dt><dd>{statusTypeLabel}</dd></div>
+          <div><dt>결과 형식</dt><dd>{statusTypeLabel}</dd></div>
           <div><dt>품질</dt><dd>{statusQualityLabel}</dd></div>
           <div><dt>보관 기간</dt><dd>완료 후 {statusJob.retentionDays}일</dd></div>
         </dl>
+        <p className="result-context">
+          완료 파일은 {statusJob.retentionDays}일 동안 보관되며, 요청 내역은 이 브라우저에만 남습니다.
+        </p>
         <div className="result-actions result-actions--video">
           <a className="download-button" download href={downloadHref}><AppIcon name="download" />다운로드</a>
           <button className="secondary-button secondary-button--new-request" type="button" onClick={returnToRequest}><AppIcon name="newRequest" />새 요청</button>
@@ -241,7 +251,7 @@ export function VideoExtractPage() {
 
   return (
     <section className="console-panel phase-panel status-panel" aria-labelledby="error-title">
-      <PanelTitle icon="failed" id="error-title">요청을 완료하지 못했습니다</PanelTitle>
+      <PanelTitle icon="failed" id="error-title">영상 추출</PanelTitle>
       <RequestFlow current="extract" />
       <StatusHead icon="failed" tone="failed" title={statusTitle} message={statusMessage} isAlert />
       {workerHealthFailed ? (
@@ -257,8 +267,8 @@ export function VideoExtractPage() {
 }
 
 /** 화면별 panel heading을 일정한 구조로 렌더링한다. */
-function PanelTitle(props: { /** 아이콘 이름. */ icon: AppIconName; /** heading id. */ id: string; /** 제목. */ children: string }) {
-  return <div className="panel-title-row"><h2 id={props.id}><AppIcon name={props.icon} />{props.children}</h2></div>;
+function PanelTitle(props: { /** 아이콘 이름. */ icon: AppIconName; /** heading id. */ id: string; /** 기존 ready form을 유지한 채 health를 갱신하는지 여부. */ isRefreshing?: boolean; /** 제목. */ children: string }) {
+  return <div className="panel-title-row"><h2 id={props.id}><AppIcon name={props.icon} />{props.children}{props.isRefreshing ? <span aria-hidden="true" className="panel-title__refresh" title="서비스 상태 새로 확인 중"><AppIcon name="processing" /></span> : null}</h2></div>;
 }
 
 /** 상태 제목과 안내 문구를 렌더링한다. */

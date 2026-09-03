@@ -33,7 +33,7 @@ const SUBTITLE_PROCESSING_OPTIONS = [
 
 /** 자막 처리 방식 선택을 시작하게 하는 사용자 중심 안내. */
 const SUBTITLE_PROCESSING_GUIDANCE =
-  '파일의 음성을 영어 SRT 자막으로 만들 처리 방향을 선택하세요.';
+  '파일의 음성을 영어 자막 파일(SRT)로 만들 처리 방향을 선택하세요.';
 /** 접힌 처리 정보에서 설명할 기술적인 실행 환경. */
 const SUBTITLE_PROCESSING_TECHNICAL_NOTE =
   '영어 전용 자막은 로컬 Whisper로 처리합니다.';
@@ -61,7 +61,7 @@ export function SubtitlesExtractPage() {
     requestNotice, retryWorkerHealth, returnToRequest, selectedFile, selectedFileMeta,
     selectedWhisperModel, statusErrorDetail, statusIconName, statusJob, statusMessage, statusTitle,
     statusTone, submitDisabledReason, viewPhase, workerHealthCheckedAt, workerHealthFailed,
-    workerHealthDetail, workerHealthIsFetching, workerHealthStatus,
+    workerHealthDetail, workerHealthIsFetching, workerHealthIsRefreshing, workerHealthStatus,
   } = useSubtitlesExtractLogic();
 
   if (
@@ -77,7 +77,7 @@ export function SubtitlesExtractPage() {
         lastCheckedAt={workerHealthCheckedAt}
         status={workerHealthStatus}
         technicalDetail={workerHealthDetail}
-        title="영어 SRT 생성"
+        title="자막 추출"
         onRetry={retryWorkerHealth}
       />
     );
@@ -85,7 +85,21 @@ export function SubtitlesExtractPage() {
 
   if (viewPhase === 'request') {
     return <section className="phase-panel subtitle-request-panel" aria-labelledby="subtitles-title">
-      <PanelTitle icon="subtitle" id="subtitles-title">영어 SRT 생성</PanelTitle>
+      <PanelTitle
+        icon="subtitle"
+        id="subtitles-title"
+        isRefreshing={workerHealthIsRefreshing}
+      >
+        자막 추출
+      </PanelTitle>
+      <WorkerHealthStatusNotice
+        id={SUBTITLE_WORKER_HEALTH_TITLE_ID}
+        isFetching={workerHealthIsFetching}
+        lastCheckedAt={workerHealthCheckedAt}
+        status={workerHealthStatus}
+        technicalDetail={workerHealthDetail}
+        onRetry={retryWorkerHealth}
+      />
       <RequestFlow current="source" />
       {requestNotice ? <RequestNotice message={requestNotice} /> : null}
       <form className="subtitle-form" onSubmit={handleSubtitleSubmit}>
@@ -184,20 +198,12 @@ export function SubtitlesExtractPage() {
           </p>
         ) : null}
       </form>
-      <WorkerHealthStatusNotice
-        id={SUBTITLE_WORKER_HEALTH_TITLE_ID}
-        isFetching={workerHealthIsFetching}
-        lastCheckedAt={workerHealthCheckedAt}
-        status={workerHealthStatus}
-        technicalDetail={workerHealthDetail}
-        onRetry={retryWorkerHealth}
-      />
     </section>;
   }
 
   if (viewPhase === 'processing') {
     return <section className="console-panel phase-panel status-panel" aria-labelledby="subtitle-status-title">
-      <PanelTitle icon="processing" id="subtitle-status-title">처리 상태</PanelTitle>
+      <PanelTitle icon="processing" id="subtitle-status-title">자막 추출</PanelTitle>
       <RequestFlow current="extract" />
       {requestNotice ? <RequestNotice message={requestNotice} /> : null}
       <StatusHead icon={statusIconName} tone={statusTone} title={statusTitle} message={statusMessage} />
@@ -208,7 +214,7 @@ export function SubtitlesExtractPage() {
 
   if (viewPhase === 'accepting') {
     return <section className="console-panel phase-panel status-panel" aria-labelledby="subtitle-accepting-title">
-      <PanelTitle icon="processing" id="subtitle-accepting-title">요청 접수 중</PanelTitle>
+      <PanelTitle icon="processing" id="subtitle-accepting-title">자막 추출</PanelTitle>
       <RequestFlow current="extract" />
       <StatusHead icon={statusIconName} tone={statusTone} title={statusTitle} message={statusMessage} />
       <button className="secondary-button request-cancel-button" type="button" onClick={cancelRequest}>
@@ -220,16 +226,27 @@ export function SubtitlesExtractPage() {
 
   if (viewPhase === 'result') {
     return <section className="console-panel phase-panel status-panel" aria-labelledby="subtitle-result-title">
-      <PanelTitle icon="completed" id="subtitle-result-title">영어 SRT 준비 완료</PanelTitle>
+      <PanelTitle icon="completed" id="subtitle-result-title">자막 추출</PanelTitle>
       <RequestFlow current="receipt" />
       {requestNotice ? <RequestNotice message={requestNotice} /> : null}
       <StatusHead icon="completed" tone="completed" title={statusTitle} message={statusMessage} />
-      <div className="result-actions"><a className="download-button" download href={downloadHref}><AppIcon name="download" />영어 SRT 다운로드</a><button className="secondary-button" type="button" onClick={returnToRequest}>새 요청</button></div>
+      <dl className="status-details">
+        <div><dt>원본 파일</dt><dd>{statusJob.fileName}</dd></div>
+        <div><dt>결과 형식</dt><dd>영어 SRT</dd></div>
+        <div><dt>보관 기간</dt><dd>완료 후 {statusJob.retentionDays}일</dd></div>
+      </dl>
+      <p className="result-context">
+        완료 파일은 {statusJob.retentionDays}일 동안 보관되며, 요청 내역은 이 브라우저에만 남습니다.
+      </p>
+      <div className="result-actions subtitle-result-actions">
+        <a className="download-button" download href={downloadHref}><AppIcon name="download" />영어 SRT 다운로드</a>
+        <button className="secondary-button" type="button" onClick={returnToRequest}>새 요청</button>
+      </div>
     </section>;
   }
 
   return <section className="console-panel phase-panel status-panel" aria-labelledby="subtitle-error-title">
-    <PanelTitle icon="failed" id="subtitle-error-title">요청을 완료하지 못했습니다</PanelTitle>
+    <PanelTitle icon="failed" id="subtitle-error-title">자막 추출</PanelTitle>
     <RequestFlow current="extract" />
     <StatusHead icon="failed" tone="failed" title={statusTitle} message={statusMessage} isAlert />
     {workerHealthFailed ? <button className="secondary-button" disabled={workerHealthIsFetching} type="button" onClick={retryWorkerHealth}>다시 확인</button> : null}
@@ -239,8 +256,8 @@ export function SubtitlesExtractPage() {
 }
 
 /** 화면별 panel heading을 일정한 구조로 렌더링한다. */
-function PanelTitle(props: { /** 아이콘 이름. */ icon: AppIconName; /** heading id. */ id: string; /** 제목. */ children: string }) {
-  return <div className="panel-title-row"><h2 id={props.id}><AppIcon name={props.icon} />{props.children}</h2></div>;
+function PanelTitle(props: { /** 아이콘 이름. */ icon: AppIconName; /** heading id. */ id: string; /** 기존 ready form을 유지한 채 health를 갱신하는지 여부. */ isRefreshing?: boolean; /** 제목. */ children: string }) {
+  return <div className="panel-title-row"><h2 id={props.id}><AppIcon name={props.icon} />{props.children}{props.isRefreshing ? <span aria-hidden="true" className="panel-title__refresh" title="서비스 상태 새로 확인 중"><AppIcon name="processing" /></span> : null}</h2></div>;
 }
 
 /** 상태 제목과 안내 문구를 렌더링한다. */
