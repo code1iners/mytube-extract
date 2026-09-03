@@ -124,7 +124,7 @@ describe('worker health status', () => {
     expect(getWorkerHealthStatus(input)).toEqual(expected);
   });
 
-  it('shows checking while a refresh is fetching even when the previous result was ready', () => {
+  it('keeps the ready state while a background refresh is fetching', () => {
     expect(
       getWorkerHealthStatus({
         apiReady: true,
@@ -133,7 +133,7 @@ describe('worker health status', () => {
         unavailableMessage: '현재 추출 서버가 준비되지 않았습니다.',
         workerAvailable: true,
       }).kind,
-    ).toBe('checking');
+    ).toBe('ready');
   });
 
   it('treats an unhealthy API response as a failed status', () => {

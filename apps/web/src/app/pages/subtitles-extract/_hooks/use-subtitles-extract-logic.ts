@@ -2,6 +2,7 @@ import { useMutation } from '@tanstack/react-query';
 import {
   type ChangeEvent,
   type DragEvent,
+  type FormEvent,
   useEffect,
   useRef,
   useState,
@@ -419,7 +420,9 @@ export function useSubtitlesExtractLogic() {
   }
 
   /** 영어 SRT 생성 submit 이벤트를 처리한다. */
-  async function handleSubtitleSubmit() {
+  async function handleSubtitleSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+
     if (!selectedFile || !canSubmit) {
       return;
     }

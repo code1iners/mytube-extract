@@ -73,7 +73,7 @@ export function SubtitlesExtractPage() {
 
     return <section className="phase-panel subtitle-request-panel" aria-labelledby="subtitles-title">
       <PanelTitle icon="subtitle" id="subtitles-title">영어 SRT 생성</PanelTitle>
-      <div className="subtitle-form">
+      <form className="subtitle-form" onSubmit={handleSubtitleSubmit}>
         <div className={fileFeedbackIsError ? 'field has-error' : 'field'}>
           <span className="field-label">로컬 영상 파일</span>
           <input
@@ -154,8 +154,7 @@ export function SubtitlesExtractPage() {
           }
           className="primary-button"
           disabled={!canSubmit}
-          type="button"
-          onClick={handleSubtitleSubmit}
+          type="submit"
         >
           <AppIcon name="subtitle" />
           {isSubtitlePending ? '요청 중' : '영어 SRT 생성'}
@@ -165,7 +164,7 @@ export function SubtitlesExtractPage() {
             {submitDisabledReason}
           </p>
         ) : null}
-      </div>
+      </form>
       <WorkerHealthStatusNotice
         id={SUBTITLE_WORKER_HEALTH_TITLE_ID}
         isFetching={workerHealthIsFetching}
@@ -211,7 +210,7 @@ export function SubtitlesExtractPage() {
 
 /** 화면별 panel heading을 일정한 구조로 렌더링한다. */
 function PanelTitle(props: { /** 아이콘 이름. */ icon: AppIconName; /** heading id. */ id: string; /** 제목. */ children: string }) {
-  return <div className="panel-title-row"><h2 id={props.id}><AppIcon name={props.icon} />{props.children}</h2><span className="title-dots" aria-hidden="true" /></div>;
+  return <div className="panel-title-row"><h2 id={props.id}><AppIcon name={props.icon} />{props.children}</h2></div>;
 }
 
 /** 상태 제목과 안내 문구를 렌더링한다. */
@@ -219,7 +218,10 @@ function StatusHead(props: { /** 상태 아이콘. */ icon: AppIconName; /** 상
   return <div className={`status-head status-head--${props.tone}`}><span className="status-icon" aria-hidden="true"><AppIcon name={props.icon} /></span><div><h3>{props.title}</h3><p role={props.isAlert ? 'alert' : 'status'} aria-live="polite">{props.message}</p></div></div>;
 }
 
-/** 자막 job 진행률을 10칸 pixel meter로 렌더링한다. */
+/** 자막 job 진행률을 meter와 화면 표시 문구로 렌더링한다. */
 function ProgressMeter(props: { /** 채울 pixel cell 수. */ filledCells: number; /** API 진행률 값. */ value: number | null }) {
-  return <div className="progress-meter" aria-label="진행률" aria-valuemax={100} aria-valuemin={0} aria-valuenow={props.value ?? undefined} role="progressbar">{Array.from({ length: 10 }).map((_, index) => <span className={index < props.filledCells ? 'is-filled' : ''} key={index} />)}</div>;
+  /** 시각 사용자와 보조 기술에 함께 제공할 진행률 문구. */
+  const progressLabel = props.value === null ? '처리 중' : `진행률 ${props.value}%`;
+
+  return <><div className="progress-meter" aria-label="진행률" aria-valuemax={100} aria-valuemin={0} aria-valuenow={props.value ?? undefined} aria-valuetext={progressLabel} role="progressbar">{Array.from({ length: 10 }).map((_, index) => <span className={index < props.filledCells ? 'is-filled' : ''} key={index} />)}</div><p className="progress-label">{progressLabel}</p></>;
 }

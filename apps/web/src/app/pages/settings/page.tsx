@@ -26,7 +26,6 @@ export function SettingsPage() {
           <AppIcon name="settings" />
           설정
         </h2>
-        <span className="title-dots" aria-hidden="true" />
       </div>
       <p className="settings-description">
         시스템 설정을 따르거나 라이트·다크 중 하나를 선택합니다. 설정에는 요청과 파일

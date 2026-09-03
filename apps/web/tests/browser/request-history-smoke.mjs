@@ -254,6 +254,15 @@ async function verifyRequestReadinessStatus() {
           await page.keyboard.press('Enter');
           await waitForCondition(async () => healthCalls === 2);
           await waitForCondition(async () => refreshButton.isDisabled());
+          assert.equal(
+            await page.locator('[data-health-status="ready"]').count(),
+            1,
+          );
+          assert.equal(await submitButton.isDisabled(), false);
+          assert.equal(
+            await submitButton.getAttribute('aria-describedby'),
+            null,
+          );
           await refreshButton.dispatchEvent('click');
           await refreshButton.dispatchEvent('click');
           assert.equal(healthCalls, 2);

@@ -53,6 +53,8 @@ describe('subtitles extract page', () => {
     expect(markup).toContain('data-health-status="unavailable"');
     expect(markup).toContain('data-health-presentation="expanded"');
     expect(markup).toContain('class="phase-panel subtitle-request-panel"');
+    expect(markup).toContain('class="subtitle-form"');
+    expect(markup).toContain('type="submit"');
     expect(markup).toContain('role="alert"');
     expect(markup).toContain('다시 확인');
     expect(markup).toContain(
@@ -69,7 +71,7 @@ describe('subtitles extract page', () => {
       markup.indexOf('영어 SRT 생성</button>'),
     );
     expect(markup).toMatch(
-      /class="subtitle-form">[\s\S]*<\/div><section[^>]*class="worker-health-status/,
+      /class="subtitle-form">[\s\S]*<\/form><section[^>]*class="worker-health-status/,
     );
   });
 
@@ -265,6 +267,8 @@ describe('subtitles extract page', () => {
     const markup = renderToStaticMarkup(<SubtitlesExtractPage />);
 
     expect(markup).toContain('aria-current="step"');
+    expect(markup).toContain('aria-valuetext="진행률 60%"');
+    expect(markup).toContain('class="progress-label">진행률 60%');
     expect(markup).toContain('영어 SRT 생성');
     expect(markup.match(/class="step-tab/g)).toHaveLength(4);
   });

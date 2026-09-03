@@ -138,8 +138,7 @@ a {
   margin: 0 auto;
 }
 
-/* Hero와 panel은 공통으로 hairline + whisper-soft shadow를 쓴다. */
-.console-hero,
+/* 상태 panel은 hairline + whisper-soft shadow로 작업 흐름과 분리한다. */
 .console-panel {
   border: 1px solid var(--color-border);
   border-radius: var(--radius-lg);
@@ -147,12 +146,12 @@ a {
   box-shadow: var(--shadow-soft);
 }
 
-.console-hero {
+.app-header {
   display: grid;
-  min-height: 96px;
   align-items: center;
   gap: 16px;
-  padding: 20px 24px;
+  padding: 0 0 16px;
+  border-bottom: 1px solid var(--color-border);
   grid-template-areas:
     'brand utilities'
     'primary primary';
@@ -475,10 +474,8 @@ a {
 }
 
 .panel-title-row {
-  display: grid;
+  display: flex;
   align-items: center;
-  gap: 12px;
-  grid-template-columns: auto minmax(0, 1fr);
   margin-bottom: 16px;
 }
 
@@ -495,11 +492,6 @@ a {
   font-size: 21px;
   font-weight: 600;
   line-height: 1.4;
-}
-
-.title-dots {
-  height: 1px;
-  background: var(--color-border);
 }
 
 .download-form,
@@ -686,7 +678,7 @@ a {
 }
 
 .quality-grid {
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
 .primary-button,
@@ -1547,9 +1539,8 @@ input:focus-visible,
     gap: 14px;
   }
 
-  .console-hero {
-    min-height: 84px;
-    padding: 14px;
+  .app-header {
+    padding-bottom: 14px;
     grid-template-columns: minmax(0, 1fr) auto;
   }
 
@@ -1578,9 +1569,12 @@ input:focus-visible,
     padding: 16px;
   }
 
-  .segmented-control,
-  .quality-grid {
+  .segmented-control {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .quality-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 
   .subtitle-processing-method {
@@ -1617,9 +1611,8 @@ input:focus-visible,
     padding: 10px 10px calc(68px + env(safe-area-inset-bottom));
   }
 
-  .console-hero {
-    min-height: 64px;
-    padding: 10px 12px;
+  .app-header {
+    padding-bottom: 10px;
     grid-template-columns: minmax(0, 1fr) auto;
     gap: 8px;
   }
@@ -1633,7 +1626,7 @@ input:focus-visible,
     height: 26px;
   }
 
-  .console-hero {
+  .app-header {
     align-items: start;
   }
 

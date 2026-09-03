@@ -43,6 +43,20 @@ export type WorkerHealthStatusInput = {
 export function getWorkerHealthStatus(
   input: WorkerHealthStatusInput,
 ): WorkerHealthStatus {
+  // 직전 정상 응답이 있으면 백그라운드 재확인 중에도 준비 상태를 유지한다.
+  if (
+    !input.hasError &&
+    input.apiReady === true &&
+    input.workerAvailable === true
+  ) {
+    return {
+      kind: 'ready',
+      label: '준비됨',
+      message: '서버 연결됨 · worker가 작업을 받을 준비가 되었습니다.',
+      role: 'status',
+    };
+  }
+
   if (input.isFetching) {
     return {
       kind: 'checking',
@@ -67,15 +81,6 @@ export function getWorkerHealthStatus(
       label: 'worker 중단',
       message: `API는 응답했지만 worker가 작업을 받을 수 없습니다. ${input.unavailableMessage}`,
       role: 'alert',
-    };
-  }
-
-  if (input.workerAvailable === true) {
-    return {
-      kind: 'ready',
-      label: '준비됨',
-      message: '서버 연결됨 · worker가 작업을 받을 준비가 되었습니다.',
-      role: 'status',
     };
   }
 

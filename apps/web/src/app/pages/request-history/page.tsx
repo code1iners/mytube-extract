@@ -302,7 +302,6 @@ export function RequestHistoryPage() {
         <h2 id="history-title" tabIndex={-1}>
           <AppIcon name="queued" />요청 내역
         </h2>
-        <span className="title-dots" aria-hidden="true" />
       </div>
       <p className="history-description">
         최근 요청 20건을 서버의 최신 상태로 확인합니다.

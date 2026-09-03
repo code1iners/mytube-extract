@@ -87,7 +87,7 @@ export function AppHero() {
   }
 
   return (
-    <header className="console-hero">
+    <header className="app-header">
       <div className="brand-lockup" ref={lockupRef}>
         <div className="brand-mark" ref={markRef} aria-hidden="true">
           <AppMark />

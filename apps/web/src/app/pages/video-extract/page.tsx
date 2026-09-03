@@ -230,7 +230,7 @@ export function VideoExtractPage() {
 
 /** 화면별 panel heading을 일정한 구조로 렌더링한다. */
 function PanelTitle(props: { /** 아이콘 이름. */ icon: AppIconName; /** heading id. */ id: string; /** 제목. */ children: string }) {
-  return <div className="panel-title-row"><h2 id={props.id}><AppIcon name={props.icon} />{props.children}</h2><span className="title-dots" aria-hidden="true" /></div>;
+  return <div className="panel-title-row"><h2 id={props.id}><AppIcon name={props.icon} />{props.children}</h2></div>;
 }
 
 /** 상태 제목과 안내 문구를 렌더링한다. */
