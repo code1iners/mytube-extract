@@ -20,6 +20,24 @@ type TestVideoJob = RequestLifecycleJob & {
   quality: string;
 };
 
+/** 테스트에서 사용할 자막 요청 입력. */
+type TestSubtitleRequest = {
+  /** 업로드할 파일명. */
+  fileName: string;
+  /** 선택한 Whisper 모델. */
+  whisperModel: 'base_en' | 'small_en';
+};
+
+/** 테스트에서 사용할 자막 job. */
+type TestSubtitleJob = RequestLifecycleJob & {
+  /** 응답에 보존할 원본 파일명. */
+  fileName: string;
+  /** 응답에 보존할 Whisper 모델. */
+  whisperModel: 'base_en' | 'small_en';
+  /** 응답에 보존할 처리 단계. */
+  stage: 'queued' | 'completed';
+};
+
 /** 테스트에서 사용할 정상 readiness 응답. */
 const readyResponse: RequestReadinessResponse = {
   ok: true,
@@ -34,6 +52,22 @@ function createJob(overrides: Partial<TestVideoJob> = {}): TestVideoJob {
     jobId: '4f8f82b3-cf37-4e31-9d56-d27eb526a922',
     message: '요청이 접수되어 대기 중입니다.',
     quality: '720',
+    ...overrides,
+  };
+}
+
+/** 테스트용 자막 job을 만든다. */
+function createSubtitleJob(
+  overrides: Partial<TestSubtitleJob> = {},
+): TestSubtitleJob {
+  return {
+    createdAt: '2026-09-04T00:00:00.000Z',
+    displayStatus: 'queued',
+    fileName: 'sample-video.mp4',
+    jobId: '067b084b-c84a-4574-952f-950cb8fa2157',
+    message: '영어 SRT 생성 요청이 접수되었습니다.',
+    stage: 'queued',
+    whisperModel: 'base_en',
     ...overrides,
   };
 }
@@ -62,6 +96,28 @@ function LifecycleProbe({
     TestVideoJob,
     TestVideoJob,
     'video'
+  >;
+}) {
+  /** 현재 lifecycle interface. */
+  const value = useExtractionRequestLifecycle(options);
+  onValue(value);
+  return null;
+}
+
+/** 자막 lifecycle hook의 최신 interface를 관찰하는 테스트 probe. */
+function SubtitleLifecycleProbe({
+  onValue,
+  options,
+}: {
+  /** 최신 lifecycle 값을 기록할 함수. */
+  onValue: (
+    value: RequestLifecycleResult<TestSubtitleRequest, TestSubtitleJob>,
+  ) => void;
+  /** hook에 주입할 lifecycle dependency. */
+  options: UseExtractionRequestLifecycleOptions<
+    TestSubtitleRequest,
+    TestSubtitleJob,
+    'subtitle'
   >;
 }) {
   /** 현재 lifecycle interface. */
@@ -166,6 +222,111 @@ describe('request lifecycle adapter seam', () => {
     ).resolves.toMatchObject({ displayStatus: 'processing' });
 
     expect(fetcher).toHaveBeenCalledTimes(3);
+  });
+
+  it('keeps the same lifecycle phases and actions when the adapter is replaced with subtitle', async () => {
+    /** 자막 adapter에 전달된 요청 입력 기록. */
+    const createRequest = vi.fn(
+      async (request: TestSubtitleRequest) =>
+        createSubtitleJob({
+          fileName: request.fileName,
+          whisperModel: request.whisperModel,
+        }),
+    );
+    /** 자막 상태 조회 adapter 호출 기록. */
+    const getStatus = vi.fn(async () =>
+      createSubtitleJob({
+        displayStatus: 'completed',
+        stage: 'completed',
+      }),
+    );
+    /** 자막 lifecycle adapter seam을 사용하는 in-memory adapter. */
+    const adapter = createInMemoryRequestLifecycleAdapter<
+      TestSubtitleRequest,
+      TestSubtitleJob,
+      'subtitle'
+    >({
+      createRequest,
+      getStatus,
+      kind: 'subtitle',
+      readiness: readyResponse,
+    });
+    /** hook에서 관찰한 최신 lifecycle 값. */
+    let latest:
+      | RequestLifecycleResult<TestSubtitleRequest, TestSubtitleJob>
+      | undefined;
+    /** lifecycle에서 저장한 자막 receipt 기록. */
+    const savedReceipts: string[] = [];
+    /** lifecycle hook을 mount할 renderer. */
+    let renderer: ReturnType<typeof create>;
+
+    await act(async () => {
+      renderer = create(
+        createElement(SubtitleLifecycleProbe, {
+          onValue: (value) => {
+            latest = value;
+          },
+          options: {
+            adapter,
+            messages: {
+              cancelled: '취소 후 파일을 보존했습니다.',
+              unavailable: '자막 서버가 준비되지 않았습니다.',
+            },
+            navigation: {
+              setHistoryDestination: () => undefined,
+              setLocked: () => undefined,
+            },
+            receiptStore: {
+              save: (kind, jobId, acceptedAt) => {
+                savedReceipts.push(`${kind}:${jobId}:${acceptedAt}`);
+                return { storageFailed: false, to: '/history' };
+              },
+            },
+          },
+        }),
+      );
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(latest?.phase).toBe('request');
+    expect(latest?.actions.submit).toBeDefined();
+    expect(latest?.actions.cancel).toBeUndefined();
+
+    await act(async () => {
+      latest?.actions.submit?.({
+        fileName: 'sample-video.mp4',
+        whisperModel: 'small_en',
+      });
+      /** lifecycle adapter 응답을 반영할 microtask 반복 횟수. */
+      let index = 0;
+      for (; index < 6; index += 1) {
+        await Promise.resolve();
+      }
+    });
+
+    expect(createRequest).toHaveBeenCalledWith(
+      { fileName: 'sample-video.mp4', whisperModel: 'small_en' },
+      expect.any(AbortSignal),
+    );
+    expect(getStatus).toHaveBeenCalledWith(
+      expect.objectContaining({
+        kind: 'subtitle',
+        jobId: '067b084b-c84a-4574-952f-950cb8fa2157',
+      }),
+      expect.any(AbortSignal),
+    );
+    expect(savedReceipts).toHaveLength(1);
+    expect(savedReceipts[0]).toMatch(/^subtitle:/);
+    expect(latest?.receipt?.kind).toBe('subtitle');
+    expect(latest?.phase).toBe('result');
+    expect(latest?.actions.submit).toBeUndefined();
+    expect(latest?.actions.cancel).toBeUndefined();
+    expect(latest?.actions.reset).toBeDefined();
+
+    await act(async () => {
+      renderer!.unmount();
+    });
   });
 
   it('continues readiness after React StrictMode effect cleanup and replay', async () => {
@@ -461,6 +622,9 @@ describe('request lifecycle adapter seam', () => {
     });
 
     expect(latest?.receiptStorageFailed).toBe(true);
+    expect(latest?.requestNotice).toBe(
+      '요청 내역 저장에 실패했지만 현재 작업은 계속 확인할 수 있습니다.',
+    );
     expect(latest?.phase).toBe('result');
     expect(historyDestinations).toEqual([
       '/history?kind=video&jobId=4f8f82b3-cf37-4e31-9d56-d27eb526a922',

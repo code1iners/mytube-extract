@@ -43,6 +43,7 @@ try {
   await run('video request cancellation restores input and navigation', verifyVideoRequestCancellation);
   await run('receipt storage failure keeps the accepted job history destination', verifyAcceptedJobStorageFallback);
   await run('subtitle in-place success and navigation lock', verifySubtitleRequestFlow);
+  await run('subtitle receipt storage failure keeps the accepted job history destination', verifySubtitleReceiptStorageFallback);
   await run('subtitle request cancellation cleans upload and restores file input', verifySubtitleRequestCancellation);
   await run('request shortcuts focus only their own action', verifyRequestShortcuts);
   await run('subtitle task-first mobile density and processing choices', verifySubtitleProcessingChoice);
@@ -1077,6 +1078,89 @@ async function verifySubtitleRequestFlow() {
         .getAttribute('href'),
       `${API_ORIGINS[0]}/subtitles/jobs/${SUBTITLE_ID}/file`,
     );
+    assertNoRuntimeErrors();
+  } finally {
+    await context.close();
+  }
+}
+
+/** 자막 접수증 저장 실패 뒤에도 현재 job의 요청 내역 deep link를 보존하는지 검증한다. */
+async function verifySubtitleReceiptStorageFallback() {
+  /** 접수증 저장 실패를 재현할 독립 browser context. */
+  const context = await createContext({ viewport: { height: 844, width: 390 } });
+  /** 저장 실패 복구 흐름을 확인할 page. */
+  const { page, assertNoRuntimeErrors } = await createPage(context);
+
+  try {
+    await page.addInitScript((receiptPrefix) => {
+      /** browser storage의 원래 setItem 구현. */
+      const setItem = Storage.prototype.setItem;
+
+      Storage.prototype.setItem = function blockReceiptWrite(key, value) {
+        if (key.startsWith(receiptPrefix)) {
+          throw new DOMException('Receipt storage is disabled.', 'SecurityError');
+        }
+
+        return setItem.call(this, key, value);
+      };
+    }, RECEIPT_PREFIX);
+    await page.route('https://upload.example/**', async (route) => {
+      await route.fulfill({
+        body: '',
+        headers: {
+          'Access-Control-Allow-Origin': '*',
+          'Access-Control-Expose-Headers': 'ETag',
+          ETag: '"subtitle-fallback-part"',
+        },
+        status: 200,
+      });
+    });
+    await routeApi(page, async ({ request, route, url }) => {
+      if (url.pathname === '/health') return fulfillJson(route, healthResponse());
+      if (url.pathname === '/subtitles/uploads' && request.method() === 'POST') {
+        return fulfillJson(route, {
+          expiresAt: '2026-08-13T12:00:00.000Z',
+          objectKey: 'source/video.mp4',
+          partSizeBytes: 1024,
+          parts: [{ partNumber: 1, uploadUrl: 'https://upload.example/part-1' }],
+          uploadId: 'upload-fallback-1',
+          uploadToken: 'token-fallback-1',
+        });
+      }
+      if (url.pathname === '/subtitles/uploads/complete') {
+        return fulfillJson(route, subtitleJob(SUBTITLE_OTHER_ID, 'queued'));
+      }
+      if (url.pathname === `/subtitles/jobs/${SUBTITLE_OTHER_ID}`) {
+        return fulfillJson(route, subtitleJob(SUBTITLE_OTHER_ID, 'completed'));
+      }
+      return fulfillJson(route, {}, 404);
+    });
+
+    await page.goto(`${staticServer.origin}/subtitles`);
+    await page.locator('input[type="file"]').setInputFiles({
+      buffer: Buffer.from('fake-video'),
+      mimeType: 'video/mp4',
+      name: 'storage-fallback-video.mp4',
+    });
+    /** 저장 실패 흐름에서 사용할 영어 SRT 생성 button. */
+    const submit = page.getByRole('button', { name: '영어 SRT 생성' });
+    await waitForEnabled(submit);
+    await submit.click();
+    await page.getByRole('heading', { name: '영어 자막 파일이 준비되었습니다' }).waitFor();
+    await page
+      .getByText('요청 내역 저장에 실패했지만 현재 작업은 계속 확인할 수 있습니다.', { exact: true })
+      .waitFor();
+
+    /** 저장 실패 job을 가리키는 요청 내역 deep link. */
+    const historyLink = page.getByRole('link', { name: '요청 내역' }).first();
+    assert.equal(
+      await historyLink.getAttribute('href'),
+      `/history?kind=subtitle&jobId=${SUBTITLE_OTHER_ID}`,
+    );
+    await historyLink.click();
+    await page.getByRole('heading', { name: '요청 내역' }).waitFor();
+    assert.equal(await page.locator('.history-item').count(), 1);
+    assert.equal(new URL(page.url()).searchParams.get('jobId'), SUBTITLE_OTHER_ID);
     assertNoRuntimeErrors();
   } finally {
     await context.close();

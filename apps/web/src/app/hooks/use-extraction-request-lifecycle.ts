@@ -203,6 +203,9 @@ const browserReceiptStore: RequestReceiptStore = {
 const DEFAULT_HISTORY_PATH = '/history';
 /** worker health background 확인 기본 간격. */
 const DEFAULT_READINESS_INTERVAL_MS = 15_000;
+/** 접수증 저장 실패 뒤에도 현재 작업을 추적할 수 있음을 알리는 안내. */
+const RECEIPT_STORAGE_FAILED_MESSAGE =
+  '요청 내역 저장에 실패했지만 현재 작업은 계속 확인할 수 있습니다.';
 
 /** lifecycle 내부 상태. */
 type InternalLifecycleState<TJob extends RequestLifecycleJob> = {
@@ -619,9 +622,11 @@ export function useExtractionRequestLifecycle<
           receipt,
           receiptStorageFailed: storageResult.storageFailed,
           requestError: null,
-          requestNotice: attempt.cancelled
-            ? '요청을 중단하는 동안 서버 작업이 접수되어 요청 내역에 보존했습니다.'
-            : '',
+          requestNotice: createRequestNotice({
+            cancelled: attempt.cancelled,
+            cancelledMessage,
+            storageFailed: storageResult.storageFailed,
+          }),
           statusError: null,
         }));
       } catch (error) {
@@ -657,6 +662,7 @@ export function useExtractionRequestLifecycle<
     },
     [
       adapter,
+      cancelledMessage,
       historyPath,
       now,
       receiptStore,
@@ -941,6 +947,27 @@ export function useExtractionRequestLifecycle<
     receiptStorageFailed: state.receiptStorageFailed,
     requestNotice: state.requestNotice,
   };
+}
+
+/** 접수 결과의 cancel race와 receipt 저장 실패 안내를 함께 만든다. */
+function createRequestNotice({
+  cancelled,
+  cancelledMessage,
+  storageFailed,
+}: {
+  /** 서버 job이 cancel 이후 늦게 접수되었는지 여부. */
+  cancelled: boolean;
+  /** cancel race에서 사용할 route 안내. */
+  cancelledMessage: string;
+  /** browser receipt 저장이 실패했는지 여부. */
+  storageFailed: boolean;
+}): string {
+  return [
+    cancelled ? cancelledMessage : '',
+    storageFailed ? RECEIPT_STORAGE_FAILED_MESSAGE : '',
+  ]
+    .filter(Boolean)
+    .join(' ');
 }
 
 /** lifecycle 초기 상태를 만든다. */

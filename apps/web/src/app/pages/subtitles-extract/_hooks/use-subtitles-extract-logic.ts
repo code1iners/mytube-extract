@@ -1,9 +1,9 @@
-import { useMutation } from '@tanstack/react-query';
 import {
   type ChangeEvent,
   type DragEvent,
   type FormEvent,
   useEffect,
+  useMemo,
   useRef,
   useState,
 } from 'react';
@@ -16,36 +16,25 @@ import {
   type UserVisibleErrorDetail,
   SubtitleUploadTooLargeError,
   WorkerUnavailableError,
-  abortSubtitleUpload,
-  assertWorkerAvailable,
   buildApiUrl,
-  completeSubtitleUpload,
-  createSubtitleUpload,
-  uploadSubtitleFileParts,
 } from '../../../../api/mytube-extract.api';
+import {
+  createSubtitleRequestAdapter,
+  type SubtitleRequest,
+} from '../../../adapters/subtitle-request.adapter';
 import { useNavigation } from '../../../components/navigation-context';
 import { type AppIconName } from '../../../components/app-icon';
 import { ROUTE_PATHS } from '../../../constants/route-paths.constant';
-import { useActiveJobStatus } from '../../../hooks/use-active-job-status';
-import {
-  type RequestAttempt,
-  useRequestAttempt,
-} from '../../../hooks/use-request-attempt';
-import { useWorkerReadiness } from '../../../hooks/use-worker-readiness';
-import { getExtractViewPhase } from '../../../utils/extract-view-phase.util';
-import { acceptJobReceipt } from '../../../utils/job-receipt.util';
+import { useExtractionRequestLifecycle } from '../../../hooks/use-extraction-request-lifecycle';
 import {
   createJobStatusRequestErrorDetail,
   createTerminalJobErrorDetail,
-  fetchJobStatus,
 } from '../../../utils/job-status-polling.util';
 import {
   getRequestPreferences,
   setSubtitleWhisperModelPreference,
 } from '../../../utils/request-preference.util';
-import {
-  getWorkerHealthSubmitReason,
-} from '../../../utils/worker-health-notice.util';
+import { getWorkerHealthSubmitReason } from '../../../utils/worker-health-notice.util';
 import { isUnmodifiedShortcut } from '../../../utils/keyboard-shortcut.util';
 
 /** worker 미가용 안내 문구. */
@@ -74,7 +63,7 @@ const DEFAULT_WHISPER_MODEL: SubtitleWhisperModel = 'base_en';
 /** 화면에 표시하는 자막 처리 단계. */
 export type SubtitleStepKey = 'file_select' | SubtitleJobResponse['stage'];
 
-/** 자막 추출 route의 file upload, polling, 표시 상태를 조합한다. */
+/** 자막 추출 route의 file upload, polling, 표시 상태를 lifecycle interface로 정규화한다. */
 export function useSubtitlesExtractLogic() {
   // Variables.
 
@@ -87,6 +76,7 @@ export function useSubtitlesExtractLogic() {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   /** 접근 가능한 파일 선택 버튼 DOM 참조. */
   const filePickerButtonRef = useRef<HTMLButtonElement | null>(null);
+
   // States.
 
   /** 사용자가 선택한 로컬 영상 파일. */
@@ -96,153 +86,113 @@ export function useSubtitlesExtractLogic() {
     useState<SubtitleWhisperModel>(
       () => getRequestPreferences().whisperModel,
     );
-  /** 요청 실패 메시지. */
-  const [requestError, setRequestError] = useState('');
-  /** 요청 중단 또는 늦은 접수 결과를 보조 기술에 알릴 문구. */
-  const [requestNotice, setRequestNotice] = useState('');
-  /** R2 direct upload 진행률. */
+  /** multipart 원본 업로드 진행률. */
   const [uploadProgress, setUploadProgress] = useState<number | null>(null);
-  /** 이 화면에서 상태를 확인할 직전 접수 자막 job. */
-  const [activeJob, setActiveJob] = useState<SubtitleJobResponse | null>(null);
+  /** 업로드 용량 초과를 파일 feedback으로 유지할 안내. */
+  const [fileUploadErrorMessage, setFileUploadErrorMessage] = useState('');
 
   // Hooks.
 
-  /** 요청 전 API·worker readiness 상태. */
-  const {
-    retryWorkerHealth,
-    workerHealthCheckedAt,
-    workerHealthFailed,
-    workerHealthIsRefreshing,
-    workerHealthQuery,
-    workerHealthStatus,
-    workerUnavailable,
-  } = useWorkerReadiness({
-    apiBaseUrl,
-    unavailableMessage: WORKER_UNAVAILABLE_MESSAGE,
-  });
-  /** 자막 job 생성 mutation. */
-  const subtitleJobMutation = useMutation({
-    mutationFn: async (input: {
-      /** 업로드할 로컬 영상 파일. */
-      file: File;
-      /** 요청 중단 신호. */
-      signal: AbortSignal;
-    }) => {
-      /** submit 직전 최신 worker health. */
-      const workerHealth = await workerHealthQuery.refetch({
-        cancelRefetch: false,
-      });
-
-      if (workerHealth.error) {
-        throw workerHealth.error;
-      }
-
-      assertWorkerAvailable(workerHealth.data);
-
-      /** 생성된 R2 direct upload session. */
-      let upload: Awaited<ReturnType<typeof createSubtitleUpload>> | null =
-        null;
-
-      try {
-        upload = await createSubtitleUpload(input.file, selectedWhisperModel, {
-          apiBaseUrl,
-          signal: input.signal,
-        });
-        setUploadProgress(0);
-
-        /** R2에 직접 업로드한 multipart part 목록. */
-        const parts = await uploadSubtitleFileParts(input.file, upload, {
-          signal: input.signal,
-          onProgress: (progress) => setUploadProgress(progress.percent),
-        });
-
-        return completeSubtitleUpload(upload, parts, {
-          apiBaseUrl,
-          signal: input.signal,
-        });
-      } catch (error) {
-        if (upload) {
-          void abortSubtitleUpload(upload, { apiBaseUrl }).catch(() => {
-            // 실패한 multipart upload 정리는 best-effort로만 수행한다.
-          });
-        }
-
-        throw error;
-      } finally {
-        setUploadProgress(null);
-      }
-    },
-  });
-  /** 현재 화면의 자막 job 접수증과 상태 query. */
-  const { activeJobQuery, activeJobReceipt } = useActiveJobStatus({
-    activeJob,
-    apiBaseUrl,
-    fetchStatus: (receipt, signal) =>
-      fetchJobStatus(receipt, apiBaseUrl, signal),
-    kind: 'subtitle',
-  });
+  /** 자막 요청 통신과 multipart 세부를 감싼 adapter. */
+  const subtitleRequestAdapter = useMemo(
+    () =>
+      createSubtitleRequestAdapter({
+        apiBaseUrl,
+        onProgress: (progress) =>
+          setUploadProgress(progress ? progress.percent : null),
+      }),
+    [apiBaseUrl],
+  );
   /** 추출 진행 중 route 이동 차단 상태를 갱신한다. */
   const { setHistoryDestination, setNavigationLocked } = useNavigation();
-  /** job 생성 요청의 중단·응답 경쟁과 navigation lock 생명주기. */
-  const {
-    acceptRequestResult,
-    beginRequestAttempt,
-    cancelRequestAttempt,
-    finishRequestAttempt,
-    resetRequestAttempt,
-    shouldIgnoreRequestError,
-  } = useRequestAttempt({
-    navigationLocked: subtitleJobMutation.isPending,
-    setNavigationLocked,
+  /** 자막 route가 사용하는 추출 요청 생명주기 deep module. */
+  const requestLifecycle = useExtractionRequestLifecycle<
+    SubtitleRequest,
+    SubtitleJobResponse,
+    'subtitle'
+  >({
+    adapter: subtitleRequestAdapter,
+    historyPath: ROUTE_PATHS.history,
+    messages: {
+      cancelled:
+        '요청을 중단했습니다. 선택한 파일과 처리 방식은 그대로입니다. 다시 요청할 수 있습니다.',
+      unavailable: WORKER_UNAVAILABLE_MESSAGE,
+    },
+    navigation: {
+      setHistoryDestination,
+      setLocked: setNavigationLocked,
+    },
   });
 
   // Computed.
 
   /** 현재 파일 입력 검증 결과. */
   const validation = validateSubtitleFile(selectedFile);
-  /** R2 업로드 session 생성부터 자막 job 생성까지의 요청 처리 여부. */
-  const isSubmitting = subtitleJobMutation.isPending;
-  /** 오른쪽 status panel에 표시할 job. */
+  /** API job 생성 전 요청 처리 중인지 여부. */
+  const isSubmitting = requestLifecycle.phase === 'accepting';
+  /** 오른쪽 status panel에 표시할 최신 job. */
   const statusJob =
-    activeJobQuery.data ?? activeJob ?? createIdleSubtitleJob(selectedFile);
+    requestLifecycle.job ?? createIdleSubtitleJob(selectedFile);
+  /** 현재 readiness 상태. */
+  const workerHealthStatus = requestLifecycle.readiness.status;
+  /** 활성 job이 없어 worker health가 현재 화면을 결정하는지 여부. */
+  const workerHealthAffectsView = requestLifecycle.job === null;
+  /** worker health 확인 실패 여부. */
+  const workerHealthFailed =
+    workerHealthAffectsView && workerHealthStatus.kind === 'failed';
+  /** worker가 미가용 상태인지 여부. */
+  const workerUnavailable =
+    workerHealthAffectsView && workerHealthStatus.kind === 'unavailable';
+  /** lifecycle이 우선순위를 정한 현재 오류. */
+  const lifecycleError = requestLifecycle.error;
+  /** 자막 요청 오류의 원래 cause. */
+  const requestErrorCause =
+    lifecycleError?.source === 'request' ? lifecycleError.cause : null;
+  /** 업로드 용량 오류를 파일 선택 feedback으로 정규화할지 여부. */
+  const hasSubtitleUploadTooLargeError =
+    requestErrorCause instanceof SubtitleUploadTooLargeError ||
+    Boolean(fileUploadErrorMessage);
+  /** 자막 생성 요청 오류 안내 문구. */
+  const requestError = hasSubtitleUploadTooLargeError
+    ? selectedFile
+      ? createSubtitleUploadTooLargeMessage(selectedFile)
+      : fileUploadErrorMessage
+    : lifecycleError?.source === 'request'
+      ? lifecycleError.cause instanceof WorkerUnavailableError
+        ? WORKER_UNAVAILABLE_MESSAGE
+        : lifecycleError.cause instanceof Error &&
+            hasUserVisibleErrorDetail(lifecycleError.cause)
+          ? lifecycleError.cause.detail.guidance
+          : '영어 SRT 생성 요청에 실패했습니다. 다시 시도해 주세요.'
+      : '';
+  /** 자막 job 생성 요청 오류 상세 원인. */
+  const requestErrorDetail =
+    lifecycleError?.source === 'request' &&
+    !hasSubtitleUploadTooLargeError
+      ? createSubtitleRequestErrorDetail(
+          lifecycleError.cause,
+          requestError,
+        )
+      : undefined;
   /** worker health 오류 상세 원인. */
   const workerHealthErrorDetail = createWorkerHealthErrorDetail(
-    workerHealthQuery.error,
+    requestLifecycle.readiness.error instanceof Error
+      ? requestLifecycle.readiness.error
+      : null,
   );
-  /** 자막 생성 요청 오류 상세 원인. */
-  const requestErrorDetail = requestError
-    ? createSubtitleRequestErrorDetail(
-        subtitleJobMutation.error,
-        requestError,
-      )
-    : undefined;
-  /** 업로드 용량 오류를 파일 선택 오류로 유지할지 여부. */
-  const hasSubtitleUploadTooLargeError =
-    subtitleJobMutation.error instanceof SubtitleUploadTooLargeError;
-  /** 파일 선택 control 옆에 표시할 안내 문구. */
-  // 형식 오류와 업로드 용량 오류를 같은 파일 feedback 위치로 정규화한다.
-  const fileFeedbackMessage = hasSubtitleUploadTooLargeError
-    ? requestError
-    : validation.kind !== 'ready'
-      ? validation.message
-      : '';
-  /** 파일 선택 control이 오류 상태인지 여부. */
-  const fileFeedbackIsError =
-    validation.kind === 'invalid' || hasSubtitleUploadTooLargeError;
   /** 현재 자막 job 상태 조회 오류 상세 원인. */
-  const jobStatusRequestErrorDetail = activeJobQuery.isError
-    ? createJobStatusRequestErrorDetail(
-        activeJobQuery.error,
-        activeJobReceipt,
-      )
-    : undefined;
+  const jobStatusRequestErrorDetail =
+    lifecycleError?.source === 'status' && requestLifecycle.receipt
+      ? createJobStatusRequestErrorDetail(
+          lifecycleError.cause,
+          requestLifecycle.receipt,
+        )
+      : undefined;
   /** failed·expired 자막 job 상세 원인. */
-  const terminalJobErrorDetail = createTerminalJobErrorDetail(
-    statusJob,
-    activeJobReceipt,
-  );
-  /** 활성 job이 없어 worker health가 현재 화면을 결정하는지 여부. */
-  const workerHealthAffectsView = activeJob === null;
+  const terminalJobErrorDetail =
+    lifecycleError?.source === 'terminal' && requestLifecycle.receipt
+      ? createTerminalJobErrorDetail(statusJob, requestLifecycle.receipt)
+      : undefined;
   /** 현재 readiness gate에서 열어 볼 health 상세 원인. */
   const workerHealthDetail = workerHealthAffectsView
     ? workerHealthStatus.kind === 'unavailable'
@@ -260,16 +210,15 @@ export function useSubtitlesExtractLogic() {
   /** 자막 생성 요청 가능 여부. */
   const canSubmit =
     validation.kind === 'ready' &&
-    !subtitleJobMutation.isPending &&
-    workerHealthStatus.kind === 'ready';
+    workerHealthStatus.kind === 'ready' &&
+    (requestLifecycle.canSubmit || hasSubtitleUploadTooLargeError);
   /** 제출 버튼이 비활성화된 이유. */
   const submitDisabledReason = getWorkerHealthSubmitReason({
     healthStatus: workerHealthStatus.kind,
     isSubmitting,
   });
   /** Whisper 모델 선택 가능 여부. */
-  const canChangeWhisperModel =
-    !subtitleJobMutation.isPending;
+  const canChangeWhisperModel = !isSubmitting;
   /** 화면에 선택 표시할 처리 단계. */
   const currentStepKey = createSubtitleStepKey({
     selectedFile,
@@ -334,99 +283,27 @@ export function useSubtitlesExtractLogic() {
     ? `${formatFileSize(selectedFile.size)}`
     : '';
   /** 현재 화면에 단독으로 표시할 자막 추출 단계. */
-  // 업로드 용량 오류는 파일 선택 feedback에서 복구하게 요청 화면을 유지한다.
-  const viewPhase = getExtractViewPhase({
-    hasRequestError: Boolean(
-      (requestError && !hasSubtitleUploadTooLargeError) ||
-        jobStatusRequestErrorDetail,
-    ),
-    isSubmitting,
-    status:
-      activeJobQuery.data?.displayStatus ?? activeJob?.displayStatus ?? null,
-  });
+  const viewPhase = hasSubtitleUploadTooLargeError
+    ? 'request'
+    : requestLifecycle.phase;
 
-  // Functions.
+  // Effects.
 
-  /** API base URL 환경 설정을 반환한다. */
-  function getApiBaseUrl() {
-    return (
-      import.meta.env.VITE_MYTUBE_EXTRACT_API_BASE_URL ??
-      import.meta.env.VITE_MEDIA_NEST_API_BASE_URL
-    );
-  }
-
-  /** 선택 파일과 이전 실패 상태를 초기화한다. */
-  function clearSelectedFile() {
-    setSelectedFile(null);
-    setRequestError('');
-    setRequestNotice('');
-    resetRequestAttempt();
-    setUploadProgress(null);
-    setActiveJob(null);
-    subtitleJobMutation.reset();
-
-    if (fileInputRef.current) {
-      fileInputRef.current.value = '';
-    }
-
-    // 파일을 지운 뒤 다시 파일 선택 control에 포커스를 돌린다.
-    filePickerButtonRef.current?.focus();
-  }
-
-  /** 파일 선택을 상태에 반영한다. */
-  function selectFile(file: File | null) {
-    setSelectedFile(file);
-    setRequestError('');
-    setRequestNotice('');
-    resetRequestAttempt();
-    setUploadProgress(null);
-    setActiveJob(null);
-    subtitleJobMutation.reset();
-  }
-
-  /** 요청 오류에서 선택 파일을 유지한 채 요청 화면으로 돌아간다. */
-  function returnToRequest() {
-    resetRequestAttempt();
-    setRequestError('');
-    setRequestNotice('');
-    setUploadProgress(null);
-    setActiveJob(null);
-    subtitleJobMutation.reset();
-  }
-
-  /** 요청 중단 뒤 현재 화면의 파일 선택 또는 상태 재확인 control로 focus를 돌린다. */
-  function focusRequestStart() {
-    window.requestAnimationFrame(() => {
-      const filePickerButton = filePickerButtonRef.current;
-
-      if (filePickerButton) {
-        filePickerButton.focus();
+  useEffect(
+    function preserveUploadLimitErrorAsFileFeedback() {
+      if (
+        !(requestErrorCause instanceof SubtitleUploadTooLargeError) ||
+        !selectedFile
+      ) {
         return;
       }
 
-      document
-        .querySelector<HTMLButtonElement>('.worker-health-status__retry')
-        ?.focus();
-    });
-  }
-
-  /** 서버 job 생성 전 현재 요청만 중단하고 선택 파일을 유지한다. */
-  function cancelRequest() {
-    if (!cancelRequestAttempt()) {
-      return;
-    }
-
-    setRequestError('');
-    setRequestNotice(
-      '요청을 중단했습니다. 선택한 파일과 처리 방식은 그대로입니다. 다시 요청할 수 있습니다.',
-    );
-    setUploadProgress(null);
-    setActiveJob(null);
-    subtitleJobMutation.reset();
-    focusRequestStart();
-  }
-
-  // Effects.
+      setFileUploadErrorMessage(createSubtitleUploadTooLargeMessage(selectedFile));
+      // 파일 선택 오류는 route form에서 복구할 수 있도록 lifecycle을 요청 상태로 되돌린다.
+      requestLifecycle.actions.reset?.();
+    },
+    [requestErrorCause, requestLifecycle.actions.reset, selectedFile],
+  );
 
   useEffect(
     function persistWhisperModelPreference() {
@@ -457,6 +334,72 @@ export function useSubtitlesExtractLogic() {
     },
   );
 
+  // Functions.
+
+  /** API base URL 환경 설정을 반환한다. */
+  function getApiBaseUrl() {
+    return (
+      import.meta.env.VITE_MYTUBE_EXTRACT_API_BASE_URL ??
+      import.meta.env.VITE_MEDIA_NEST_API_BASE_URL
+    );
+  }
+
+  /** 선택 파일과 현재 lifecycle 결과를 초기화한다. */
+  function clearSelectedFile() {
+    setSelectedFile(null);
+    setFileUploadErrorMessage('');
+    setUploadProgress(null);
+    requestLifecycle.actions.reset?.();
+
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
+
+    // 파일을 지운 뒤 다시 파일 선택 control에 포커스를 돌린다.
+    filePickerButtonRef.current?.focus();
+  }
+
+  /** 파일 선택과 이전 요청 오류를 상태에 반영한다. */
+  function selectFile(file: File | null) {
+    setSelectedFile(file);
+    setFileUploadErrorMessage('');
+    setUploadProgress(null);
+    requestLifecycle.actions.clearRequestError();
+  }
+
+  /** 요청 오류에서 선택 파일을 유지한 채 요청 화면으로 돌아간다. */
+  function returnToRequest() {
+    requestLifecycle.actions.reset?.();
+    setFileUploadErrorMessage('');
+    setUploadProgress(null);
+  }
+
+  /** 요청 중단 뒤 파일 선택 또는 상태 재확인 control로 focus를 돌린다. */
+  function focusRequestStart() {
+    window.requestAnimationFrame(() => {
+      const filePickerButton = filePickerButtonRef.current;
+
+      if (filePickerButton) {
+        filePickerButton.focus();
+        return;
+      }
+
+      document
+        .querySelector<HTMLButtonElement>('.worker-health-status__retry')
+        ?.focus();
+    });
+  }
+
+  /** 서버 job 생성 전 현재 요청만 중단하고 선택 파일을 유지한다. */
+  function cancelRequest() {
+    if (!requestLifecycle.actions.cancel?.()) {
+      return;
+    }
+
+    setUploadProgress(null);
+    focusRequestStart();
+  }
+
   // Handlers.
 
   /** 숨겨진 file input을 연다. */
@@ -481,61 +424,30 @@ export function useSubtitlesExtractLogic() {
   }
 
   /** 영어 SRT 생성 submit 이벤트를 처리한다. */
-  async function handleSubtitleSubmit(event: FormEvent<HTMLFormElement>) {
+  function handleSubtitleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
     if (!selectedFile || !canSubmit) {
       return;
     }
 
-    setRequestError('');
-    setRequestNotice('');
-    subtitleJobMutation.reset();
-    /** 새 자막 job 생성 요청 시도. */
-    let attempt: RequestAttempt | undefined;
+    setFileUploadErrorMessage('');
+    setUploadProgress(null);
+    requestLifecycle.actions.clearRequestError();
 
-    try {
-      attempt = beginRequestAttempt();
+    /** 검증된 자막 요청 입력. */
+    const request: SubtitleRequest = {
+      file: selectedFile,
+      whisperModel: selectedWhisperModel,
+    };
 
-      /** 생성된 자막 job. */
-      const job = await subtitleJobMutation.mutateAsync({
-        file: selectedFile,
-        signal: attempt.controller.signal,
-      });
-
-      /** 접수증 저장 결과와 해당 job의 요청 내역 deep link. */
-      const receiptDestination = acceptJobReceipt('subtitle', job.jobId);
-
-      if (acceptRequestResult(attempt)) {
-        setHistoryDestination(
-          receiptDestination.storageFailed
-            ? receiptDestination.to
-            : ROUTE_PATHS.history,
-        );
-        setRequestNotice(
-          attempt.cancelled
-            ? '요청을 중단하는 동안 서버 작업이 접수되어 요청 내역에 보존했습니다.'
-            : '',
-        );
-        setActiveJob(job);
-      }
-    } catch (error) {
-      if (shouldIgnoreRequestError(attempt, error)) {
-        return;
-      }
-
-      setRequestError(
-        error instanceof WorkerUnavailableError
-          ? WORKER_UNAVAILABLE_MESSAGE
-          : error instanceof SubtitleUploadTooLargeError
-            ? createSubtitleUploadTooLargeMessage(selectedFile)
-            : error instanceof Error && hasUserVisibleErrorDetail(error)
-              ? error.detail.guidance
-              : '영어 SRT 생성 요청에 실패했습니다. 다시 시도해 주세요.',
-      );
-    } finally {
-      finishRequestAttempt(attempt);
+    if (requestLifecycle.actions.submit) {
+      requestLifecycle.actions.submit(request);
+      return;
     }
+
+    // 파일 feedback 직후의 stale render를 복구해 다음 submit에서 요청을 다시 열 수 있게 한다.
+    requestLifecycle.actions.reset?.();
   }
 
   /** Whisper 모델 변경 이벤트를 처리한다. */
@@ -551,17 +463,24 @@ export function useSubtitlesExtractLogic() {
     downloadHref,
     fileInputRef,
     filePickerButtonRef,
-    fileFeedbackIsError,
-    fileFeedbackMessage,
+    fileFeedbackIsError:
+      validation.kind === 'invalid' || hasSubtitleUploadTooLargeError,
+    fileFeedbackMessage:
+      hasSubtitleUploadTooLargeError
+        ? requestError
+        : validation.kind !== 'ready'
+          ? validation.message
+          : '',
     filledProgressCells,
     handleDropzoneDragOver,
     handleDropzoneDrop,
     handleFileInputChange,
     handleFilePickerOpen,
     handleSubtitleSubmit,
-    isSubtitlePending: subtitleJobMutation.isPending,
     handleWhisperModelChange,
-    retryWorkerHealth,
+    isSubtitlePending: isSubmitting,
+    requestNotice: requestLifecycle.requestNotice,
+    retryWorkerHealth: () => requestLifecycle.actions.retryReadiness?.(),
     selectedFile,
     selectedFileMeta,
     selectedWhisperModel,
@@ -573,15 +492,16 @@ export function useSubtitlesExtractLogic() {
     statusTone,
     submitDisabledReason,
     cancelRequest,
-    requestNotice,
     returnToRequest,
     validation,
     viewPhase,
-    workerHealthFailed: workerHealthAffectsView && workerHealthFailed,
-    workerHealthCheckedAt,
+    workerHealthFailed,
+    workerHealthCheckedAt: requestLifecycle.readiness.lastCheckedAt,
     workerHealthDetail,
-    workerHealthIsFetching: workerHealthQuery.isFetching,
-    workerHealthIsRefreshing,
+    workerHealthIsFetching: requestLifecycle.readiness.isFetching,
+    workerHealthIsRefreshing:
+      requestLifecycle.readiness.isFetching &&
+      workerHealthStatus.kind === 'ready',
     workerHealthStatus,
   };
 }
@@ -713,7 +633,7 @@ export function createSubtitleRequestErrorDetail(
   };
 }
 
-/** worker health 오류에서 사용자 열람용 상세 정보를 만든다. */
+/** worker health 오류에서 사용자 열람용 상세 원인을 만든다. */
 function createWorkerHealthErrorDetail(
   error: Error | null,
 ): UserVisibleErrorDetail | undefined {
