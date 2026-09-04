@@ -1,6 +1,5 @@
 import { zodResolver } from '@hookform/resolvers/zod';
-import { useMutation } from '@tanstack/react-query';
-import { type ChangeEvent, useEffect, useState } from 'react';
+import { type ChangeEvent, useEffect, useMemo } from 'react';
 import { useForm } from 'react-hook-form';
 import {
   AUDIO_QUALITY_OPTIONS,
@@ -16,25 +15,16 @@ import {
 import {
   type UserVisibleErrorDetail,
   WorkerUnavailableError,
-  assertWorkerAvailable,
   buildApiUrl,
-  createDownloadJob,
 } from '../../../../api/mytube-extract.api';
+import { createVideoRequestAdapter } from '../../../adapters/video-request.adapter';
 import { useNavigation } from '../../../components/navigation-context';
 import { type AppIconName } from '../../../components/app-icon';
 import { ROUTE_PATHS } from '../../../constants/route-paths.constant';
-import { useActiveJobStatus } from '../../../hooks/use-active-job-status';
-import {
-  type RequestAttempt,
-  useRequestAttempt,
-} from '../../../hooks/use-request-attempt';
-import { useWorkerReadiness } from '../../../hooks/use-worker-readiness';
-import { getExtractViewPhase } from '../../../utils/extract-view-phase.util';
-import { acceptJobReceipt } from '../../../utils/job-receipt.util';
+import { useExtractionRequestLifecycle } from '../../../hooks/use-extraction-request-lifecycle';
 import {
   createJobStatusRequestErrorDetail,
   createTerminalJobErrorDetail,
-  fetchJobStatus,
 } from '../../../utils/job-status-polling.util';
 import {
   getRequestPreferences,
@@ -72,15 +62,6 @@ export function useVideoExtractLogic() {
   /** 현재 API base URL. */
   const apiBaseUrl = getApiBaseUrl();
 
-  // States.
-
-  /** 요청 실패 메시지. */
-  const [requestError, setRequestError] = useState('');
-  /** 요청 중단 또는 늦은 접수 결과를 보조 기술에 알릴 문구. */
-  const [requestNotice, setRequestNotice] = useState('');
-  /** 이 화면에서 상태를 확인할 직전 접수 job. */
-  const [activeJob, setActiveJob] = useState<DownloadResponse | null>(null);
-
   // Hooks.
 
   /** 다운로드 입력 form 상태. */
@@ -99,65 +80,26 @@ export function useVideoExtractLogic() {
     mode: 'onChange',
     resolver: zodResolver(downloadDraftSchema),
   });
-  /** 요청 전 API·worker readiness 상태. */
-  const {
-    retryWorkerHealth,
-    workerHealthCheckedAt,
-    workerHealthFailed,
-    workerHealthIsRefreshing,
-    workerHealthQuery,
-    workerHealthStatus,
-    workerUnavailable,
-  } = useWorkerReadiness({
-    apiBaseUrl,
-    unavailableMessage: WORKER_UNAVAILABLE_MESSAGE,
-  });
-  /** 다운로드 job 생성 mutation. */
-  const downloadJobMutation = useMutation({
-    mutationFn: async (input: {
-      /** 다운로드 입력값. */
-      draft: DownloadDraft;
-      /** 요청 중단 신호. */
-      signal: AbortSignal;
-    }) => {
-      /** submit 직전 최신 worker health. */
-      const workerHealth = await workerHealthQuery.refetch({
-        cancelRefetch: false,
-      });
-
-      if (workerHealth.error) {
-        throw workerHealth.error;
-      }
-
-      assertWorkerAvailable(workerHealth.data);
-
-      return createDownloadJob(input.draft, {
-        apiBaseUrl,
-        signal: input.signal,
-      });
-    },
-  });
-  /** 현재 화면의 다운로드 job 접수증과 상태 query. */
-  const { activeJobQuery, activeJobReceipt } = useActiveJobStatus({
-    activeJob,
-    apiBaseUrl,
-    fetchStatus: (receipt, signal) =>
-      fetchJobStatus(receipt, apiBaseUrl, signal),
-    kind: 'video',
-  });
   /** 추출 진행 중 route 이동 차단 상태를 갱신한다. */
   const { setHistoryDestination, setNavigationLocked } = useNavigation();
-  /** job 생성 요청의 중단·응답 경쟁과 navigation lock 생명주기. */
-  const {
-    acceptRequestResult,
-    beginRequestAttempt,
-    cancelRequestAttempt,
-    finishRequestAttempt,
-    resetRequestAttempt,
-    shouldIgnoreRequestError,
-  } = useRequestAttempt({
-    navigationLocked: downloadJobMutation.isPending,
-    setNavigationLocked,
+  /** 영상 요청 통신을 lifecycle adapter seam에 연결한다. */
+  const videoRequestAdapter = useMemo(
+    () => createVideoRequestAdapter({ apiBaseUrl }),
+    [apiBaseUrl],
+  );
+  /** 영상 route가 사용하는 추출 요청 생명주기 deep module. */
+  const requestLifecycle = useExtractionRequestLifecycle({
+    adapter: videoRequestAdapter,
+    historyPath: ROUTE_PATHS.history,
+    messages: {
+      cancelled:
+        '요청을 중단했습니다. 입력한 설정은 그대로입니다. 다시 요청할 수 있습니다.',
+      unavailable: WORKER_UNAVAILABLE_MESSAGE,
+    },
+    navigation: {
+      setHistoryDestination,
+      setLocked: setNavigationLocked,
+    },
   });
 
   // Computed.
@@ -170,31 +112,52 @@ export function useVideoExtractLogic() {
   const qualityOptions =
     draft.mode === 'audio' ? AUDIO_QUALITY_OPTIONS : VIDEO_QUALITY_OPTIONS;
   /** API job 생성 전 요청 처리 중인지 여부. */
-  const isSubmitting = downloadJobMutation.isPending;
+  const isSubmitting = requestLifecycle.phase === 'accepting';
   /** 오른쪽 status panel에 표시할 최신 job. */
-  const statusJob = activeJobQuery.data ?? activeJob ?? createIdleJob(draft);
+  const statusJob = requestLifecycle.job ?? createIdleJob(draft);
+  /** 현재 readiness 상태. */
+  const workerHealthStatus = requestLifecycle.readiness.status;
+  /** 활성 job이 없어 worker health가 현재 화면을 결정하는지 여부. */
+  const workerHealthAffectsView = requestLifecycle.job === null;
+  /** worker health 확인 실패 여부. */
+  const workerHealthFailed =
+    workerHealthAffectsView && workerHealthStatus.kind === 'failed';
+  /** worker가 작업을 받을 수 없는지 여부. */
+  const workerUnavailable =
+    workerHealthAffectsView && workerHealthStatus.kind === 'unavailable';
+  /** lifecycle이 우선순위를 정한 현재 오류. */
+  const lifecycleError = requestLifecycle.error;
   /** worker health 오류 상세 원인. */
   const workerHealthErrorDetail = createWorkerHealthErrorDetail(
-    workerHealthQuery.error,
+    requestLifecycle.readiness.error instanceof Error
+      ? requestLifecycle.readiness.error
+      : null,
   );
   /** 영상 job 생성 요청 오류 상세 원인. */
-  const requestErrorDetail = requestError
-    ? createVideoRequestErrorDetail(downloadJobMutation.error, requestError)
-    : undefined;
+  const requestError =
+    lifecycleError?.source === 'request'
+      ? lifecycleError.cause instanceof WorkerUnavailableError
+        ? WORKER_UNAVAILABLE_MESSAGE
+        : '추출 요청에 실패했습니다. 다시 시도해 주세요.'
+      : '';
+  /** 영상 job 생성 요청 오류 상세 원인. */
+  const requestErrorDetail =
+    lifecycleError?.source === 'request'
+      ? createVideoRequestErrorDetail(lifecycleError.cause, requestError)
+      : undefined;
   /** 현재 영상 job 상태 조회 오류 상세 원인. */
-  const jobStatusRequestErrorDetail = activeJobQuery.isError
-    ? createJobStatusRequestErrorDetail(
-        activeJobQuery.error,
-        activeJobReceipt,
-      )
-    : undefined;
+  const jobStatusRequestErrorDetail =
+    lifecycleError?.source === 'status' && requestLifecycle.receipt
+      ? createJobStatusRequestErrorDetail(
+          lifecycleError.cause,
+          requestLifecycle.receipt,
+        )
+      : undefined;
   /** failed·expired 영상 job 상세 원인. */
-  const terminalJobErrorDetail = createTerminalJobErrorDetail(
-    statusJob,
-    activeJobReceipt,
-  );
-  /** 활성 job이 없어 worker health가 현재 화면을 결정하는지 여부. */
-  const workerHealthAffectsView = activeJob === null;
+  const terminalJobErrorDetail =
+    lifecycleError?.source === 'terminal' && requestLifecycle.receipt
+      ? createTerminalJobErrorDetail(statusJob, requestLifecycle.receipt)
+      : undefined;
   /** 현재 readiness gate에서 열어 볼 health 상세 원인. */
   const workerHealthDetail = workerHealthAffectsView
     ? workerHealthStatus.kind === 'unavailable'
@@ -213,8 +176,7 @@ export function useVideoExtractLogic() {
   const canSubmit =
     validation.kind === 'ready' &&
     isValid &&
-    !downloadJobMutation.isPending &&
-    workerHealthStatus.kind === 'ready';
+    requestLifecycle.canSubmit;
   /** 제출 버튼이 비활성화된 이유. */
   const submitDisabledReason = getWorkerHealthSubmitReason({
     healthStatus: workerHealthStatus.kind,
@@ -252,6 +214,7 @@ export function useVideoExtractLogic() {
     isSubmitting
       ? 'processing'
       : jobStatusRequestErrorDetail ||
+          requestErrorDetail ||
           (workerHealthAffectsView && (workerHealthFailed || workerUnavailable))
         ? 'failed'
         : getStatusIconName(statusJob.displayStatus);
@@ -260,6 +223,7 @@ export function useVideoExtractLogic() {
     isSubmitting
       ? 'processing'
       : jobStatusRequestErrorDetail ||
+          requestErrorDetail ||
           (workerHealthAffectsView && (workerHealthFailed || workerUnavailable))
         ? 'failed'
         : statusJob.displayStatus;
@@ -274,11 +238,7 @@ export function useVideoExtractLogic() {
     ? buildApiUrl(statusJob.downloadUrl, apiBaseUrl)
     : '';
   /** 현재 화면에 단독으로 표시할 추출 단계. */
-  const viewPhase = getExtractViewPhase({
-    hasRequestError: Boolean(requestError || jobStatusRequestErrorDetail),
-    isSubmitting,
-    status: activeJobQuery.data?.displayStatus ?? activeJob?.displayStatus ?? null,
-  });
+  const viewPhase = requestLifecycle.phase;
 
   // Functions.
 
@@ -292,8 +252,7 @@ export function useVideoExtractLogic() {
 
   /** 입력 변경 후 이전 실패 상태를 초기화한다. */
   function clearRequestError() {
-    setRequestError('');
-    setRequestNotice('');
+    requestLifecycle.actions.clearRequestError();
   }
 
   /** 요청 중단 뒤 현재 화면의 첫 입력 또는 상태 재확인 control로 focus를 돌린다. */
@@ -316,26 +275,16 @@ export function useVideoExtractLogic() {
 
   /** 서버 job 생성 전 현재 요청만 중단하고 입력 상태를 유지한다. */
   function cancelRequest() {
-    if (!cancelRequestAttempt()) {
+    if (!requestLifecycle.actions.cancel?.()) {
       return;
     }
 
-    setRequestError('');
-    setRequestNotice(
-      '요청을 중단했습니다. 입력한 설정은 그대로입니다. 다시 요청할 수 있습니다.',
-    );
-    setActiveJob(null);
-    downloadJobMutation.reset();
     focusRequestStart();
   }
 
   /** 요청 오류에서 기존 입력을 유지한 채 요청 화면으로 돌아간다. */
   function returnToRequest() {
-    resetRequestAttempt();
-    setRequestError('');
-    setRequestNotice('');
-    setActiveJob(null);
-    downloadJobMutation.reset();
+    requestLifecycle.actions.reset?.();
   }
 
   // Effects.
@@ -398,48 +347,8 @@ export function useVideoExtractLogic() {
 
   /** 다운로드 실행 submit 이벤트를 처리한다. */
   async function handleDownloadSubmit(validDraft: DownloadDraft) {
-    setRequestError('');
-    setRequestNotice('');
-    /** 새 다운로드 job 생성 요청 시도. */
-    let attempt: RequestAttempt | undefined;
-
-    try {
-      attempt = beginRequestAttempt();
-
-      /** 생성된 다운로드 job. */
-      const job = await downloadJobMutation.mutateAsync({
-        draft: validDraft,
-        signal: attempt.controller.signal,
-      });
-
-      /** 접수증 저장 결과와 해당 job의 요청 내역 deep link. */
-      const receiptDestination = acceptJobReceipt('video', job.jobId);
-
-      if (acceptRequestResult(attempt)) {
-        setHistoryDestination(
-          receiptDestination.storageFailed
-            ? receiptDestination.to
-            : ROUTE_PATHS.history,
-        );
-        setRequestNotice(
-          attempt.cancelled
-            ? '요청을 중단하는 동안 서버 작업이 접수되어 요청 내역에 보존했습니다.'
-            : '',
-        );
-        setActiveJob(job);
-      }
-    } catch (error) {
-      if (shouldIgnoreRequestError(attempt, error)) {
-        return;
-      }
-
-      setRequestError(
-        error instanceof WorkerUnavailableError
-          ? WORKER_UNAVAILABLE_MESSAGE
-          : '추출 요청에 실패했습니다. 다시 시도해 주세요.',
-      );
-    } finally {
-      finishRequestAttempt(attempt);
+    if (requestLifecycle.actions.submit) {
+      requestLifecycle.actions.submit(validDraft);
     }
   }
 
@@ -453,11 +362,11 @@ export function useVideoExtractLogic() {
     handleDownloadFormSubmit: handleSubmit(handleDownloadSubmit),
     handleModeChange,
     handleSourceUrlReset,
-    isDownloadPending: downloadJobMutation.isPending,
+    isDownloadPending: isSubmitting,
     progressLabel,
     qualityOptions,
     register,
-    retryWorkerHealth,
+    retryWorkerHealth: () => requestLifecycle.actions.retryReadiness?.(),
     statusErrorDetail,
     statusIconName,
     statusJob,
@@ -468,15 +377,17 @@ export function useVideoExtractLogic() {
     statusTypeLabel,
     submitDisabledReason,
     cancelRequest,
-    requestNotice,
+    requestNotice: requestLifecycle.requestNotice,
     returnToRequest,
     validation,
     viewPhase,
     workerHealthFailed: workerHealthAffectsView && workerHealthFailed,
-    workerHealthCheckedAt,
+    workerHealthCheckedAt: requestLifecycle.readiness.lastCheckedAt,
     workerHealthDetail,
-    workerHealthIsFetching: workerHealthQuery.isFetching,
-    workerHealthIsRefreshing,
+    workerHealthIsFetching: requestLifecycle.readiness.isFetching,
+    workerHealthIsRefreshing:
+      requestLifecycle.readiness.isFetching &&
+      workerHealthStatus.kind === 'ready',
     workerHealthStatus,
   };
 }

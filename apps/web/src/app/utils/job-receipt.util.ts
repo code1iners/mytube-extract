@@ -85,9 +85,13 @@ export function addJobReceipt(
 }
 
 /** 서버가 접수한 job을 저장하고 history 이동 정보를 만든다. */
-export function acceptJobReceipt(kind: JobReceiptKind, jobId: string) {
+export function acceptJobReceipt(
+  kind: JobReceiptKind,
+  jobId: string,
+  acceptedAt = new Date().toISOString(),
+) {
   return {
-    storageFailed: !addJobReceipt(kind, jobId),
+    storageFailed: !addJobReceipt(kind, jobId, acceptedAt),
     to: `/history?kind=${kind}&jobId=${encodeURIComponent(jobId)}`,
   };
 }
