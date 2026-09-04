@@ -108,6 +108,7 @@
 
 html {
   overflow-x: hidden;
+  scrollbar-color: var(--color-border) var(--color-canvas);
 }
 
 body {
@@ -120,6 +121,15 @@ body {
 button,
 input {
   font: inherit;
+}
+
+input {
+  caret-color: var(--color-action-primary);
+}
+
+::selection {
+  background: color-mix(in srgb, var(--color-action-primary) 24%, transparent);
+  color: var(--color-text-primary);
 }
 
 button,
@@ -227,7 +237,7 @@ a {
   padding: 0;
   border: 0;
   color: var(--color-text-secondary);
-  font-size: 12px;
+  font-size: 14px;
 }
 
 .hero-utilities {
@@ -479,6 +489,7 @@ a {
 .theme-toggle__option {
   position: relative;
   display: flex;
+  cursor: pointer;
 }
 
 .theme-toggle__option input {
@@ -588,7 +599,7 @@ a {
   border-radius: var(--radius-full);
   background: var(--color-surface-alt);
   color: var(--color-text-secondary);
-  font-size: 12px;
+  font-size: 14px;
   font-weight: 600;
 }
 
@@ -653,7 +664,7 @@ a {
   border-radius: var(--radius-sm);
   background: var(--color-surface-alt);
   color: var(--color-text-primary);
-  font-size: 12px;
+  font-size: 14px;
   font-weight: 600;
 }
 
@@ -1076,13 +1087,49 @@ a {
 .primary-button:focus-visible,
 .secondary-button:focus-visible,
 .download-button:focus-visible,
+.url-reset-button:focus-visible,
+.selected-file-row button:focus-visible,
 .theme-toggle__option input:focus-visible + span,
 input:focus-visible,
 .segment:focus-within,
 .quality-chip:focus-within,
-.subtitle-dropzone:focus-visible {
+.subtitle-dropzone:focus-visible,
+.subtitle-processing-method__details summary:focus-visible,
+.error-details summary:focus-visible {
   outline: 2px solid var(--color-focus);
   outline-offset: 2px;
+}
+
+@media (hover: hover) {
+  .primary-navigation__link:not(.is-active, .is-disabled):hover,
+  .secondary-button:not(:disabled):hover,
+  .url-reset-button:hover,
+  .selected-file-row button:hover,
+  .theme-toggle__option:hover span,
+  .segment:hover,
+  .quality-chip:hover,
+  .usage-guide summary:hover,
+  .subtitle-processing-method__details summary:hover,
+  .error-details summary:hover {
+    background: var(--color-surface-alt);
+    color: var(--color-text-primary);
+  }
+
+  .subtitle-dropzone:hover {
+    border-color: var(--color-text-secondary);
+    background: var(--color-surface);
+    color: var(--color-text-primary);
+  }
+
+  .primary-button:not(:disabled):hover,
+  .download-button:hover {
+    filter: brightness(0.92);
+  }
+}
+
+.primary-button:not(:disabled):active,
+.download-button:active {
+  filter: brightness(0.84);
 }
 
 .notice-box {
