@@ -9,9 +9,10 @@
 - receipt storage: `apps/web/src/app/utils/job-receipt.util.ts`
 - request preference storage: `apps/web/src/app/utils/request-preference.util.ts`
 - shared job polling: `apps/web/src/app/utils/job-status-polling.util.ts`
+- extraction request lifecycle: `apps/web/src/app/hooks/use-extraction-request-lifecycle.ts`, `apps/web/src/app/adapters/*-request.adapter.ts`
 - request flow trail: `apps/web/src/app/components/request-flow.tsx`, `apps/web/src/app/utils/request-flow.util.ts`
 - readiness gate: `apps/web/src/app/components/request-readiness-panel.tsx`, `apps/web/src/app/components/worker-health-status.tsx`
-- request cancellation and keyboard guards: route logic hooks, `apps/web/src/app/utils/keyboard-shortcut.util.ts`
+- request cancellation and keyboard guards: extraction request lifecycle, route logic hooks, `apps/web/src/app/utils/keyboard-shortcut.util.ts`
 - route 상세: `docs/web/routes/*`
 
 `QueryClientProvider`와 React Router `BrowserRouter`를 기존 앱 전역 경계로 사용한다. 별도 상태 관리 library, 서버 목록 endpoint, DB schema는 없다.
