@@ -225,6 +225,42 @@ export class SubtitleDirectUploadFailedError extends Error {
   detail: UserVisibleErrorDetail;
 }
 
+/** R2 multipart 업로드 complete 실패 오류. */
+export class SubtitleUploadCompleteFailedError extends Error {
+  constructor(responseStatus?: number) {
+    super('Subtitle upload complete failed.');
+    this.name = 'SubtitleUploadCompleteFailedError';
+    this.detail = {
+      code: 'SUBTITLE_UPLOAD_COMPLETE_FAILED',
+      guidance: '영어 SRT 생성 요청을 완료하지 못했습니다. 다시 시도해 주세요.',
+      location: 'R2 multipart 업로드 완료',
+      requestPath: '/subtitles/uploads/complete',
+      responseStatus,
+    };
+  }
+
+  /** 사용자에게 열람 가능한 오류 상세 정보. */
+  detail: UserVisibleErrorDetail;
+}
+
+/** R2 multipart 임시 업로드 정리 실패 오류. */
+export class SubtitleUploadAbortFailedError extends Error {
+  constructor(responseStatus?: number) {
+    super('Subtitle upload abort failed.');
+    this.name = 'SubtitleUploadAbortFailedError';
+    this.detail = {
+      code: 'SUBTITLE_UPLOAD_ABORT_FAILED',
+      guidance: '임시 업로드 정리에 실패했습니다.',
+      location: 'R2 multipart 업로드 정리',
+      requestPath: '/subtitles/uploads/abort',
+      responseStatus,
+    };
+  }
+
+  /** 사용자에게 열람 가능한 오류 상세 정보. */
+  detail: UserVisibleErrorDetail;
+}
+
 /** worker health를 조회한다. */
 export async function getWorkerHealth(
   options: {
@@ -463,7 +499,7 @@ export async function completeSubtitleUpload(
   );
 
   if (!response.ok) {
-    throw new Error('Subtitle upload complete failed.');
+    throw new SubtitleUploadCompleteFailedError(response.status);
   }
 
   return (await response.json()) as SubtitleJobResponse;
@@ -484,18 +520,26 @@ export async function abortSubtitleUpload(
   /** API 요청에 사용할 fetch 함수. */
   const fetcher = options.fetcher ?? fetch;
 
-  await fetcher(buildApiUrl('/subtitles/uploads/abort', options.apiBaseUrl), {
-    body: JSON.stringify({
-      objectKey: upload.objectKey,
-      uploadId: upload.uploadId,
-      uploadToken: upload.uploadToken,
-    }),
-    headers: {
-      'Content-Type': 'application/json',
+  /** multipart 임시 업로드 정리 응답. */
+  const response = await fetcher(
+    buildApiUrl('/subtitles/uploads/abort', options.apiBaseUrl),
+    {
+      body: JSON.stringify({
+        objectKey: upload.objectKey,
+        uploadId: upload.uploadId,
+        uploadToken: upload.uploadToken,
+      }),
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      method: 'POST',
+      signal: options.signal,
     },
-    method: 'POST',
-    signal: options.signal,
-  });
+  );
+
+  if (!response.ok) {
+    throw new SubtitleUploadAbortFailedError(response.status);
+  }
 }
 
 /**
