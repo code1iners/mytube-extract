@@ -10,6 +10,7 @@ import type {
   UseExtractionRequestLifecycleOptions,
 } from '../../src/app/hooks/use-extraction-request-lifecycle';
 import { useExtractionRequestLifecycle } from '../../src/app/hooks/use-extraction-request-lifecycle';
+import { JobStatusRequestError } from '../../src/api/mytube-extract.api';
 
 // React가 비동기 상태 갱신을 act 테스트 환경으로 인식하게 한다.
 Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
@@ -126,6 +127,41 @@ function SubtitleLifecycleProbe({
   return null;
 }
 
+/** lifecycle이 route에 제공하는 테스트 표시 모델. */
+type TestLifecyclePresentation = {
+  /** 표시 모델이 반영한 현재 phase. */
+  phase: string;
+  /** 표시 모델이 반영한 제목. */
+  title: string;
+};
+
+/** lifecycle이 생성한 최종 표시 모델을 관찰하는 테스트 probe. */
+function PresentationLifecycleProbe({
+  onValue,
+  options,
+}: {
+  /** 최신 lifecycle 값을 기록할 함수. */
+  onValue: (
+    value: RequestLifecycleResult<
+      TestVideoJob,
+      TestVideoJob,
+      TestLifecyclePresentation
+    >,
+  ) => void;
+  /** 표시 모델 생성기를 포함한 lifecycle dependency. */
+  options: UseExtractionRequestLifecycleOptions<
+    TestVideoJob,
+    TestVideoJob,
+    'video',
+    TestLifecyclePresentation
+  >;
+}) {
+  /** 최종 표시 모델을 포함한 lifecycle interface. */
+  const value = useExtractionRequestLifecycle(options);
+  onValue(value);
+  return null;
+}
+
 describe('request lifecycle adapter seam', () => {
   it('lets the in-memory adapter satisfy readiness, create, and status operations', async () => {
     /** 테스트용 요청 입력. */
@@ -171,6 +207,75 @@ describe('request lifecycle adapter seam', () => {
       expect.objectContaining({ jobId: createdJob.jobId, kind: 'video' }),
       expect.any(AbortSignal),
     );
+  });
+
+  it('returns the route presentation derived from normalized lifecycle state', async () => {
+    /** hook에서 관찰한 최신 lifecycle 값. */
+    let latest:
+      | RequestLifecycleResult<
+          TestVideoJob,
+          TestVideoJob,
+          TestLifecyclePresentation
+        >
+      | undefined;
+    /** lifecycle state를 표시 모델로 바꾸는 selector. */
+    const createPresentation = vi.fn(
+      (input): TestLifecyclePresentation => ({
+        phase: input.phase,
+        title:
+          input.readiness.status.kind === 'ready'
+            ? '요청할 수 있습니다'
+            : '서비스 상태를 확인하고 있습니다',
+      }),
+    );
+    /** 테스트 lifecycle hook options. */
+    const options: UseExtractionRequestLifecycleOptions<
+      TestVideoJob,
+      TestVideoJob,
+      'video',
+      TestLifecyclePresentation
+    > = {
+      adapter: createInMemoryRequestLifecycleAdapter({
+        createRequest: async () => createJob(),
+        getStatus: async () => createJob(),
+        kind: 'video',
+        readiness: readyResponse,
+      }),
+      createPresentation,
+      messages: {
+        cancelled: '취소 후 입력을 보존했습니다.',
+        unavailable: '서버가 준비되지 않았습니다.',
+      },
+      navigation: {
+        setHistoryDestination: () => undefined,
+        setLocked: () => undefined,
+      },
+    };
+    /** lifecycle hook을 mount할 renderer. */
+    let renderer: ReturnType<typeof create>;
+
+    await act(async () => {
+      renderer = create(
+        createElement(PresentationLifecycleProbe, {
+          onValue: (value) => {
+            latest = value;
+          },
+          options,
+        }),
+      );
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(createPresentation).toHaveBeenCalled();
+    expect(latest?.presentation).toEqual({
+      phase: 'request',
+      title: '요청할 수 있습니다',
+    });
+
+    await act(async () => {
+      renderer!.unmount();
+    });
   });
 
   it('keeps the production video adapter on the same interface', async () => {
@@ -629,6 +734,147 @@ describe('request lifecycle adapter seam', () => {
     expect(historyDestinations).toEqual([
       '/history?kind=video&jobId=4f8f82b3-cf37-4e31-9d56-d27eb526a922',
     ]);
+
+    await act(async () => {
+      renderer!.unmount();
+    });
+  });
+
+  it('keeps processing during retryable status errors until a later success', async () => {
+    vi.useFakeTimers();
+
+    try {
+      /** 상태 조회 호출 횟수. */
+      let statusCall = 0;
+      /** hook에서 관찰한 최신 lifecycle 값. */
+      let latest: RequestLifecycleResult<TestVideoJob, TestVideoJob> | undefined;
+      /** 첫 network 오류 뒤 완료 상태를 반환하는 adapter. */
+      const adapter = createInMemoryRequestLifecycleAdapter({
+        createRequest: async () => createJob(),
+        getStatus: async () => {
+          statusCall += 1;
+
+          if (statusCall === 1) {
+            throw new TypeError('temporary network failure');
+          }
+
+          return createJob({ displayStatus: 'completed' });
+        },
+        kind: 'video',
+        readiness: readyResponse,
+      });
+      /** 테스트 lifecycle hook options. */
+      const options: UseExtractionRequestLifecycleOptions<
+        TestVideoJob,
+        TestVideoJob,
+        'video'
+      > = {
+        adapter,
+        messages: {
+          cancelled: '취소 후 입력을 보존했습니다.',
+          unavailable: '서버가 준비되지 않았습니다.',
+        },
+        navigation: {
+          setHistoryDestination: () => undefined,
+          setLocked: () => undefined,
+        },
+      };
+      /** lifecycle hook을 mount할 renderer. */
+      let renderer: ReturnType<typeof create>;
+
+      await act(async () => {
+        renderer = create(
+          createElement(LifecycleProbe, {
+            onValue: (value) => {
+              latest = value;
+            },
+            options,
+          }),
+        );
+        await Promise.resolve();
+        await Promise.resolve();
+      });
+      await act(async () => {
+        latest?.actions.submit?.(createJob());
+        await Promise.resolve();
+        await Promise.resolve();
+        await Promise.resolve();
+      });
+
+      expect(statusCall).toBe(1);
+      expect(latest?.phase).toBe('processing');
+      expect(latest?.error).toBeNull();
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(1_000);
+      });
+
+      expect(latest?.phase).toBe('result');
+
+      await act(async () => {
+        renderer!.unmount();
+      });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('exposes a non-retryable status error without scheduling another poll', async () => {
+    /** 상태 조회 호출 횟수. */
+    let statusCall = 0;
+    /** hook에서 관찰한 최신 lifecycle 값. */
+    let latest: RequestLifecycleResult<TestVideoJob, TestVideoJob> | undefined;
+    /** 재시도 불가 404를 반환하는 adapter. */
+    const adapter = createInMemoryRequestLifecycleAdapter({
+      createRequest: async () => createJob(),
+      getStatus: async () => {
+        statusCall += 1;
+        throw new JobStatusRequestError(404);
+      },
+      kind: 'video',
+      readiness: readyResponse,
+    });
+    /** 테스트 lifecycle hook options. */
+    const options: UseExtractionRequestLifecycleOptions<
+      TestVideoJob,
+      TestVideoJob,
+      'video'
+    > = {
+      adapter,
+      messages: {
+        cancelled: '취소 후 입력을 보존했습니다.',
+        unavailable: '서버가 준비되지 않았습니다.',
+      },
+      navigation: {
+        setHistoryDestination: () => undefined,
+        setLocked: () => undefined,
+      },
+    };
+    /** lifecycle hook을 mount할 renderer. */
+    let renderer: ReturnType<typeof create>;
+
+    await act(async () => {
+      renderer = create(
+        createElement(LifecycleProbe, {
+          onValue: (value) => {
+            latest = value;
+          },
+          options,
+        }),
+      );
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    await act(async () => {
+      latest?.actions.submit?.(createJob());
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(statusCall).toBe(1);
+    expect(latest?.phase).toBe('error');
+    expect(latest?.error?.source).toBe('status');
 
     await act(async () => {
       renderer!.unmount();

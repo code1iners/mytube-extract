@@ -40,6 +40,7 @@ try {
   await run('desktop route headings share one top rhythm', verifyDesktopRouteHeadingAlignment);
   await run('video request keeps the task flow first across viewports', verifyVideoTaskFirstLayout);
   await run('video in-place success, failure, navigation lock, and download', verifyVideoRequestFlows);
+  await run('subtitle request error recovery preserves file and focus', verifySubtitleRequestErrorRecovery);
   await run('video request cancellation restores input and navigation', verifyVideoRequestCancellation);
   await run('receipt storage failure keeps the accepted job history destination', verifyAcceptedJobStorageFallback);
   await run('subtitle in-place success and navigation lock', verifySubtitleRequestFlow);
@@ -93,6 +94,57 @@ async function verifyRequestRoutesDoNotRestore() {
     assertNoRuntimeErrors();
   } finally {
     await context.close();
+  }
+}
+
+/** 자막 요청 오류 복구 뒤 파일 보존과 focus 이동을 검증한다. */
+async function verifySubtitleRequestErrorRecovery() {
+  /** 자막 요청 오류 복구의 파일 보존과 focus를 확인할 context. */
+  const failureContext = await createContext({
+    viewport: { height: 844, width: 390 },
+  });
+  /** 자막 요청 오류 복구를 확인할 page. */
+  const { page: failurePage, assertNoRuntimeErrors: assertFailureNoErrors } =
+    await createPage(failureContext, { ignoreHttpErrors: true });
+
+  try {
+    await routeApi(failurePage, async ({ request, route, url }) => {
+      if (url.pathname === '/health') return fulfillJson(route, healthResponse());
+      if (
+        url.pathname === '/subtitles/uploads' &&
+        request.method() === 'POST'
+      ) {
+        return fulfillJson(route, {}, 500);
+      }
+      return fulfillJson(route, {}, 404);
+    });
+    await failurePage.goto(`${staticServer.origin}/subtitles`);
+    await failurePage.locator('input[type="file"]').setInputFiles({
+      buffer: Buffer.from('failed-video'),
+      mimeType: 'video/mp4',
+      name: 'failed-video.mp4',
+    });
+    const failureSubmit = failurePage.getByRole('button', {
+      name: '영어 SRT 생성',
+    });
+    await waitForEnabled(failureSubmit);
+    await failureSubmit.click();
+    await failurePage
+      .getByText('영어 SRT 생성 요청에 실패했습니다. 다시 시도해 주세요.')
+      .waitFor();
+    await failurePage
+      .getByRole('button', { name: '요청 설정으로 돌아가기' })
+      .click();
+    const recoveredPicker = failurePage.getByRole('button', {
+      name: '영상 선택 또는 드래그 (로컬 영상 파일)',
+    });
+    await waitForCondition(async () =>
+      recoveredPicker.evaluate((element) => document.activeElement === element),
+    );
+    await failurePage.getByText('failed-video.mp4', { exact: true }).waitFor();
+    assertFailureNoErrors();
+  } finally {
+    await failureContext.close();
   }
 }
 
@@ -665,6 +717,19 @@ async function verifyVideoRequestFlows() {
     await waitForEnabled(submit);
     await submit.click();
     await failurePage.getByText('추출 요청에 실패했습니다. 다시 시도해 주세요.').waitFor();
+    await failurePage
+      .getByRole('button', { name: '요청 설정으로 돌아가기' })
+      .click();
+    const recoveredSourceUrl = failurePage.getByLabel('YouTube URL');
+    await waitForCondition(async () =>
+      recoveredSourceUrl.evaluate(
+        (element) => document.activeElement === element,
+      ),
+    );
+    assert.equal(
+      await recoveredSourceUrl.inputValue(),
+      'https://youtu.be/abc123_DEF0',
+    );
 
     assert.equal(new URL(failurePage.url()).pathname, '/video');
     assert.equal(await receiptCount(failurePage), 0);

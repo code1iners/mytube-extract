@@ -127,6 +127,7 @@ export type UseExtractionRequestLifecycleOptions<
   TRequest,
   TJob extends RequestLifecycleJob,
   TKind extends JobReceiptKind,
+  TPresentation = null,
 > = {
   /** 영상 또는 자막 통신을 감싼 adapter. */
   adapter: RequestLifecycleAdapter<TRequest, TJob, TKind>;
@@ -142,6 +143,10 @@ export type UseExtractionRequestLifecycleOptions<
   readinessIntervalMs?: number;
   /** 접수 시각과 readiness 확인 시각을 주입할 clock. */
   now?: () => number;
+  /** 정규화된 lifecycle 상태를 route별 최종 표시 모델로 바꾼다. */
+  createPresentation?: (
+    input: RequestLifecyclePresentationInput<TJob>,
+  ) => TPresentation;
 };
 
 /** lifecycle 현재 상태에서 사용할 action. 잘못된 phase에서는 노출하지 않는다. */
@@ -162,6 +167,7 @@ export type RequestLifecycleActions<TRequest> = {
 export type RequestLifecycleResult<
   TRequest,
   TJob extends RequestLifecycleJob,
+  TPresentation = null,
 > = {
   /** 현재 lifecycle phase. */
   phase: RequestLifecyclePhase;
@@ -190,6 +196,26 @@ export type RequestLifecycleResult<
   receiptStorageFailed: boolean;
   /** 현재 phase에 맞춘 lifecycle action. */
   actions: RequestLifecycleActions<TRequest>;
+  /** lifecycle 상태와 오류 우선순위에서 파생된 화면 표시 모델. */
+  presentation: TPresentation;
+};
+
+/** 화면 표시 모델을 만들 때 lifecycle이 제공하는 정규화된 상태. */
+export type RequestLifecyclePresentationInput<
+  TJob extends RequestLifecycleJob,
+> = Pick<
+  RequestLifecycleResult<never, TJob>,
+  | 'error'
+  | 'canSubmit'
+  | 'job'
+  | 'phase'
+  | 'readiness'
+  | 'receipt'
+  | 'receiptStorageFailed'
+  | 'requestNotice'
+> & {
+  /** API job 생성 전 요청 처리 중인지 여부. */
+  isSubmitting: boolean;
 };
 
 /** 기본 browser receipt 저장 adapter. */
@@ -259,9 +285,15 @@ export function useExtractionRequestLifecycle<
   TRequest,
   TJob extends RequestLifecycleJob,
   TKind extends JobReceiptKind,
+  TPresentation = null,
 >(
-  options: UseExtractionRequestLifecycleOptions<TRequest, TJob, TKind>,
-): RequestLifecycleResult<TRequest, TJob> {
+  options: UseExtractionRequestLifecycleOptions<
+    TRequest,
+    TJob,
+    TKind,
+    TPresentation
+  >,
+): RequestLifecycleResult<TRequest, TJob, TPresentation> {
   /** 통신을 담당하는 route adapter. */
   const adapter = options.adapter;
   /** navigation lock 갱신 함수. */
@@ -855,6 +887,15 @@ export function useExtractionRequestLifecycle<
 
           /** 현재 상태 오류가 다음 polling에서 재시도 가능한지 여부. */
           const retryable = shouldRetryJobStatus(retryCount, error);
+          if (retryable && !disposed) {
+            /** exponential backoff를 적용한 다음 상태 조회 지연. */
+            const retryDelay = getJobStatusRetryDelay(retryCount);
+            retryCount += 1;
+            timerId = setTimeout(pollStatus, retryDelay);
+            return;
+          }
+
+          // 재시도 불가 오류만 현재 작업을 error phase로 전환한다.
           updateState((current) => {
             if (
               current.receipt?.jobId !== activeReceipt.jobId ||
@@ -865,13 +906,6 @@ export function useExtractionRequestLifecycle<
 
             return { ...current, statusError: error };
           });
-
-          if (retryable && !disposed) {
-            /** exponential backoff를 적용한 다음 상태 조회 지연. */
-            const retryDelay = getJobStatusRetryDelay(retryCount);
-            retryCount += 1;
-            timerId = setTimeout(pollStatus, retryDelay);
-          }
         }
       }
 
@@ -935,6 +969,20 @@ export function useExtractionRequestLifecycle<
     retryReadiness: canRetryReadiness ? retryReadiness : undefined,
     submit: canSubmit ? submitRequest : undefined,
   };
+  /** lifecycle이 오류 우선순위를 적용한 route별 최종 표시 모델. */
+  const presentation = (
+    options.createPresentation?.({
+      canSubmit,
+      error,
+      isSubmitting: state.isSubmitting,
+      job: state.job,
+      phase,
+      readiness: state.readiness,
+      receipt: state.receipt,
+      receiptStorageFailed: state.receiptStorageFailed,
+      requestNotice: state.requestNotice,
+    }) ?? null
+  ) as TPresentation;
 
   return {
     actions,
@@ -942,6 +990,7 @@ export function useExtractionRequestLifecycle<
     error,
     job: state.job,
     phase,
+    presentation,
     readiness: state.readiness,
     receipt: state.receipt,
     receiptStorageFailed: state.receiptStorageFailed,

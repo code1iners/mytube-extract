@@ -25,7 +25,10 @@ import {
 import { useNavigation } from '../../../components/navigation-context';
 import { type AppIconName } from '../../../components/app-icon';
 import { ROUTE_PATHS } from '../../../constants/route-paths.constant';
-import { useExtractionRequestLifecycle } from '../../../hooks/use-extraction-request-lifecycle';
+import {
+  type RequestLifecyclePresentationInput,
+  useExtractionRequestLifecycle,
+} from '../../../hooks/use-extraction-request-lifecycle';
 import {
   createJobStatusRequestErrorDetail,
   createTerminalJobErrorDetail,
@@ -105,13 +108,25 @@ export function useSubtitlesExtractLogic() {
   );
   /** 추출 진행 중 route 이동 차단 상태를 갱신한다. */
   const { setHistoryDestination, setNavigationLocked } = useNavigation();
+  /** 현재 파일 입력 검증 결과. */
+  const validation = validateSubtitleFile(selectedFile);
   /** 자막 route가 사용하는 추출 요청 생명주기 deep module. */
   const requestLifecycle = useExtractionRequestLifecycle<
     SubtitleRequest,
     SubtitleJobResponse,
-    'subtitle'
+    'subtitle',
+    ReturnType<typeof createSubtitleLifecyclePresentation>
   >({
     adapter: subtitleRequestAdapter,
+    createPresentation: (lifecycle) =>
+      createSubtitleLifecyclePresentation({
+        apiBaseUrl,
+        fileUploadErrorMessage,
+        lifecycle,
+        selectedFile,
+        uploadProgress,
+        validation,
+      }),
     historyPath: ROUTE_PATHS.history,
     messages: {
       cancelled:
@@ -126,97 +141,31 @@ export function useSubtitlesExtractLogic() {
 
   // Computed.
 
-  /** 현재 파일 입력 검증 결과. */
-  const validation = validateSubtitleFile(selectedFile);
-  /** API job 생성 전 요청 처리 중인지 여부. */
-  const isSubmitting = requestLifecycle.phase === 'accepting';
-  /** 오른쪽 status panel에 표시할 최신 job. */
-  const statusJob =
-    requestLifecycle.job ?? createIdleSubtitleJob(selectedFile);
-  /** 현재 readiness 상태. */
-  const workerHealthStatus = requestLifecycle.readiness.status;
-  /** 활성 job이 없어 worker health가 현재 화면을 결정하는지 여부. */
-  const workerHealthAffectsView = requestLifecycle.job === null;
-  /** worker health 확인 실패 여부. */
-  const workerHealthFailed =
-    workerHealthAffectsView && workerHealthStatus.kind === 'failed';
-  /** worker가 미가용 상태인지 여부. */
-  const workerUnavailable =
-    workerHealthAffectsView && workerHealthStatus.kind === 'unavailable';
-  /** lifecycle이 우선순위를 정한 현재 오류. */
-  const lifecycleError = requestLifecycle.error;
-  /** 자막 요청 오류의 원래 cause. */
-  const requestErrorCause =
-    lifecycleError?.source === 'request' ? lifecycleError.cause : null;
-  /** 업로드 용량 오류를 파일 선택 feedback으로 정규화할지 여부. */
-  const hasSubtitleUploadTooLargeError =
-    requestErrorCause instanceof SubtitleUploadTooLargeError ||
-    Boolean(fileUploadErrorMessage);
-  /** 자막 생성 요청 오류 안내 문구. */
-  const requestError = hasSubtitleUploadTooLargeError
-    ? selectedFile
-      ? createSubtitleUploadTooLargeMessage(selectedFile)
-      : fileUploadErrorMessage
-    : lifecycleError?.source === 'request'
-      ? lifecycleError.cause instanceof WorkerUnavailableError
-        ? WORKER_UNAVAILABLE_MESSAGE
-        : lifecycleError.cause instanceof Error &&
-            hasUserVisibleErrorDetail(lifecycleError.cause)
-          ? lifecycleError.cause.detail.guidance
-          : '영어 SRT 생성 요청에 실패했습니다. 다시 시도해 주세요.'
-      : '';
-  /** 자막 job 생성 요청 오류 상세 원인. */
-  const requestErrorDetail =
-    lifecycleError?.source === 'request' &&
-    !hasSubtitleUploadTooLargeError
-      ? createSubtitleRequestErrorDetail(
-          lifecycleError.cause,
-          requestError,
-        )
-      : undefined;
-  /** worker health 오류 상세 원인. */
-  const workerHealthErrorDetail = createWorkerHealthErrorDetail(
-    requestLifecycle.readiness.error instanceof Error
-      ? requestLifecycle.readiness.error
-      : null,
-  );
-  /** 현재 자막 job 상태 조회 오류 상세 원인. */
-  const jobStatusRequestErrorDetail =
-    lifecycleError?.source === 'status' && requestLifecycle.receipt
-      ? createJobStatusRequestErrorDetail(
-          lifecycleError.cause,
-          requestLifecycle.receipt,
-        )
-      : undefined;
-  /** failed·expired 자막 job 상세 원인. */
-  const terminalJobErrorDetail =
-    lifecycleError?.source === 'terminal' && requestLifecycle.receipt
-      ? createTerminalJobErrorDetail(statusJob, requestLifecycle.receipt)
-      : undefined;
-  /** 현재 readiness gate에서 열어 볼 health 상세 원인. */
-  const workerHealthDetail = workerHealthAffectsView
-    ? workerHealthStatus.kind === 'unavailable'
-      ? WORKER_UNAVAILABLE_DETAIL
-      : workerHealthStatus.kind === 'failed'
-        ? workerHealthErrorDetail ?? WORKER_HEALTH_FAILED_DETAIL
-        : undefined
-    : undefined;
-  /** 현재 상태 패널 상세 원인. */
-  const statusErrorDetail =
-    jobStatusRequestErrorDetail ??
-    terminalJobErrorDetail ??
-    requestErrorDetail ??
-    workerHealthDetail;
-  /** 자막 생성 요청 가능 여부. */
-  const canSubmit =
-    validation.kind === 'ready' &&
-    workerHealthStatus.kind === 'ready' &&
-    (requestLifecycle.canSubmit || hasSubtitleUploadTooLargeError);
-  /** 제출 버튼이 비활성화된 이유. */
-  const submitDisabledReason = getWorkerHealthSubmitReason({
-    healthStatus: workerHealthStatus.kind,
+  /** lifecycle interface가 최종 우선순위를 적용한 자막 표시 모델. */
+  const {
+    canSubmit,
+    downloadHref,
+    filledProgressCells,
+    hasSubtitleUploadTooLargeError,
     isSubmitting,
-  });
+    requestError,
+    requestErrorCause,
+    requestNotice,
+    statusErrorDetail,
+    statusIconName,
+    statusJob,
+    statusMessage,
+    statusTitle,
+    statusTone,
+    submitDisabledReason,
+    viewPhase,
+    workerHealthDetail,
+    workerHealthFailed,
+    workerHealthCheckedAt,
+    workerHealthIsFetching,
+    workerHealthIsRefreshing,
+    workerHealthStatus,
+  } = requestLifecycle.presentation;
   /** Whisper 모델 선택 가능 여부. */
   const canChangeWhisperModel = !isSubmitting;
   /** 화면에 선택 표시할 처리 단계. */
@@ -225,67 +174,10 @@ export function useSubtitlesExtractLogic() {
     statusJob,
     validationKind: validation.kind,
   });
-  /** 10칸 진행률 bar 중 채울 칸 수. */
-  const filledProgressCells =
-    uploadProgress !== null
-      ? Math.round(uploadProgress / 10)
-      : statusJob.progress === null
-        ? 0
-        : Math.round(statusJob.progress / 10);
-  /** 현재 상태 제목. */
-  const statusTitle =
-    (uploadProgress !== null ? '원본 영상을 업로드 중입니다' : '') ||
-    (isSubmitting ? '영어 SRT 생성 요청을 준비하고 있습니다' : '') ||
-    (requestError ? '영어 SRT 생성 요청에 실패했습니다' : '') ||
-    (jobStatusRequestErrorDetail ? '작업 상태를 확인할 수 없습니다' : '') ||
-    (workerHealthAffectsView
-      ? createWorkerHealthTitle({
-          failed: workerHealthFailed,
-          unavailable: workerUnavailable,
-        })
-      : '') ||
-    createStatusTitle(statusJob);
-  /** 현재 상태 문구. */
-  const statusMessage =
-    (uploadProgress !== null
-      ? `원본 영상을 준비하고 있습니다. (${uploadProgress}%)`
-      : '') ||
-    (isSubmitting ? '영어 SRT 생성 요청을 준비하고 있습니다.' : '') ||
-    requestError ||
-    jobStatusRequestErrorDetail?.guidance ||
-    (workerHealthAffectsView && workerHealthStatus.kind !== 'ready'
-      ? workerHealthStatus.message
-      : '') ||
-    statusJob.message ||
-    validation.message;
-  /** 현재 상태 아이콘 이름. */
-  const statusIconName =
-    uploadProgress !== null || isSubmitting
-      ? 'processing'
-      : jobStatusRequestErrorDetail ||
-          (workerHealthAffectsView && (workerHealthFailed || workerUnavailable))
-        ? 'failed'
-        : getStatusIconName(statusJob.displayStatus);
-  /** 현재 상태 표시 tone. */
-  const statusTone =
-    uploadProgress !== null || isSubmitting
-      ? 'processing'
-      : jobStatusRequestErrorDetail ||
-          (workerHealthAffectsView && (workerHealthFailed || workerUnavailable))
-        ? 'failed'
-        : getStatusTone(statusJob.displayStatus);
-  /** 완료 SRT 다운로드 href. */
-  const downloadHref = statusJob.downloadUrl
-    ? buildApiUrl(statusJob.downloadUrl, apiBaseUrl)
-    : '';
   /** 선택 파일 메타 정보. */
   const selectedFileMeta = selectedFile
     ? `${formatFileSize(selectedFile.size)}`
     : '';
-  /** 현재 화면에 단독으로 표시할 자막 추출 단계. */
-  const viewPhase = hasSubtitleUploadTooLargeError
-    ? 'request'
-    : requestLifecycle.phase;
 
   // Effects.
 
@@ -372,6 +264,7 @@ export function useSubtitlesExtractLogic() {
     requestLifecycle.actions.reset?.();
     setFileUploadErrorMessage('');
     setUploadProgress(null);
+    focusRequestStart();
   }
 
   /** 요청 중단 뒤 파일 선택 또는 상태 재확인 control로 focus를 돌린다. */
@@ -479,7 +372,7 @@ export function useSubtitlesExtractLogic() {
     handleSubtitleSubmit,
     handleWhisperModelChange,
     isSubtitlePending: isSubmitting,
-    requestNotice: requestLifecycle.requestNotice,
+    requestNotice,
     retryWorkerHealth: () => requestLifecycle.actions.retryReadiness?.(),
     selectedFile,
     selectedFileMeta,
@@ -496,11 +389,187 @@ export function useSubtitlesExtractLogic() {
     validation,
     viewPhase,
     workerHealthFailed,
-    workerHealthCheckedAt: requestLifecycle.readiness.lastCheckedAt,
+    workerHealthCheckedAt,
     workerHealthDetail,
-    workerHealthIsFetching: requestLifecycle.readiness.isFetching,
+    workerHealthIsFetching,
+    workerHealthIsRefreshing,
+    workerHealthStatus,
+  };
+}
+
+/** 정규화된 lifecycle 상태를 자막 화면의 최종 표시 모델로 만든다. */
+function createSubtitleLifecyclePresentation(input: {
+  /** 현재 API base URL. */
+  apiBaseUrl: string | undefined;
+  /** route가 보존한 업로드 용량 오류 안내. */
+  fileUploadErrorMessage: string;
+  /** deep module이 우선순위를 적용한 lifecycle 상태. */
+  lifecycle: RequestLifecyclePresentationInput<SubtitleJobResponse>;
+  /** 사용자가 선택한 로컬 영상 파일. */
+  selectedFile: File | null;
+  /** multipart 원본 업로드 진행률. */
+  uploadProgress: number | null;
+  /** 현재 파일 입력 검증 결과. */
+  validation: ReturnType<typeof validateSubtitleFile>;
+}) {
+  /** 오른쪽 status panel에 표시할 최신 job. */
+  const statusJob =
+    input.lifecycle.job ?? createIdleSubtitleJob(input.selectedFile);
+  /** 현재 readiness 상태. */
+  const workerHealthStatus = input.lifecycle.readiness.status;
+  /** 활성 job이 없어 worker health가 현재 화면을 결정하는지 여부. */
+  const workerHealthAffectsView = input.lifecycle.job === null;
+  /** worker health 확인 실패 여부. */
+  const workerHealthFailed =
+    workerHealthAffectsView && workerHealthStatus.kind === 'failed';
+  /** worker가 미가용 상태인지 여부. */
+  const workerUnavailable =
+    workerHealthAffectsView && workerHealthStatus.kind === 'unavailable';
+  /** lifecycle이 우선순위를 정한 현재 오류. */
+  const lifecycleError = input.lifecycle.error;
+  /** 자막 요청 오류의 원래 cause. */
+  const requestErrorCause =
+    lifecycleError?.source === 'request' ? lifecycleError.cause : null;
+  /** 업로드 용량 오류를 파일 선택 feedback으로 정규화할지 여부. */
+  const hasSubtitleUploadTooLargeError =
+    requestErrorCause instanceof SubtitleUploadTooLargeError ||
+    Boolean(input.fileUploadErrorMessage);
+  /** 자막 생성 요청 오류 안내 문구. */
+  const requestError = hasSubtitleUploadTooLargeError
+    ? input.selectedFile
+      ? createSubtitleUploadTooLargeMessage(input.selectedFile)
+      : input.fileUploadErrorMessage
+    : lifecycleError?.source === 'request'
+      ? lifecycleError.cause instanceof WorkerUnavailableError
+        ? WORKER_UNAVAILABLE_MESSAGE
+        : lifecycleError.cause instanceof Error &&
+            hasUserVisibleErrorDetail(lifecycleError.cause)
+          ? lifecycleError.cause.detail.guidance
+          : '영어 SRT 생성 요청에 실패했습니다. 다시 시도해 주세요.'
+      : '';
+  /** 자막 job 생성 요청 오류 상세 원인. */
+  const requestErrorDetail =
+    lifecycleError?.source === 'request' && !hasSubtitleUploadTooLargeError
+      ? createSubtitleRequestErrorDetail(lifecycleError.cause, requestError)
+      : undefined;
+  /** worker health 오류 상세 원인. */
+  const workerHealthErrorDetail = createWorkerHealthErrorDetail(
+    input.lifecycle.readiness.error instanceof Error
+      ? input.lifecycle.readiness.error
+      : null,
+  );
+  /** 현재 자막 job 상태 조회 오류 상세 원인. */
+  const jobStatusRequestErrorDetail =
+    lifecycleError?.source === 'status' && input.lifecycle.receipt
+      ? createJobStatusRequestErrorDetail(
+          lifecycleError.cause,
+          input.lifecycle.receipt,
+        )
+      : undefined;
+  /** failed·expired 자막 job 상세 원인. */
+  const terminalJobErrorDetail =
+    lifecycleError?.source === 'terminal' && input.lifecycle.receipt
+      ? createTerminalJobErrorDetail(statusJob, input.lifecycle.receipt)
+      : undefined;
+  /** 현재 readiness gate에서 열어 볼 health 상세 원인. */
+  const workerHealthDetail = workerHealthAffectsView
+    ? workerHealthStatus.kind === 'unavailable'
+      ? WORKER_UNAVAILABLE_DETAIL
+      : workerHealthStatus.kind === 'failed'
+        ? workerHealthErrorDetail ?? WORKER_HEALTH_FAILED_DETAIL
+        : undefined
+    : undefined;
+  /** 현재 상태 패널 상세 원인. */
+  const statusErrorDetail =
+    jobStatusRequestErrorDetail ??
+    terminalJobErrorDetail ??
+    requestErrorDetail ??
+    workerHealthDetail;
+  /** API job 생성 전 요청 처리 중인지 여부. */
+  const isSubmitting = input.lifecycle.isSubmitting;
+  /** 자막 생성 요청 가능 여부. */
+  const canSubmit =
+    input.validation.kind === 'ready' &&
+    workerHealthStatus.kind === 'ready' &&
+    (input.lifecycle.canSubmit || hasSubtitleUploadTooLargeError);
+  /** 제출 버튼이 비활성화된 이유. */
+  const submitDisabledReason = getWorkerHealthSubmitReason({
+    healthStatus: workerHealthStatus.kind,
+    isSubmitting,
+  });
+  /** 현재 상태 제목. */
+  const statusTitle =
+    (input.uploadProgress !== null ? '원본 영상을 업로드 중입니다' : '') ||
+    (isSubmitting ? '영어 SRT 생성 요청을 준비하고 있습니다' : '') ||
+    (requestError ? '영어 SRT 생성 요청에 실패했습니다' : '') ||
+    (jobStatusRequestErrorDetail ? '작업 상태를 확인할 수 없습니다' : '') ||
+    (workerHealthAffectsView
+      ? createWorkerHealthTitle({
+          failed: workerHealthFailed,
+          unavailable: workerUnavailable,
+        })
+      : '') ||
+    createStatusTitle(statusJob);
+  /** 현재 상태 문구. */
+  const statusMessage =
+    (input.uploadProgress !== null
+      ? `원본 영상을 준비하고 있습니다. (${input.uploadProgress}%)`
+      : '') ||
+    (isSubmitting ? '영어 SRT 생성 요청을 준비하고 있습니다.' : '') ||
+    requestError ||
+    jobStatusRequestErrorDetail?.guidance ||
+    (workerHealthAffectsView && workerHealthStatus.kind !== 'ready'
+      ? workerHealthStatus.message
+      : '') ||
+    statusJob.message ||
+    input.validation.message;
+
+  return {
+    canSubmit,
+    downloadHref: statusJob.downloadUrl
+      ? buildApiUrl(statusJob.downloadUrl, input.apiBaseUrl)
+      : '',
+    filledProgressCells:
+      input.uploadProgress !== null
+        ? Math.round(input.uploadProgress / 10)
+        : statusJob.progress === null
+          ? 0
+          : Math.round(statusJob.progress / 10),
+    hasSubtitleUploadTooLargeError,
+    isSubmitting,
+    requestError,
+    requestErrorCause,
+    requestNotice: input.lifecycle.requestNotice,
+    statusErrorDetail,
+    statusIconName:
+      input.uploadProgress !== null || isSubmitting
+        ? 'processing'
+        : jobStatusRequestErrorDetail ||
+            (workerHealthAffectsView &&
+              (workerHealthFailed || workerUnavailable))
+          ? 'failed'
+          : getStatusIconName(statusJob.displayStatus),
+    statusJob,
+    statusMessage,
+    statusTitle,
+    statusTone:
+      input.uploadProgress !== null || isSubmitting
+        ? 'processing'
+        : jobStatusRequestErrorDetail ||
+            (workerHealthAffectsView &&
+              (workerHealthFailed || workerUnavailable))
+          ? 'failed'
+          : getStatusTone(statusJob.displayStatus),
+    submitDisabledReason,
+    viewPhase: hasSubtitleUploadTooLargeError
+      ? ('request' as const)
+      : input.lifecycle.phase,
+    workerHealthDetail,
+    workerHealthFailed,
+    workerHealthCheckedAt: input.lifecycle.readiness.lastCheckedAt,
+    workerHealthIsFetching: input.lifecycle.readiness.isFetching,
     workerHealthIsRefreshing:
-      requestLifecycle.readiness.isFetching &&
+      input.lifecycle.readiness.isFetching &&
       workerHealthStatus.kind === 'ready',
     workerHealthStatus,
   };

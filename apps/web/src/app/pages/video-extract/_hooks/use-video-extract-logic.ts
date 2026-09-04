@@ -21,7 +21,10 @@ import { createVideoRequestAdapter } from '../../../adapters/video-request.adapt
 import { useNavigation } from '../../../components/navigation-context';
 import { type AppIconName } from '../../../components/app-icon';
 import { ROUTE_PATHS } from '../../../constants/route-paths.constant';
-import { useExtractionRequestLifecycle } from '../../../hooks/use-extraction-request-lifecycle';
+import {
+  type RequestLifecyclePresentationInput,
+  useExtractionRequestLifecycle,
+} from '../../../hooks/use-extraction-request-lifecycle';
 import {
   createJobStatusRequestErrorDetail,
   createTerminalJobErrorDetail,
@@ -82,6 +85,10 @@ export function useVideoExtractLogic() {
   });
   /** 추출 진행 중 route 이동 차단 상태를 갱신한다. */
   const { setHistoryDestination, setNavigationLocked } = useNavigation();
+  /** 현재 form 입력값. */
+  const draft = watch();
+  /** 현재 입력 검증 결과. */
+  const validation = validateDownloadDraft(draft);
   /** 영상 요청 통신을 lifecycle adapter seam에 연결한다. */
   const videoRequestAdapter = useMemo(
     () => createVideoRequestAdapter({ apiBaseUrl }),
@@ -90,6 +97,14 @@ export function useVideoExtractLogic() {
   /** 영상 route가 사용하는 추출 요청 생명주기 deep module. */
   const requestLifecycle = useExtractionRequestLifecycle({
     adapter: videoRequestAdapter,
+    createPresentation: (lifecycle) =>
+      createVideoLifecyclePresentation({
+        apiBaseUrl,
+        draft,
+        isValid,
+        lifecycle,
+        validation,
+      }),
     historyPath: ROUTE_PATHS.history,
     messages: {
       cancelled:
@@ -104,141 +119,35 @@ export function useVideoExtractLogic() {
 
   // Computed.
 
-  /** 현재 form 입력값. */
-  const draft = watch();
-  /** 현재 입력 검증 결과. */
-  const validation = validateDownloadDraft(draft);
   /** 현재 품질 선택지. */
   const qualityOptions =
     draft.mode === 'audio' ? AUDIO_QUALITY_OPTIONS : VIDEO_QUALITY_OPTIONS;
-  /** API job 생성 전 요청 처리 중인지 여부. */
-  const isSubmitting = requestLifecycle.phase === 'accepting';
-  /** 오른쪽 status panel에 표시할 최신 job. */
-  const statusJob = requestLifecycle.job ?? createIdleJob(draft);
-  /** 현재 readiness 상태. */
-  const workerHealthStatus = requestLifecycle.readiness.status;
-  /** 활성 job이 없어 worker health가 현재 화면을 결정하는지 여부. */
-  const workerHealthAffectsView = requestLifecycle.job === null;
-  /** worker health 확인 실패 여부. */
-  const workerHealthFailed =
-    workerHealthAffectsView && workerHealthStatus.kind === 'failed';
-  /** worker가 작업을 받을 수 없는지 여부. */
-  const workerUnavailable =
-    workerHealthAffectsView && workerHealthStatus.kind === 'unavailable';
-  /** lifecycle이 우선순위를 정한 현재 오류. */
-  const lifecycleError = requestLifecycle.error;
-  /** worker health 오류 상세 원인. */
-  const workerHealthErrorDetail = createWorkerHealthErrorDetail(
-    requestLifecycle.readiness.error instanceof Error
-      ? requestLifecycle.readiness.error
-      : null,
-  );
-  /** 영상 job 생성 요청 오류 상세 원인. */
-  const requestError =
-    lifecycleError?.source === 'request'
-      ? lifecycleError.cause instanceof WorkerUnavailableError
-        ? WORKER_UNAVAILABLE_MESSAGE
-        : '추출 요청에 실패했습니다. 다시 시도해 주세요.'
-      : '';
-  /** 영상 job 생성 요청 오류 상세 원인. */
-  const requestErrorDetail =
-    lifecycleError?.source === 'request'
-      ? createVideoRequestErrorDetail(lifecycleError.cause, requestError)
-      : undefined;
-  /** 현재 영상 job 상태 조회 오류 상세 원인. */
-  const jobStatusRequestErrorDetail =
-    lifecycleError?.source === 'status' && requestLifecycle.receipt
-      ? createJobStatusRequestErrorDetail(
-          lifecycleError.cause,
-          requestLifecycle.receipt,
-        )
-      : undefined;
-  /** failed·expired 영상 job 상세 원인. */
-  const terminalJobErrorDetail =
-    lifecycleError?.source === 'terminal' && requestLifecycle.receipt
-      ? createTerminalJobErrorDetail(statusJob, requestLifecycle.receipt)
-      : undefined;
-  /** 현재 readiness gate에서 열어 볼 health 상세 원인. */
-  const workerHealthDetail = workerHealthAffectsView
-    ? workerHealthStatus.kind === 'unavailable'
-      ? WORKER_UNAVAILABLE_DETAIL
-      : workerHealthStatus.kind === 'failed'
-        ? workerHealthErrorDetail ?? WORKER_HEALTH_FAILED_DETAIL
-        : undefined
-    : undefined;
-  /** 현재 상태 패널 상세 원인. */
-  const statusErrorDetail =
-    jobStatusRequestErrorDetail ??
-    terminalJobErrorDetail ??
-    requestErrorDetail ??
-    workerHealthDetail;
-  /** 추출 요청 가능 여부. */
-  const canSubmit =
-    validation.kind === 'ready' &&
-    isValid &&
-    requestLifecycle.canSubmit;
-  /** 제출 버튼이 비활성화된 이유. */
-  const submitDisabledReason = getWorkerHealthSubmitReason({
-    healthStatus: workerHealthStatus.kind,
+  /** lifecycle interface가 최종 우선순위를 적용한 영상 표시 모델. */
+  const {
+    canSubmit,
+    createdTime,
+    downloadHref,
+    filledProgressCells,
     isSubmitting,
-  });
-  /** 10칸 진행률 bar 중 채울 칸 수. */
-  const filledProgressCells =
-    statusJob.progress === null ? 0 : Math.round(statusJob.progress / 10);
-  /** 현재 상태 제목. */
-  const statusTitle =
-    (isSubmitting ? '추출 요청을 준비하고 있습니다' : '') ||
-    (requestError ? '추출 요청에 실패했습니다' : '') ||
-    (jobStatusRequestErrorDetail ? '작업 상태를 확인할 수 없습니다' : '') ||
-    (workerHealthAffectsView
-      ? createWorkerHealthTitle({
-          failed: workerHealthFailed,
-          unavailable: workerUnavailable,
-        })
-      : '') ||
-    createStatusTitle(statusJob);
-  /** 현재 상태 문구. */
-  const statusMessage =
-    (isSubmitting ? '요청을 접수하고 있습니다.' : '') ||
-    requestError ||
-    jobStatusRequestErrorDetail?.guidance ||
-    (workerHealthAffectsView && workerHealthStatus.kind !== 'ready'
-      ? workerHealthStatus.message
-      : '') ||
-    statusJob.message ||
-    validation.message;
-  /** 요청 시작 시각 표시값. */
-  const createdTime = formatTime(statusJob.createdAt);
-  /** 현재 상태 아이콘 이름. */
-  const statusIconName =
-    isSubmitting
-      ? 'processing'
-      : jobStatusRequestErrorDetail ||
-          requestErrorDetail ||
-          (workerHealthAffectsView && (workerHealthFailed || workerUnavailable))
-        ? 'failed'
-        : getStatusIconName(statusJob.displayStatus);
-  /** 현재 상태 표시 tone. */
-  const statusTone =
-    isSubmitting
-      ? 'processing'
-      : jobStatusRequestErrorDetail ||
-          requestErrorDetail ||
-          (workerHealthAffectsView && (workerHealthFailed || workerUnavailable))
-        ? 'failed'
-        : statusJob.displayStatus;
-  /** 현재 진행률 표시 문구. */
-  const progressLabel = createProgressLabel(statusJob);
-  /** 상태 패널 형식 표시값. */
-  const statusTypeLabel = statusJob.type === 'audio' ? '오디오' : '비디오';
-  /** 상태 패널 품질 표시값. */
-  const statusQualityLabel = formatQuality(statusJob);
-  /** 완료 asset 다운로드 href. */
-  const downloadHref = statusJob.downloadUrl
-    ? buildApiUrl(statusJob.downloadUrl, apiBaseUrl)
-    : '';
-  /** 현재 화면에 단독으로 표시할 추출 단계. */
-  const viewPhase = requestLifecycle.phase;
+    progressLabel,
+    requestNotice,
+    statusErrorDetail,
+    statusIconName,
+    statusJob,
+    statusMessage,
+    statusQualityLabel,
+    statusTitle,
+    statusTone,
+    statusTypeLabel,
+    submitDisabledReason,
+    viewPhase,
+    workerHealthDetail,
+    workerHealthFailed,
+    workerHealthCheckedAt,
+    workerHealthIsFetching,
+    workerHealthIsRefreshing,
+    workerHealthStatus,
+  } = requestLifecycle.presentation;
 
   // Functions.
 
@@ -285,6 +194,7 @@ export function useVideoExtractLogic() {
   /** 요청 오류에서 기존 입력을 유지한 채 요청 화면으로 돌아간다. */
   function returnToRequest() {
     requestLifecycle.actions.reset?.();
+    focusRequestStart();
   }
 
   // Effects.
@@ -377,16 +287,169 @@ export function useVideoExtractLogic() {
     statusTypeLabel,
     submitDisabledReason,
     cancelRequest,
-    requestNotice: requestLifecycle.requestNotice,
+    requestNotice,
     returnToRequest,
     validation,
     viewPhase,
-    workerHealthFailed: workerHealthAffectsView && workerHealthFailed,
-    workerHealthCheckedAt: requestLifecycle.readiness.lastCheckedAt,
+    workerHealthFailed,
+    workerHealthCheckedAt,
     workerHealthDetail,
-    workerHealthIsFetching: requestLifecycle.readiness.isFetching,
+    workerHealthIsFetching,
+    workerHealthIsRefreshing,
+    workerHealthStatus,
+  };
+}
+
+/** 정규화된 lifecycle 상태를 영상 화면의 최종 표시 모델로 만든다. */
+function createVideoLifecyclePresentation(input: {
+  /** 현재 API base URL. */
+  apiBaseUrl: string | undefined;
+  /** 현재 form 입력값. */
+  draft: DownloadDraft;
+  /** React Hook Form 검증 통과 여부. */
+  isValid: boolean;
+  /** deep module이 우선순위를 적용한 lifecycle 상태. */
+  lifecycle: RequestLifecyclePresentationInput<DownloadResponse>;
+  /** 현재 입력 검증 결과. */
+  validation: ReturnType<typeof validateDownloadDraft>;
+}) {
+  /** 오른쪽 status panel에 표시할 최신 job. */
+  const statusJob = input.lifecycle.job ?? createIdleJob(input.draft);
+  /** 현재 readiness 상태. */
+  const workerHealthStatus = input.lifecycle.readiness.status;
+  /** 활성 job이 없어 worker health가 현재 화면을 결정하는지 여부. */
+  const workerHealthAffectsView = input.lifecycle.job === null;
+  /** worker health 확인 실패 여부. */
+  const workerHealthFailed =
+    workerHealthAffectsView && workerHealthStatus.kind === 'failed';
+  /** worker가 작업을 받을 수 없는지 여부. */
+  const workerUnavailable =
+    workerHealthAffectsView && workerHealthStatus.kind === 'unavailable';
+  /** lifecycle이 우선순위를 정한 현재 오류. */
+  const lifecycleError = input.lifecycle.error;
+  /** worker health 오류 상세 원인. */
+  const workerHealthErrorDetail = createWorkerHealthErrorDetail(
+    input.lifecycle.readiness.error instanceof Error
+      ? input.lifecycle.readiness.error
+      : null,
+  );
+  /** 영상 job 생성 요청 오류 안내. */
+  const requestError =
+    lifecycleError?.source === 'request'
+      ? lifecycleError.cause instanceof WorkerUnavailableError
+        ? WORKER_UNAVAILABLE_MESSAGE
+        : '추출 요청에 실패했습니다. 다시 시도해 주세요.'
+      : '';
+  /** 영상 job 생성 요청 오류 상세 원인. */
+  const requestErrorDetail =
+    lifecycleError?.source === 'request'
+      ? createVideoRequestErrorDetail(lifecycleError.cause, requestError)
+      : undefined;
+  /** 현재 영상 job 상태 조회 오류 상세 원인. */
+  const jobStatusRequestErrorDetail =
+    lifecycleError?.source === 'status' && input.lifecycle.receipt
+      ? createJobStatusRequestErrorDetail(
+          lifecycleError.cause,
+          input.lifecycle.receipt,
+        )
+      : undefined;
+  /** failed·expired 영상 job 상세 원인. */
+  const terminalJobErrorDetail =
+    lifecycleError?.source === 'terminal' && input.lifecycle.receipt
+      ? createTerminalJobErrorDetail(statusJob, input.lifecycle.receipt)
+      : undefined;
+  /** 현재 readiness gate에서 열어 볼 health 상세 원인. */
+  const workerHealthDetail = workerHealthAffectsView
+    ? workerHealthStatus.kind === 'unavailable'
+      ? WORKER_UNAVAILABLE_DETAIL
+      : workerHealthStatus.kind === 'failed'
+        ? workerHealthErrorDetail ?? WORKER_HEALTH_FAILED_DETAIL
+        : undefined
+    : undefined;
+  /** 현재 상태 패널 상세 원인. */
+  const statusErrorDetail =
+    jobStatusRequestErrorDetail ??
+    terminalJobErrorDetail ??
+    requestErrorDetail ??
+    workerHealthDetail;
+  /** API job 생성 전 요청 처리 중인지 여부. */
+  const isSubmitting = input.lifecycle.isSubmitting;
+  /** 추출 요청 가능 여부. */
+  const canSubmit =
+    input.validation.kind === 'ready' &&
+    input.isValid &&
+    input.lifecycle.canSubmit;
+  /** 제출 버튼이 비활성화된 이유. */
+  const submitDisabledReason = getWorkerHealthSubmitReason({
+    healthStatus: workerHealthStatus.kind,
+    isSubmitting,
+  });
+  /** 현재 상태 제목. */
+  const statusTitle =
+    (isSubmitting ? '추출 요청을 준비하고 있습니다' : '') ||
+    (requestError ? '추출 요청에 실패했습니다' : '') ||
+    (jobStatusRequestErrorDetail ? '작업 상태를 확인할 수 없습니다' : '') ||
+    (workerHealthAffectsView
+      ? createWorkerHealthTitle({
+          failed: workerHealthFailed,
+          unavailable: workerUnavailable,
+        })
+      : '') ||
+    createStatusTitle(statusJob);
+  /** 현재 상태 문구. */
+  const statusMessage =
+    (isSubmitting ? '요청을 접수하고 있습니다.' : '') ||
+    requestError ||
+    jobStatusRequestErrorDetail?.guidance ||
+    (workerHealthAffectsView && workerHealthStatus.kind !== 'ready'
+      ? workerHealthStatus.message
+      : '') ||
+    statusJob.message ||
+    input.validation.message;
+
+  return {
+    canSubmit,
+    createdTime: formatTime(statusJob.createdAt),
+    downloadHref: statusJob.downloadUrl
+      ? buildApiUrl(statusJob.downloadUrl, input.apiBaseUrl)
+      : '',
+    filledProgressCells:
+      statusJob.progress === null ? 0 : Math.round(statusJob.progress / 10),
+    isSubmitting,
+    progressLabel: createProgressLabel(statusJob),
+    requestNotice: input.lifecycle.requestNotice,
+    statusErrorDetail,
+    statusIconName:
+      isSubmitting
+        ? 'processing'
+        : jobStatusRequestErrorDetail ||
+            requestErrorDetail ||
+            (workerHealthAffectsView &&
+              (workerHealthFailed || workerUnavailable))
+          ? 'failed'
+          : getStatusIconName(statusJob.displayStatus),
+    statusJob,
+    statusMessage,
+    statusQualityLabel: formatQuality(statusJob),
+    statusTitle,
+    statusTone:
+      isSubmitting
+        ? 'processing'
+        : jobStatusRequestErrorDetail ||
+            requestErrorDetail ||
+            (workerHealthAffectsView &&
+              (workerHealthFailed || workerUnavailable))
+          ? 'failed'
+          : statusJob.displayStatus,
+    statusTypeLabel: statusJob.type === 'audio' ? '오디오' : '비디오',
+    submitDisabledReason,
+    viewPhase: input.lifecycle.phase,
+    workerHealthDetail,
+    workerHealthFailed,
+    workerHealthCheckedAt: input.lifecycle.readiness.lastCheckedAt,
+    workerHealthIsFetching: input.lifecycle.readiness.isFetching,
     workerHealthIsRefreshing:
-      requestLifecycle.readiness.isFetching &&
+      input.lifecycle.readiness.isFetching &&
       workerHealthStatus.kind === 'ready',
     workerHealthStatus,
   };
