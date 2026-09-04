@@ -1,5 +1,4 @@
 import { useQuery } from '@tanstack/react-query';
-import { useEffect, useState } from 'react';
 import { getWorkerHealth } from '../../api/mytube-extract.api';
 import { getWorkerHealthStatus } from '../utils/worker-health-notice.util';
 
@@ -16,8 +15,6 @@ type WorkerReadinessInput = {
 
 /** 영상·자막 요청 전에 공유하는 API·worker readiness 상태를 관리한다. */
 export function useWorkerReadiness(input: WorkerReadinessInput) {
-  /** 마지막 worker health 확인 시작 시각(epoch milliseconds). */
-  const [workerHealthCheckedAt, setWorkerHealthCheckedAt] = useState(0);
   /** worker health query. */
   const workerHealthQuery = useQuery({
     queryKey: ['worker-health', input.apiBaseUrl],
@@ -55,18 +52,9 @@ export function useWorkerReadiness(input: WorkerReadinessInput) {
     void workerHealthQuery.refetch({ cancelRefetch: false });
   }
 
-  useEffect(
-    function recordWorkerHealthCheckTimestamp() {
-      if (workerHealthQuery.isFetching) {
-        setWorkerHealthCheckedAt(Date.now());
-      }
-    },
-    [workerHealthQuery.isFetching],
-  );
-
   return {
     retryWorkerHealth,
-    workerHealthCheckedAt,
+    workerHealthCheckedAt: workerHealthQuery.dataUpdatedAt,
     workerHealthFailed,
     workerHealthIsInitialChecking,
     workerHealthIsRefreshing,

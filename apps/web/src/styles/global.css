@@ -1929,16 +1929,20 @@ input:focus-visible,
 .bottom-tab-bar {
   position: fixed;
   z-index: 20;
-  right: 0;
   bottom: 0;
-  left: 0;
+  left: 50%;
   display: none;
+  width: calc(
+    100% - var(--layout-content-gutter) - var(--layout-content-gutter)
+  );
+  max-width: var(--layout-content-max-width);
   min-height: var(--layout-bottom-nav-height);
   grid-template-columns: repeat(3, minmax(0, 1fr));
   border: 0;
   border-top: 1px solid var(--color-border);
   background: var(--color-surface);
   padding-bottom: env(safe-area-inset-bottom);
+  transform: translateX(-50%);
 }
 
 .bottom-tab-bar .primary-navigation__link {

@@ -68,10 +68,11 @@ export function addJobReceipt(
   }
 
   try {
-    localStorage.setItem(
-      createReceiptKey(kind, parsedJobId.data),
-      JSON.stringify(parsedValue.data),
-    );
+    storeJobReceipt({
+      acceptedAt: parsedValue.data.acceptedAt,
+      jobId: parsedJobId.data,
+      kind,
+    });
 
     for (const receipt of listJobReceipts().receipts.slice(MAX_JOB_RECEIPTS)) {
       localStorage.removeItem(createReceiptKey(receipt.kind, receipt.jobId));
@@ -114,14 +115,10 @@ export function restoreJobReceipt(receipt: JobReceipt) {
     return false;
   }
 
-  // 기존 접수증 추가 seam으로 동일한 key와 acceptedAt을 저장한다.
-  if (
-    !addJobReceipt(
-      parsedReceipt.data.kind,
-      parsedReceipt.data.jobId,
-      parsedReceipt.data.acceptedAt,
-    )
-  ) {
+  try {
+    // 복원은 동시 추가된 다른 접수증을 용량 정리 대상으로 만들지 않는다.
+    storeJobReceipt(parsedReceipt.data);
+  } catch {
     return false;
   }
 
@@ -142,6 +139,14 @@ export function restoreJobReceipt(receipt: JobReceipt) {
 
 function createReceiptKey(kind: JobReceiptKind, jobId: string) {
   return `${JOB_RECEIPT_PREFIX}${kind}:${jobId}`;
+}
+
+/** 검증된 접수증을 정리 정책 없이 browser storage에 저장한다. */
+function storeJobReceipt(receipt: JobReceipt) {
+  localStorage.setItem(
+    createReceiptKey(receipt.kind, receipt.jobId),
+    JSON.stringify({ acceptedAt: receipt.acceptedAt }),
+  );
 }
 
 /** storage event key에서 유효한 접수증 종류와 job ID를 읽는다. */

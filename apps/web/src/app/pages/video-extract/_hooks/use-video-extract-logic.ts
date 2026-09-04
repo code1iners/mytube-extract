@@ -1,6 +1,6 @@
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useMutation } from '@tanstack/react-query';
-import { type ChangeEvent, useEffect, useRef, useState } from 'react';
+import { type ChangeEvent, useEffect, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import {
   AUDIO_QUALITY_OPTIONS,
@@ -19,12 +19,15 @@ import {
   assertWorkerAvailable,
   buildApiUrl,
   createDownloadJob,
-  isAbortError,
 } from '../../../../api/mytube-extract.api';
 import { useNavigation } from '../../../components/navigation-context';
 import { type AppIconName } from '../../../components/app-icon';
 import { ROUTE_PATHS } from '../../../constants/route-paths.constant';
 import { useActiveJobStatus } from '../../../hooks/use-active-job-status';
+import {
+  type RequestAttempt,
+  useRequestAttempt,
+} from '../../../hooks/use-request-attempt';
 import { useWorkerReadiness } from '../../../hooks/use-worker-readiness';
 import { getExtractViewPhase } from '../../../utils/extract-view-phase.util';
 import { acceptJobReceipt } from '../../../utils/job-receipt.util';
@@ -62,13 +65,6 @@ const WORKER_HEALTH_FAILED_DETAIL: UserVisibleErrorDetail = {
   requestPath: '/health',
 };
 
-type DownloadRequestAttempt = {
-  /** 이번 요청을 중단할 controller. */
-  controller: AbortController;
-  /** 사용자가 서버 job 생성 전에 중단을 눌렀는지 여부. */
-  cancelled: boolean;
-};
-
 /** 영상 추출 route의 form, polling, 표시 상태를 조합한다. */
 export function useVideoExtractLogic() {
   // Variables.
@@ -76,19 +72,12 @@ export function useVideoExtractLogic() {
   /** 현재 API base URL. */
   const apiBaseUrl = getApiBaseUrl();
 
-  // Refs.
-
-  /** 현재 job 생성 요청을 중단하기 위한 컨트롤러. */
-  const requestAttemptRef = useRef<DownloadRequestAttempt | null>(null);
-
   // States.
 
   /** 요청 실패 메시지. */
   const [requestError, setRequestError] = useState('');
   /** 요청 중단 또는 늦은 접수 결과를 보조 기술에 알릴 문구. */
   const [requestNotice, setRequestNotice] = useState('');
-  /** 중단 직후 mutation이 정리되기 전에도 navigation을 unlock할지 여부. */
-  const [requestCancelled, setRequestCancelled] = useState(false);
   /** 이 화면에서 상태를 확인할 직전 접수 job. */
   const [activeJob, setActiveJob] = useState<DownloadResponse | null>(null);
 
@@ -158,6 +147,18 @@ export function useVideoExtractLogic() {
   });
   /** 추출 진행 중 route 이동 차단 상태를 갱신한다. */
   const { setHistoryDestination, setNavigationLocked } = useNavigation();
+  /** job 생성 요청의 중단·응답 경쟁과 navigation lock 생명주기. */
+  const {
+    acceptRequestResult,
+    beginRequestAttempt,
+    cancelRequestAttempt,
+    finishRequestAttempt,
+    resetRequestAttempt,
+    shouldIgnoreRequestError,
+  } = useRequestAttempt({
+    navigationLocked: downloadJobMutation.isPending,
+    setNavigationLocked,
+  });
 
   // Computed.
 
@@ -168,9 +169,6 @@ export function useVideoExtractLogic() {
   /** 현재 품질 선택지. */
   const qualityOptions =
     draft.mode === 'audio' ? AUDIO_QUALITY_OPTIONS : VIDEO_QUALITY_OPTIONS;
-  /** route를 벗어나면 안 되는 추출 요청 접수 상태 여부. */
-  const extractionNavigationLocked =
-    downloadJobMutation.isPending && !requestCancelled;
   /** API job 생성 전 요청 처리 중인지 여부. */
   const isSubmitting = downloadJobMutation.isPending;
   /** 오른쪽 status panel에 표시할 최신 job. */
@@ -292,12 +290,6 @@ export function useVideoExtractLogic() {
     );
   }
 
-  /** 현재 job 생성 요청만 중단한다. */
-  function stopRequest() {
-    requestAttemptRef.current?.controller.abort();
-    requestAttemptRef.current = null;
-  }
-
   /** 입력 변경 후 이전 실패 상태를 초기화한다. */
   function clearRequestError() {
     setRequestError('');
@@ -324,30 +316,22 @@ export function useVideoExtractLogic() {
 
   /** 서버 job 생성 전 현재 요청만 중단하고 입력 상태를 유지한다. */
   function cancelRequest() {
-    const attempt = requestAttemptRef.current;
-
-    if (!attempt) {
+    if (!cancelRequestAttempt()) {
       return;
     }
 
-    attempt.cancelled = true;
-    attempt.controller.abort();
-    requestAttemptRef.current = null;
-    setRequestCancelled(true);
     setRequestError('');
     setRequestNotice(
       '요청을 중단했습니다. 입력한 설정은 그대로입니다. 다시 요청할 수 있습니다.',
     );
     setActiveJob(null);
     downloadJobMutation.reset();
-    setNavigationLocked(false);
     focusRequestStart();
   }
 
   /** 요청 오류에서 기존 입력을 유지한 채 요청 화면으로 돌아간다. */
   function returnToRequest() {
-    stopRequest();
-    setRequestCancelled(false);
+    resetRequestAttempt();
     setRequestError('');
     setRequestNotice('');
     setActiveJob(null);
@@ -355,23 +339,6 @@ export function useVideoExtractLogic() {
   }
 
   // Effects.
-
-  useEffect(
-    function cleanupDownloadRequest() {
-      return () => {
-        stopRequest();
-        setNavigationLocked(false);
-      };
-    },
-    [setNavigationLocked],
-  );
-
-  useEffect(
-    function syncExtractionNavigationLock() {
-      setNavigationLocked(extractionNavigationLocked);
-    },
-    [extractionNavigationLocked, setNavigationLocked],
-  );
 
   useEffect(
     function persistDownloadPreferences() {
@@ -431,39 +398,29 @@ export function useVideoExtractLogic() {
 
   /** 다운로드 실행 submit 이벤트를 처리한다. */
   async function handleDownloadSubmit(validDraft: DownloadDraft) {
-    stopRequest();
-    setRequestCancelled(false);
     setRequestError('');
     setRequestNotice('');
     /** 새 다운로드 job 생성 요청 시도. */
-    let attempt: DownloadRequestAttempt | undefined;
+    let attempt: RequestAttempt | undefined;
 
     try {
-      /** 새 다운로드 job 생성 요청 컨트롤러. */
-      const abortController = new AbortController();
-      attempt = {
-        cancelled: false,
-        controller: abortController,
-      };
-      requestAttemptRef.current = attempt;
+      attempt = beginRequestAttempt();
 
       /** 생성된 다운로드 job. */
       const job = await downloadJobMutation.mutateAsync({
         draft: validDraft,
-        signal: abortController.signal,
+        signal: attempt.controller.signal,
       });
 
       /** 접수증 저장 결과와 해당 job의 요청 내역 deep link. */
       const receiptDestination = acceptJobReceipt('video', job.jobId);
-      const isCurrentAttempt = requestAttemptRef.current === attempt;
 
-      if (attempt && (isCurrentAttempt || attempt.cancelled)) {
+      if (acceptRequestResult(attempt)) {
         setHistoryDestination(
           receiptDestination.storageFailed
             ? receiptDestination.to
             : ROUTE_PATHS.history,
         );
-        setRequestCancelled(false);
         setRequestNotice(
           attempt.cancelled
             ? '요청을 중단하는 동안 서버 작업이 접수되어 요청 내역에 보존했습니다.'
@@ -472,11 +429,7 @@ export function useVideoExtractLogic() {
         setActiveJob(job);
       }
     } catch (error) {
-      if (
-        attempt?.cancelled ||
-        requestAttemptRef.current !== attempt ||
-        isAbortError(error)
-      ) {
+      if (shouldIgnoreRequestError(attempt, error)) {
         return;
       }
 
@@ -486,9 +439,7 @@ export function useVideoExtractLogic() {
           : '추출 요청에 실패했습니다. 다시 시도해 주세요.',
       );
     } finally {
-      if (attempt && requestAttemptRef.current?.controller === attempt.controller) {
-        requestAttemptRef.current = null;
-      }
+      finishRequestAttempt(attempt);
     }
   }
 

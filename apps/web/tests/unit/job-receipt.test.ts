@@ -96,6 +96,37 @@ describe('job receipt', () => {
     ]);
   });
 
+  it('restores a receipt without pruning a concurrently added receipt', () => {
+    const storage = createStorage();
+    vi.stubGlobal('localStorage', storage);
+
+    for (let index = 0; index < 20; index += 1) {
+      addJobReceipt(
+        'video',
+        `00000000-0000-4000-8000-${String(index).padStart(12, '0')}`,
+        new Date(Date.UTC(2026, 7, 11, 0, index)).toISOString(),
+      );
+    }
+
+    /** 사용자가 삭제한 뒤 되돌릴 접수증. */
+    const removedReceipt = listJobReceipts().receipts[10]!;
+    removeJobReceipt(removedReceipt.kind, removedReceipt.jobId);
+    addJobReceipt(
+      'subtitle',
+      SUBTITLE_ID,
+      '2026-08-11T01:00:00.000Z',
+    );
+    /** 복원 전 동시 추가까지 반영된 다른 접수증 ID. */
+    const preservedJobIds = listJobReceipts().receipts.map(
+      (receipt) => receipt.jobId,
+    );
+
+    expect(restoreJobReceipt(removedReceipt)).toBe(true);
+    expect(listJobReceipts().receipts.map((receipt) => receipt.jobId)).toEqual(
+      expect.arrayContaining([...preservedJobIds, removedReceipt.jobId]),
+    );
+  });
+
   it('rejects invalid restore values and storage access failures', () => {
     const storage = createStorage();
     vi.stubGlobal('localStorage', storage);

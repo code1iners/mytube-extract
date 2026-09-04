@@ -1845,14 +1845,36 @@ async function verifyTerminalPolling() {
     });
 
     await page.goto(`${staticServer.origin}/history`);
+    await page.evaluate(() => {
+      /** polling 동안 live region에 표시된 상태 전환 공지. */
+      window.__historyStatusAnnouncements = [];
+      /** 짧게 교체되는 공지도 놓치지 않고 기록할 observer. */
+      const announcementObserver = new MutationObserver(() => {
+        /** 현재 live region에 표시된 공지. */
+        const message = document
+          .querySelector('.history-panel > .visually-hidden')
+          ?.textContent?.trim();
+
+        if (message) {
+          window.__historyStatusAnnouncements.push(message);
+        }
+      });
+      announcementObserver.observe(document.body, {
+        characterData: true,
+        childList: true,
+        subtree: true,
+      });
+    });
     await waitForCondition(
       async () =>
         (await page.locator('.history-status').getByText('완료', { exact: true }).count()) === 2,
     );
-    const statusAnnouncement = page.locator('.history-panel > .visually-hidden');
     await waitForCondition(async () => {
-      const message = await statusAnnouncement.innerText();
-      return message.includes('영상 요청') && message.includes('자막 요청');
+      /** 관찰 기간에 기록한 모든 상태 전환 공지. */
+      const messages = await page.evaluate(
+        () => window.__historyStatusAnnouncements.join(' '),
+      );
+      return messages.includes('영상 요청') && messages.includes('자막 요청');
     });
     /** terminal 상태에 도달했을 때 종류별 API 호출 수. */
     const terminalCallCounts = {
@@ -2564,7 +2586,7 @@ async function verifyPopulatedHistoryResponsiveLayout() {
 }
 
 async function verifyResponsivePrimaryNavigation() {
-  for (const width of [320, 390, 1280]) {
+  for (const width of [320, 390, 800, 1280]) {
     for (const theme of ['light', 'dark']) {
       /** 모바일 하단 내비게이션의 짧은 viewport 계약도 함께 확인한다. */
       const height = width <= 820 ? 640 : 900;
@@ -2901,6 +2923,13 @@ async function verifyResponsiveNavigationLayout(page, width, routePath) {
       true,
     );
     assert.equal(navigationMetrics.navigation.position, 'fixed');
+    /** 하단 탭과 본문이 공유해야 하는 콘텐츠 폭과 좌측 위치. */
+    const workspaceMetrics = await page.locator('.workspace').evaluate((element) => {
+      const rect = element.getBoundingClientRect();
+      return { left: rect.left, width: rect.width };
+    });
+    assert.equal(navigationMetrics.navigation.left, workspaceMetrics.left);
+    assert.equal(navigationMetrics.navigation.width, workspaceMetrics.width);
     assert.equal(
       await visibleNavigation.evaluate(() =>
         [...document.styleSheets].some((styleSheet) => {

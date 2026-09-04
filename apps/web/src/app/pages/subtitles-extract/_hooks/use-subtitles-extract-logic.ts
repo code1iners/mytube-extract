@@ -21,13 +21,16 @@ import {
   buildApiUrl,
   completeSubtitleUpload,
   createSubtitleUpload,
-  isAbortError,
   uploadSubtitleFileParts,
 } from '../../../../api/mytube-extract.api';
 import { useNavigation } from '../../../components/navigation-context';
 import { type AppIconName } from '../../../components/app-icon';
 import { ROUTE_PATHS } from '../../../constants/route-paths.constant';
 import { useActiveJobStatus } from '../../../hooks/use-active-job-status';
+import {
+  type RequestAttempt,
+  useRequestAttempt,
+} from '../../../hooks/use-request-attempt';
 import { useWorkerReadiness } from '../../../hooks/use-worker-readiness';
 import { getExtractViewPhase } from '../../../utils/extract-view-phase.util';
 import { acceptJobReceipt } from '../../../utils/job-receipt.util';
@@ -71,13 +74,6 @@ const DEFAULT_WHISPER_MODEL: SubtitleWhisperModel = 'base_en';
 /** 화면에 표시하는 자막 처리 단계. */
 export type SubtitleStepKey = 'file_select' | SubtitleJobResponse['stage'];
 
-type SubtitleRequestAttempt = {
-  /** 이번 요청을 중단할 controller. */
-  controller: AbortController;
-  /** 사용자가 서버 job 생성 전에 중단을 눌렀는지 여부. */
-  cancelled: boolean;
-};
-
 /** 자막 추출 route의 file upload, polling, 표시 상태를 조합한다. */
 export function useSubtitlesExtractLogic() {
   // Variables.
@@ -91,9 +87,6 @@ export function useSubtitlesExtractLogic() {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   /** 접근 가능한 파일 선택 버튼 DOM 참조. */
   const filePickerButtonRef = useRef<HTMLButtonElement | null>(null);
-  /** 현재 upload/job 생성 요청을 중단하기 위한 컨트롤러. */
-  const requestAttemptRef = useRef<SubtitleRequestAttempt | null>(null);
-
   // States.
 
   /** 사용자가 선택한 로컬 영상 파일. */
@@ -107,8 +100,6 @@ export function useSubtitlesExtractLogic() {
   const [requestError, setRequestError] = useState('');
   /** 요청 중단 또는 늦은 접수 결과를 보조 기술에 알릴 문구. */
   const [requestNotice, setRequestNotice] = useState('');
-  /** 중단 직후 mutation이 정리되기 전에도 navigation을 unlock할지 여부. */
-  const [requestCancelled, setRequestCancelled] = useState(false);
   /** R2 direct upload 진행률. */
   const [uploadProgress, setUploadProgress] = useState<number | null>(null);
   /** 이 화면에서 상태를 확인할 직전 접수 자막 job. */
@@ -192,14 +183,23 @@ export function useSubtitlesExtractLogic() {
   });
   /** 추출 진행 중 route 이동 차단 상태를 갱신한다. */
   const { setHistoryDestination, setNavigationLocked } = useNavigation();
+  /** job 생성 요청의 중단·응답 경쟁과 navigation lock 생명주기. */
+  const {
+    acceptRequestResult,
+    beginRequestAttempt,
+    cancelRequestAttempt,
+    finishRequestAttempt,
+    resetRequestAttempt,
+    shouldIgnoreRequestError,
+  } = useRequestAttempt({
+    navigationLocked: subtitleJobMutation.isPending,
+    setNavigationLocked,
+  });
 
   // Computed.
 
   /** 현재 파일 입력 검증 결과. */
   const validation = validateSubtitleFile(selectedFile);
-  /** route를 벗어나면 안 되는 자막 요청/진행 상태 여부. */
-  const subtitleNavigationLocked =
-    subtitleJobMutation.isPending && !requestCancelled;
   /** R2 업로드 session 생성부터 자막 job 생성까지의 요청 처리 여부. */
   const isSubmitting = subtitleJobMutation.isPending;
   /** 오른쪽 status panel에 표시할 job. */
@@ -355,18 +355,12 @@ export function useSubtitlesExtractLogic() {
     );
   }
 
-  /** 현재 upload/job 생성 요청만 중단한다. */
-  function stopRequest() {
-    requestAttemptRef.current?.controller.abort();
-    requestAttemptRef.current = null;
-  }
-
   /** 선택 파일과 이전 실패 상태를 초기화한다. */
   function clearSelectedFile() {
     setSelectedFile(null);
     setRequestError('');
     setRequestNotice('');
-    setRequestCancelled(false);
+    resetRequestAttempt();
     setUploadProgress(null);
     setActiveJob(null);
     subtitleJobMutation.reset();
@@ -384,7 +378,7 @@ export function useSubtitlesExtractLogic() {
     setSelectedFile(file);
     setRequestError('');
     setRequestNotice('');
-    setRequestCancelled(false);
+    resetRequestAttempt();
     setUploadProgress(null);
     setActiveJob(null);
     subtitleJobMutation.reset();
@@ -392,8 +386,7 @@ export function useSubtitlesExtractLogic() {
 
   /** 요청 오류에서 선택 파일을 유지한 채 요청 화면으로 돌아간다. */
   function returnToRequest() {
-    stopRequest();
-    setRequestCancelled(false);
+    resetRequestAttempt();
     setRequestError('');
     setRequestNotice('');
     setUploadProgress(null);
@@ -419,16 +412,10 @@ export function useSubtitlesExtractLogic() {
 
   /** 서버 job 생성 전 현재 요청만 중단하고 선택 파일을 유지한다. */
   function cancelRequest() {
-    const attempt = requestAttemptRef.current;
-
-    if (!attempt) {
+    if (!cancelRequestAttempt()) {
       return;
     }
 
-    attempt.cancelled = true;
-    attempt.controller.abort();
-    requestAttemptRef.current = null;
-    setRequestCancelled(true);
     setRequestError('');
     setRequestNotice(
       '요청을 중단했습니다. 선택한 파일과 처리 방식은 그대로입니다. 다시 요청할 수 있습니다.',
@@ -436,28 +423,10 @@ export function useSubtitlesExtractLogic() {
     setUploadProgress(null);
     setActiveJob(null);
     subtitleJobMutation.reset();
-    setNavigationLocked(false);
     focusRequestStart();
   }
 
   // Effects.
-
-  useEffect(
-    function cleanupSubtitleRequest() {
-      return () => {
-        stopRequest();
-        setNavigationLocked(false);
-      };
-    },
-    [setNavigationLocked],
-  );
-
-  useEffect(
-    function syncSubtitleNavigationLock() {
-      setNavigationLocked(subtitleNavigationLocked);
-    },
-    [setNavigationLocked, subtitleNavigationLocked],
-  );
 
   useEffect(
     function persistWhisperModelPreference() {
@@ -519,40 +488,30 @@ export function useSubtitlesExtractLogic() {
       return;
     }
 
-    stopRequest();
-    setRequestCancelled(false);
     setRequestError('');
     setRequestNotice('');
     subtitleJobMutation.reset();
     /** 새 자막 job 생성 요청 시도. */
-    let attempt: SubtitleRequestAttempt | undefined;
+    let attempt: RequestAttempt | undefined;
 
     try {
-      /** 새 자막 job 생성 요청 컨트롤러. */
-      const abortController = new AbortController();
-      attempt = {
-        cancelled: false,
-        controller: abortController,
-      };
-      requestAttemptRef.current = attempt;
+      attempt = beginRequestAttempt();
 
       /** 생성된 자막 job. */
       const job = await subtitleJobMutation.mutateAsync({
         file: selectedFile,
-        signal: abortController.signal,
+        signal: attempt.controller.signal,
       });
 
       /** 접수증 저장 결과와 해당 job의 요청 내역 deep link. */
       const receiptDestination = acceptJobReceipt('subtitle', job.jobId);
-      const isCurrentAttempt = requestAttemptRef.current === attempt;
 
-      if (attempt && (isCurrentAttempt || attempt.cancelled)) {
+      if (acceptRequestResult(attempt)) {
         setHistoryDestination(
           receiptDestination.storageFailed
             ? receiptDestination.to
             : ROUTE_PATHS.history,
         );
-        setRequestCancelled(false);
         setRequestNotice(
           attempt.cancelled
             ? '요청을 중단하는 동안 서버 작업이 접수되어 요청 내역에 보존했습니다.'
@@ -561,11 +520,7 @@ export function useSubtitlesExtractLogic() {
         setActiveJob(job);
       }
     } catch (error) {
-      if (
-        attempt?.cancelled ||
-        requestAttemptRef.current !== attempt ||
-        isAbortError(error)
-      ) {
+      if (shouldIgnoreRequestError(attempt, error)) {
         return;
       }
 
@@ -579,9 +534,7 @@ export function useSubtitlesExtractLogic() {
               : '영어 SRT 생성 요청에 실패했습니다. 다시 시도해 주세요.',
       );
     } finally {
-      if (attempt && requestAttemptRef.current?.controller === attempt.controller) {
-        requestAttemptRef.current = null;
-      }
+      finishRequestAttempt(attempt);
     }
   }
 
