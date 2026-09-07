@@ -297,8 +297,8 @@ a {
 }
 
 .theme-toggle__option input:checked + span,
-.segment.is-selected,
-.quality-chip.is-selected {
+.subtitle-request-panel .segment.is-selected,
+.subtitle-request-panel .quality-chip.is-selected {
   border-color: var(--color-action-primary);
   background: var(--color-surface);
   color: var(--color-text-primary);
@@ -313,7 +313,7 @@ a {
   z-index: 1;
 }
 
-.segment.is-selected .app-icon {
+.subtitle-request-panel .segment.is-selected .app-icon {
   color: var(--color-action-primary);
 }
 
@@ -410,8 +410,7 @@ a {
   color: var(--color-action-primary);
 }
 
-/* 영상·자막 요청은 입력 흐름을 먼저 읽도록 외곽 카드 표면을 사용하지 않는다. */
-.video-request-panel,
+/* 자막 요청은 입력 흐름을 먼저 읽도록 외곽 카드 표면을 사용하지 않는다. */
 .subtitle-request-panel {
   display: grid;
   gap: 24px;
@@ -422,13 +421,8 @@ a {
   box-shadow: none;
 }
 
-.video-request-panel .panel-title-row,
 .subtitle-request-panel .panel-title-row {
   margin-bottom: 0;
-}
-
-.video-request-panel .download-form {
-  gap: 24px;
 }
 
 .subtitle-request-panel .subtitle-form {
@@ -474,51 +468,25 @@ a {
   height: 16px;
 }
 
-.download-form,
 .subtitle-form {
   display: grid;
   gap: 20px;
 }
 
-.field {
+.subtitle-request-panel .field {
   display: grid;
   gap: 8px;
 }
 
-.field-label,
-.segmented-control legend,
-.quality-grid legend {
+.subtitle-request-panel .field-label,
+.subtitle-request-panel .segmented-control legend,
+.subtitle-request-panel .quality-grid legend {
   color: var(--color-text-primary);
   font-size: 16px;
   font-weight: 600;
 }
 
-.url-input-frame {
-  display: grid;
-  min-height: 48px;
-  align-items: center;
-  grid-template-columns: 28px minmax(0, 1fr) auto;
-  width: 100%;
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
-  background: var(--color-surface);
-}
-
-.url-input-frame:focus-within {
-  border-color: var(--color-focus);
-}
-
-/* 입력 포커스는 전체 프레임으로 옮기고 지우기 버튼의 개별 포커스는 유지한다. */
-.url-input-frame input:focus-visible {
-  outline: none;
-}
-
-.input-icon {
-  justify-self: center;
-  color: var(--color-text-secondary);
-}
-
-.field input {
+.subtitle-request-panel .field input {
   width: 100%;
   min-width: 0;
   min-height: 44px;
@@ -529,37 +497,23 @@ a {
   outline: none;
 }
 
-.field.has-error .url-input-frame {
+.subtitle-request-panel .field.has-error .url-input-frame {
   border-color: var(--color-status-failed);
 }
 
-.field-feedback {
+.subtitle-request-panel .field-feedback {
   margin: -2px 0 0;
   color: var(--color-text-secondary);
   font-size: 14px;
   line-height: 1.4;
 }
 
-.field-feedback--error {
+.subtitle-request-panel .field-feedback--error {
   color: var(--color-status-failed);
 }
 
-.url-reset-button {
-  min-width: 44px;
-  min-height: 44px;
-  margin-right: 8px;
-  padding: 0 8px;
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-sm);
-  background: var(--color-surface-alt);
-  color: var(--color-text-secondary);
-  cursor: pointer;
-  font-size: 14px;
-  font-weight: 600;
-}
-
-.segmented-control,
-.quality-grid {
+.subtitle-request-panel .segmented-control,
+.subtitle-request-panel .quality-grid {
   display: grid;
   gap: 12px 8px;
   margin: 0;
@@ -567,29 +521,29 @@ a {
   padding: 0;
 }
 
-.segmented-control {
+.subtitle-request-panel .segmented-control {
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
-.subtitle-processing-method {
+.subtitle-request-panel .subtitle-processing-method {
   grid-template-columns: minmax(0, 1fr);
   gap: 8px;
 }
 
-.segmented-control legend,
-.quality-grid legend {
+.subtitle-request-panel .segmented-control legend,
+.subtitle-request-panel .quality-grid legend {
   grid-column: 1 / -1;
   /* legend는 grid row-gap이 적용되지 않아 margin으로 직접 여백을 준다. */
   margin: 0 0 12px;
   padding: 0;
 }
 
-.subtitle-processing-method legend {
+.subtitle-request-panel .subtitle-processing-method legend {
   margin-bottom: 0;
 }
 
-.segment,
-.quality-chip {
+.subtitle-request-panel .segment,
+.subtitle-request-panel .quality-chip {
   display: flex;
   min-height: 48px;
   align-items: center;
@@ -714,15 +668,15 @@ a {
   word-break: keep-all;
 }
 
-.segment input,
-.quality-chip input {
+.subtitle-request-panel .segment input,
+.subtitle-request-panel .quality-chip input {
   position: absolute;
   width: 1px;
   height: 1px;
   opacity: 0;
 }
 
-.quality-grid {
+.subtitle-request-panel .quality-grid {
   grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
@@ -786,13 +740,11 @@ a {
 .primary-button:focus-visible,
 .secondary-button:focus-visible,
 .download-button:focus-visible,
-.url-reset-button:focus-visible,
 .selected-file-row button:focus-visible,
 .theme-toggle__option input:focus-visible + span,
 input:focus-visible,
-.url-input-frame:has(input:focus-visible),
-.segment:focus-within,
-.quality-chip:focus-within,
+.subtitle-request-panel .segment:focus-within,
+.subtitle-request-panel .quality-chip:focus-within,
 .subtitle-dropzone:focus-visible,
 .subtitle-processing-method__details summary:focus-visible {
   outline: 2px solid var(--color-focus);
@@ -802,11 +754,10 @@ input:focus-visible,
 @media (hover: hover) {
   .primary-navigation__link:not(.is-active, .is-disabled):hover,
   .secondary-button:not(:disabled):hover,
-  .url-reset-button:hover,
   .selected-file-row button:hover,
   .theme-toggle__option:hover span,
-  .segment:hover,
-  .quality-chip:hover,
+  .subtitle-request-panel .segment:hover,
+  .subtitle-request-panel .quality-chip:hover,
   .usage-guide summary:hover,
   .subtitle-processing-method__details summary:hover {
     background: var(--color-surface-alt);
@@ -1415,15 +1366,15 @@ input:focus-visible,
     padding: 16px;
   }
 
-  .segmented-control {
+  .subtitle-request-panel .segmented-control {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
-  .quality-grid {
+  .subtitle-request-panel .quality-grid {
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 
-  .subtitle-processing-method {
+  .subtitle-request-panel .subtitle-processing-method {
     grid-template-columns: minmax(0, 1fr);
   }
 
@@ -1453,7 +1404,6 @@ input:focus-visible,
 }
 
 @media (max-width: 560px) {
-  .video-request-panel,
   .subtitle-request-panel {
     gap: 16px;
   }

@@ -840,6 +840,8 @@ async function verifyVideoTaskFirstLayout() {
         await page.goto(`${staticServer.origin}/video`);
         await page.getByRole('heading', { name: '영상 추출' }).waitFor();
         await page.getByLabel('YouTube URL').waitFor();
+        /** 영상 요청 제출 button. */
+        const submit = page.getByRole('button', { name: '추출 요청' });
         assert.equal(await page.locator('.request-flow[data-flow-stage="source"]').count(), 1);
         assert.deepEqual(
           await page.locator('.request-flow__step > span:last-child').allTextContents(),
@@ -855,6 +857,98 @@ async function verifyVideoTaskFirstLayout() {
           ['360p', '720p', '1080p'],
         );
         await page.getByRole('radio', { name: /오디오/ }).check();
+
+        /** 현재 테마가 입력 control에 적용해야 하는 semantic 색상. */
+        const expectedVideoInputTheme = theme === 'dark'
+          ? {
+              action: 'rgb(230, 0, 18)',
+              border: 'rgb(118, 118, 118)',
+              danger: 'rgb(255, 138, 128)',
+              disabled: 'rgb(92, 89, 85)',
+              focus: 'rgb(169, 180, 242)',
+              onAction: 'rgb(255, 255, 255)',
+              surface: 'rgb(32, 33, 36)',
+              surfaceAlt: 'rgb(41, 42, 45)',
+              textPrimary: 'rgb(242, 240, 238)',
+            }
+          : {
+              action: 'rgb(230, 0, 18)',
+              border: 'rgb(138, 138, 138)',
+              danger: 'rgb(198, 40, 40)',
+              disabled: 'rgb(200, 200, 200)',
+              focus: 'rgb(75, 92, 206)',
+              onAction: 'rgb(255, 255, 255)',
+              surface: 'rgb(248, 248, 248)',
+              surfaceAlt: 'rgb(239, 239, 239)',
+              textPrimary: 'rgb(72, 72, 72)',
+            };
+        /** 영상 입력 control의 computed style을 읽는다. */
+        const inputStyles = await page.evaluate(() => {
+          /** URL 입력 frame. */
+          const urlFrame = document.querySelector('.url-input-frame');
+          /** 제출 button. */
+          const submit = document.querySelector('button[type="submit"]');
+          /** 형식 선택지. */
+          const formatOptions = [...document.querySelectorAll('.segmented-control label')];
+          /** 품질 선택지. */
+          const qualityOptions = [...document.querySelectorAll('.quality-grid label')];
+          /** 선택지 style을 직렬화한다. */
+          const serializeOption = (element) => {
+            const style = getComputedStyle(element);
+            return {
+              borderColor: style.borderTopColor,
+              textColor: style.color,
+              textDecoration: style.textDecorationLine,
+            };
+          };
+          /** 제출 button style을 직렬화한다. */
+          const submitStyle = getComputedStyle(submit);
+
+          return {
+            format: formatOptions.map(serializeOption),
+            frame: {
+              backgroundColor: getComputedStyle(urlFrame).backgroundColor,
+              borderColor: getComputedStyle(urlFrame).borderTopColor,
+              borderRadius: getComputedStyle(urlFrame).borderTopLeftRadius,
+            },
+            quality: qualityOptions.map(serializeOption),
+            submit: {
+              backgroundColor: submitStyle.backgroundColor,
+              boxShadow: submitStyle.boxShadow,
+              color: submitStyle.color,
+            },
+          };
+        });
+        assert.deepEqual(inputStyles.frame, {
+          backgroundColor: expectedVideoInputTheme.surface,
+          borderColor: expectedVideoInputTheme.border,
+          borderRadius: '8px',
+        });
+        assert.equal(inputStyles.format[0].borderColor, expectedVideoInputTheme.action);
+        assert.equal(inputStyles.format[0].textColor, expectedVideoInputTheme.textPrimary);
+        assert.equal(inputStyles.format[0].textDecoration, 'underline');
+        assert.equal(inputStyles.format[1].borderColor, expectedVideoInputTheme.border);
+        assert.equal(inputStyles.format[1].textDecoration, 'none');
+        assert.equal(inputStyles.quality.at(-1).borderColor, expectedVideoInputTheme.action);
+        assert.equal(inputStyles.quality.at(-1).textDecoration, 'underline');
+        assert.equal(inputStyles.submit.backgroundColor, expectedVideoInputTheme.surfaceAlt);
+        assert.doesNotMatch(inputStyles.submit.boxShadow, /2px 8px/);
+        assert.equal(inputStyles.submit.color, expectedVideoInputTheme.disabled);
+
+        await page.getByLabel('YouTube URL').focus();
+        const focusedFrameStyles = await page.locator('.url-input-frame').evaluate((element) => {
+          const style = getComputedStyle(element);
+          return {
+            borderColor: style.borderTopColor,
+            outlineOffset: style.outlineOffset,
+            outlineWidth: style.outlineWidth,
+          };
+        });
+        assert.deepEqual(focusedFrameStyles, {
+          borderColor: expectedVideoInputTheme.focus,
+          outlineOffset: '2px',
+          outlineWidth: '2px',
+        });
 
         /** 작업 입력과 보조 readiness의 DOM 위치. */
         const documentOrder = await page.evaluate(() => {
@@ -967,9 +1061,29 @@ async function verifyVideoTaskFirstLayout() {
         }
 
         assert.equal(await page.getByRole('button', { name: '지우기' }).count(), 0);
+        await page.getByLabel('YouTube URL').fill('not-a-url');
+        await waitForCondition(async () =>
+          (await page.getByLabel('YouTube URL').getAttribute('aria-invalid')) === 'true',
+        );
+        const invalidFrameColor = await page.locator('.url-input-frame').evaluate(
+          (element) => getComputedStyle(element).borderTopColor,
+        );
+        assert.equal(invalidFrameColor, expectedVideoInputTheme.danger);
         await page.getByLabel('YouTube URL').fill('https://youtu.be/abc123_DEF0');
         /** 입력값이 있을 때 표시되는 URL 지우기 button. */
         const resetButton = page.getByRole('button', { name: '지우기' });
+        await waitForEnabled(submit);
+        const enabledSubmitStyles = await submit.evaluate((element) => {
+          const style = getComputedStyle(element);
+          return {
+            backgroundColor: style.backgroundColor,
+            boxShadow: style.boxShadow,
+            color: style.color,
+          };
+        });
+        assert.equal(enabledSubmitStyles.backgroundColor, expectedVideoInputTheme.action);
+        assert.match(enabledSubmitStyles.boxShadow, /2px 8px/);
+        assert.equal(enabledSubmitStyles.color, expectedVideoInputTheme.onAction);
         await page.locator('.usage-guide summary').click();
         /** 더보기 메뉴 안의 설정 navigation link. */
         const settingsLink = page.getByRole('link', { name: '설정' });

@@ -25,6 +25,55 @@ const VIDEO_ERROR_DETAIL_SUMMARY =
   '영상 추출 요청이 정상적으로 처리되지 않았습니다.';
 /** 영상 route worker health 제목 id. */
 const VIDEO_WORKER_HEALTH_TITLE_ID = 'video-worker-health-title';
+/** 영상 요청 panel의 Tailwind layout className. */
+const VIDEO_REQUEST_PANEL_CLASS_NAME =
+  'phase-panel video-request-panel grid min-w-0 gap-mytube-24 p-0 max-[560px]:gap-mytube-16';
+/** 영상 요청 form의 Tailwind layout className. */
+const VIDEO_REQUEST_FORM_CLASS_NAME = 'download-form grid gap-mytube-24';
+/** 영상 URL field의 Tailwind layout className. */
+const VIDEO_URL_FIELD_CLASS_NAME = 'field field--wide grid gap-mytube-8';
+/** 영상 URL field label의 Tailwind typography className. */
+const VIDEO_URL_FIELD_LABEL_CLASS_NAME =
+  'field-label text-mytube-text-primary text-[16px] font-semibold leading-[1.4]';
+/** 영상 URL 입력 frame의 Tailwind layout·state className. */
+const VIDEO_URL_INPUT_FRAME_CLASS_NAME =
+  'url-input-frame grid min-h-[48px] w-full grid-cols-[28px_minmax(0,1fr)_auto] items-center border border-mytube-border rounded-mytube-md bg-mytube-surface focus-within:border-mytube-focus focus-within:outline-2 focus-within:outline-mytube-focus focus-within:outline-offset-2';
+/** 영상 URL input의 Tailwind reset·typography className. */
+const VIDEO_URL_INPUT_CLASS_NAME =
+  'w-full min-w-0 min-h-[44px] border-0 bg-transparent py-[9px] pr-[13px] pl-0 text-mytube-text-primary outline-none focus-visible:!outline-none';
+/** 영상 URL 지우기 button의 Tailwind state className. */
+const VIDEO_URL_RESET_CLASS_NAME =
+  'url-reset-button min-w-[44px] min-h-[44px] mr-mytube-8 px-mytube-8 border border-mytube-border rounded-mytube-sm bg-mytube-surface-alt text-mytube-text-secondary cursor-pointer text-[14px] font-semibold focus-visible:outline-2 focus-visible:outline-mytube-focus focus-visible:outline-offset-2 hover:bg-mytube-surface-alt hover:text-mytube-text-primary';
+/** 영상 URL 입력 피드백의 Tailwind typography className. */
+const VIDEO_FIELD_FEEDBACK_CLASS_NAME =
+  'field-feedback m-[-2px_0_0] text-mytube-text-secondary text-[14px] leading-[1.4]';
+/** 영상 요청 fieldset의 Tailwind layout className. */
+const VIDEO_OPTION_FIELDSET_CLASS_NAME =
+  'grid min-w-0 gap-y-[12px] gap-x-mytube-8 m-0 border-0 p-0';
+/** 영상 형식 선택 fieldset의 Tailwind column className. */
+const VIDEO_FORMAT_FIELDSET_CLASS_NAME =
+  `segmented-control ${VIDEO_OPTION_FIELDSET_CLASS_NAME} grid-cols-2`;
+/** 영상 품질 선택 fieldset의 Tailwind column className. */
+const VIDEO_QUALITY_FIELDSET_CLASS_NAME =
+  `quality-grid ${VIDEO_OPTION_FIELDSET_CLASS_NAME} grid-cols-3`;
+/** 영상 option legend의 Tailwind typography className. */
+const VIDEO_OPTION_LEGEND_CLASS_NAME =
+  'col-span-full m-0 mb-mytube-12 p-0 text-mytube-text-primary text-[16px] font-semibold leading-[1.4]';
+/** 영상 option label의 공통 Tailwind layout·state className. */
+const VIDEO_OPTION_BASE_CLASS_NAME =
+  'flex min-h-[48px] items-center justify-center gap-mytube-8 border border-mytube-border rounded-mytube-md bg-mytube-surface text-mytube-text-secondary cursor-pointer font-semibold focus-within:outline-2 focus-within:outline-mytube-focus focus-within:outline-offset-2 hover:bg-mytube-surface-alt hover:text-mytube-text-primary';
+/** 선택된 영상 option의 Tailwind state className. */
+const VIDEO_OPTION_SELECTED_CLASS_NAME =
+  'is-selected !border-mytube-action-primary bg-mytube-surface !text-mytube-text-primary underline decoration-mytube-text-primary decoration-2 underline-offset-4';
+/** 영상 option 안의 native radio input을 시각적으로 숨기는 className. */
+const VIDEO_OPTION_INPUT_CLASS_NAME =
+  'absolute h-px w-px opacity-0';
+/** 영상 제출 button의 Tailwind state className. */
+const VIDEO_SUBMIT_BUTTON_CLASS_NAME =
+  'video-submit-button inline-flex w-full min-h-[48px] items-center justify-center gap-mytube-8 border border-mytube-action-primary rounded-mytube-md bg-mytube-action-primary text-mytube-on-primary cursor-pointer text-[18px] font-semibold leading-[1] shadow-mytube-soft focus-visible:outline-2 focus-visible:outline-mytube-focus focus-visible:outline-offset-2 enabled:hover:brightness-[0.92] enabled:active:brightness-[0.84] disabled:border-mytube-border disabled:bg-mytube-surface-alt disabled:text-mytube-text-disabled disabled:cursor-not-allowed disabled:!shadow-none';
+/** 영상 제출 불가 사유의 Tailwind typography className. */
+const VIDEO_SUBMIT_DISABLED_REASON_CLASS_NAME =
+  'video-submit-disabled-reason m-[-12px_0_0] text-mytube-text-secondary text-[14px] leading-[1.4] break-keep';
 
 /** 영상 추출 route page. */
 export function VideoExtractPage() {
@@ -89,7 +138,7 @@ export function VideoExtractPage() {
 
   if (viewPhase === 'request') {
     return (
-      <section className="phase-panel video-request-panel" aria-labelledby="request-title">
+      <section className={VIDEO_REQUEST_PANEL_CLASS_NAME} aria-labelledby="request-title">
         <PanelTitle
           icon="download"
           id="request-title"
@@ -108,22 +157,23 @@ export function VideoExtractPage() {
         <RequestFlow current="source" />
         {requestNotice ? <RequestNotice message={requestNotice} /> : null}
 
-        <form className="download-form" onSubmit={handleDownloadFormSubmit}>
-          <label className={validation.kind === 'invalid' ? 'field field--wide has-error' : 'field field--wide'}>
-            <span className="field-label">YouTube URL</span>
-            <span className="url-input-frame">
-              <AppIcon className="input-icon" name="link" />
+        <form className={VIDEO_REQUEST_FORM_CLASS_NAME} onSubmit={handleDownloadFormSubmit}>
+          <label className={`${VIDEO_URL_FIELD_CLASS_NAME}${validation.kind === 'invalid' ? ' has-error' : ''}`}>
+            <span className={VIDEO_URL_FIELD_LABEL_CLASS_NAME}>YouTube URL</span>
+            <span className={`${VIDEO_URL_INPUT_FRAME_CLASS_NAME}${validation.kind === 'invalid' ? ' !border-mytube-status-failed' : ''}`}>
+              <AppIcon className="input-icon justify-self-center text-mytube-text-secondary" name="link" />
               <input
                 autoComplete="off"
                 aria-describedby={validation.kind === 'ready' ? undefined : 'video-source-url-feedback'}
                 aria-invalid={validation.kind === 'invalid' || undefined}
+                className={VIDEO_URL_INPUT_CLASS_NAME}
                 placeholder="https://www.youtube.com/watch?v=..."
                 type="url"
                 {...register('sourceUrl', { onChange: clearRequestError })}
               />
               {draft.sourceUrl ? (
                 <button
-                  className="url-reset-button"
+                  className={VIDEO_URL_RESET_CLASS_NAME}
                   type="button"
                   onClick={handleSourceUrlReset}
                 >
@@ -131,29 +181,29 @@ export function VideoExtractPage() {
                 </button>
               ) : null}
             </span>
-            {validation.kind !== 'ready' ? <p className={validation.kind === 'invalid' ? 'field-feedback field-feedback--error' : 'field-feedback'} id="video-source-url-feedback" role={validation.kind === 'invalid' ? 'alert' : undefined}>{validation.message}</p> : null}
+            {validation.kind !== 'ready' ? <p className={`${VIDEO_FIELD_FEEDBACK_CLASS_NAME}${validation.kind === 'invalid' ? ' text-mytube-status-failed' : ''}`} id="video-source-url-feedback" role={validation.kind === 'invalid' ? 'alert' : undefined}>{validation.message}</p> : null}
             <p className="keyboard-shortcut-hint"><kbd>U</kbd> 키로 URL 입력에 바로 포커스</p>
           </label>
 
-          <fieldset className="segmented-control">
-            <legend>추출 형식</legend>
-            <label className={draft.mode === 'audio' ? 'segment is-selected' : 'segment'}>
-              <input checked={draft.mode === 'audio'} type="radio" value="audio" {...register('mode', { onChange: handleModeChange })} />
-              <AppIcon name="audio" />
+          <fieldset className={VIDEO_FORMAT_FIELDSET_CLASS_NAME}>
+            <legend className={VIDEO_OPTION_LEGEND_CLASS_NAME}>추출 형식</legend>
+            <label className={`${VIDEO_OPTION_BASE_CLASS_NAME}${draft.mode === 'audio' ? ` ${VIDEO_OPTION_SELECTED_CLASS_NAME}` : ''} segment`}>
+              <input className={VIDEO_OPTION_INPUT_CLASS_NAME} checked={draft.mode === 'audio'} type="radio" value="audio" {...register('mode', { onChange: handleModeChange })} />
+              <AppIcon className={draft.mode === 'audio' ? 'text-mytube-action-primary' : ''} name="audio" />
               오디오 (MP3)
             </label>
-            <label className={draft.mode === 'video' ? 'segment is-selected' : 'segment'}>
-              <input checked={draft.mode === 'video'} type="radio" value="video" {...register('mode', { onChange: handleModeChange })} />
-              <AppIcon name="video" />
+            <label className={`${VIDEO_OPTION_BASE_CLASS_NAME}${draft.mode === 'video' ? ` ${VIDEO_OPTION_SELECTED_CLASS_NAME}` : ''} segment`}>
+              <input className={VIDEO_OPTION_INPUT_CLASS_NAME} checked={draft.mode === 'video'} type="radio" value="video" {...register('mode', { onChange: handleModeChange })} />
+              <AppIcon className={draft.mode === 'video' ? 'text-mytube-action-primary' : ''} name="video" />
               비디오 (MP4)
             </label>
           </fieldset>
 
-          <fieldset className="quality-grid">
-            <legend>품질</legend>
+          <fieldset className={VIDEO_QUALITY_FIELDSET_CLASS_NAME}>
+            <legend className={VIDEO_OPTION_LEGEND_CLASS_NAME}>품질</legend>
             {qualityOptions.map((option) => (
-              <label className={draft.quality === option.value ? 'quality-chip is-selected' : 'quality-chip'} key={option.value}>
-                <input type="radio" value={option.value} {...register('quality', { onChange: clearRequestError })} />
+              <label className={`${VIDEO_OPTION_BASE_CLASS_NAME}${draft.quality === option.value ? ` ${VIDEO_OPTION_SELECTED_CLASS_NAME}` : ''} quality-chip`} key={option.value}>
+                <input className={VIDEO_OPTION_INPUT_CLASS_NAME} type="radio" value={option.value} {...register('quality', { onChange: clearRequestError })} />
                 {option.label}
               </label>
             ))}
@@ -165,7 +215,7 @@ export function VideoExtractPage() {
                 ? 'video-submit-disabled-reason'
                 : undefined
             }
-            className="primary-button"
+            className={VIDEO_SUBMIT_BUTTON_CLASS_NAME}
             disabled={!canSubmit}
             type="submit"
           >
@@ -173,7 +223,7 @@ export function VideoExtractPage() {
             {isDownloadPending ? '요청 중' : '추출 요청'}
           </button>
           {!canSubmit && submitDisabledReason ? (
-            <p className="submit-disabled-reason" id="video-submit-disabled-reason">
+            <p className={VIDEO_SUBMIT_DISABLED_REASON_CLASS_NAME} id="video-submit-disabled-reason">
               {submitDisabledReason}
             </p>
           ) : null}

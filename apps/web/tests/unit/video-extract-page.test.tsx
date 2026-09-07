@@ -47,12 +47,12 @@ describe('video extract page', () => {
     expect(markup).not.toContain('video-submit-disabled-reason');
     expect(markup).toContain('YouTube URL을 입력해 주세요.');
     expect(markup.indexOf('YouTube URL')).toBeLessThan(
-      markup.indexOf('<legend>추출 형식</legend>'),
+      markup.indexOf('>추출 형식</legend>'),
     );
-    expect(markup.indexOf('<legend>추출 형식</legend>')).toBeLessThan(
-      markup.indexOf('<legend>품질</legend>'),
+    expect(markup.indexOf('>추출 형식</legend>')).toBeLessThan(
+      markup.indexOf('>품질</legend>'),
     );
-    expect(markup.indexOf('<legend>품질</legend>')).toBeLessThan(
+    expect(markup.indexOf('>품질</legend>')).toBeLessThan(
       markup.indexOf('추출 요청</button>'),
     );
     expect(markup.indexOf('data-health-status="ready"')).toBeLessThan(
@@ -129,7 +129,7 @@ describe('video extract page', () => {
     /** URL이 입력된 요청 화면의 정적 HTML. */
     const markup = renderToStaticMarkup(<VideoExtractPage />);
 
-    expect(markup).toContain('class="url-reset-button"');
+    expect(markup).toMatch(/class="[^"]*\burl-reset-button\b[^"]*"/);
     expect(markup).toContain('>지우기</button>');
     expect(markup).not.toContain('>리셋</button>');
   });
