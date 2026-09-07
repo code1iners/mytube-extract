@@ -732,11 +732,6 @@ a {
   font-size: 14px;
 }
 
-.secondary-button--new-request {
-  gap: 8px;
-  padding: 0 16px;
-}
-
 .primary-button:focus-visible,
 .secondary-button:focus-visible,
 .download-button:focus-visible,
@@ -880,7 +875,6 @@ input:focus-visible,
   color: var(--color-status-expired);
 }
 
-.step-tabs,
 .subtitle-step-tabs {
   display: grid;
   gap: 8px;
@@ -1336,15 +1330,6 @@ input:focus-visible,
   margin-top: 20px;
 }
 
-.result-actions--video {
-  grid-template-columns: minmax(0, 1fr) 160px;
-}
-
-.result-actions--video .download-button,
-.secondary-button--new-request {
-  min-height: 48px;
-}
-
 /* Native safe-area inset은 Tailwind의 일반 spacing 토큰으로 표현하지 않는다. */
 .bottom-tab-bar {
   padding-bottom: env(safe-area-inset-bottom);
@@ -1452,13 +1437,8 @@ input:focus-visible,
     border-left: 0;
   }
 
-  .result-actions,
-  .result-actions--video {
+  .result-actions {
     grid-template-columns: 1fr;
-  }
-
-  .secondary-button--new-request {
-    width: 100%;
   }
 }
 

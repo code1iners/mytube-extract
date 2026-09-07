@@ -136,6 +136,7 @@ describe('video extract page', () => {
 
   it('shows a lightweight acceptance status without a progress meter', () => {
     videoExtractLogic.mockReturnValue({
+      cancelRequest: () => undefined,
       statusIconName: 'processing',
       statusMessage: '추출 요청을 접수하고 있습니다.',
       statusTitle: '요청을 접수하고 있습니다',
@@ -149,6 +150,47 @@ describe('video extract page', () => {
     expect(markup).toContain('요청을 접수하고 있습니다');
     expect(markup).not.toContain('progress-meter');
     expect(markup).not.toContain('step-tabs');
+  });
+
+  it('keeps video lifecycle surfaces on dedicated Tailwind classes', () => {
+    videoExtractLogic.mockReturnValue({
+      cancelRequest: () => undefined,
+      statusIconName: 'processing',
+      statusMessage: '추출 요청을 접수하고 있습니다.',
+      statusTitle: '요청을 접수하고 있습니다',
+      statusTone: 'processing',
+      viewPhase: 'accepting',
+    });
+
+    /** 영상 접수 중 화면의 정적 HTML. */
+    const acceptingMarkup = renderToStaticMarkup(<VideoExtractPage />);
+
+    expect(acceptingMarkup).toContain('video-status-panel');
+    expect(acceptingMarkup).toContain('video-status-head');
+    expect(acceptingMarkup).not.toContain('console-panel');
+    expect(acceptingMarkup).not.toMatch(/(?:class="| )status-panel(?: |")/);
+    expect(acceptingMarkup).not.toMatch(/(?:class="| )secondary-button(?: |")/);
+
+    videoExtractLogic.mockReturnValue({
+      downloadHref: 'https://api.example.test/downloads/job-1/file',
+      returnToRequest: () => undefined,
+      statusJob: {
+        retentionDays: 7,
+      },
+      statusMessage: '파일이 준비되었습니다.',
+      statusQualityLabel: '720p',
+      statusTitle: '파일이 준비되었습니다',
+      statusTypeLabel: '비디오',
+      viewPhase: 'result',
+    });
+
+    /** 영상 완료 결과 화면의 정적 HTML. */
+    const resultMarkup = renderToStaticMarkup(<VideoExtractPage />);
+
+    expect(resultMarkup).toContain('video-result-actions');
+    expect(resultMarkup).toContain('video-download-button');
+    expect(resultMarkup).not.toContain('result-actions--video');
+    expect(resultMarkup).not.toMatch(/(?:class="| )download-button(?: |")/);
   });
 
   it('marks the selected processing step as the current step', () => {
@@ -221,8 +263,10 @@ describe('video extract page', () => {
         responseBody: 'upstream failure',
         responseStatus: 502,
       },
+      statusIconName: 'failed',
       statusMessage: '영상 추출 요청을 다시 시도해 주세요.',
       statusTitle: '추출에 실패했습니다',
+      statusTone: 'failed',
       viewPhase: 'error',
       workerHealthFailed: false,
     });
