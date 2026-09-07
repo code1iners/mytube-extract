@@ -3230,24 +3230,58 @@ async function verifyPopulatedHistoryResponsiveLayout() {
           );
         }, theme);
         await seedReceipts(page, [
-          ['subtitle', SUBTITLE_ID, '2026-08-11T00:01:00.000Z'],
+          ['video', VIDEO_ID, '2026-08-11T00:03:00.000Z'],
+          ['subtitle', SUBTITLE_ID, '2026-08-11T00:02:00.000Z'],
+          ['video', VIDEO_OTHER_ID, '2026-08-11T00:01:00.000Z'],
+          ['subtitle', SUBTITLE_OTHER_ID, '2026-08-11T00:00:00.000Z'],
         ]);
         await routeApi(page, async ({ route, url }) => {
+          if (url.pathname === `/downloads/${VIDEO_ID}`) {
+            return fulfillJson(route, videoJob(VIDEO_ID, 'processing'));
+          }
           if (url.pathname === `/subtitles/jobs/${SUBTITLE_ID}`) {
             return fulfillJson(route, {
               ...subtitleJob(SUBTITLE_ID, 'completed'),
               fileName: longFileName,
             });
           }
+          if (url.pathname === `/downloads/${VIDEO_OTHER_ID}`) {
+            return fulfillJson(route, videoJob(VIDEO_OTHER_ID, 'failed'));
+          }
+          if (url.pathname === `/subtitles/jobs/${SUBTITLE_OTHER_ID}`) {
+            return fulfillJson(route, subtitleJob(SUBTITLE_OTHER_ID, 'expired'));
+          }
 
           return fulfillJson(route, {}, 404);
         });
         await page.goto(`${staticServer.origin}/history`);
         const detail = page.locator('.history-item__header p');
-        await detail.waitFor();
+        await detail.first().waitFor();
         await waitForCondition(
-          async () => (await detail.textContent())?.includes(longFileName),
+          async () =>
+            (await detail.allTextContents()).some((text) =>
+              text.includes(longFileName),
+            ),
         );
+        assert.equal(await page.locator('.history-item').count(), 4);
+        assert.deepEqual(
+          await page.locator('.history-item h3').allTextContents(),
+          ['영상 요청', '자막 요청', '영상 요청', '자막 요청'],
+        );
+        assert.deepEqual(
+          await page.locator('.history-status').allTextContents(),
+          ['처리 중', '완료', '실패', '만료'],
+        );
+        assert.deepEqual(
+          await page.locator('.history-progress span').allTextContents(),
+          ['50%', '100%', '0%', '0%'],
+        );
+        assert.equal(await page.locator('.history-status--processing').count(), 1);
+        assert.equal(await page.locator('.history-status--completed').count(), 1);
+        assert.equal(await page.locator('.history-status--failed').count(), 1);
+        assert.equal(await page.locator('.history-status--expired').count(), 1);
+        assert.equal(await page.getByRole('link', { name: '다운로드' }).count(), 1);
+        assert.equal(await page.getByRole('link', { name: '다시 요청' }).count(), 2);
         assert.equal(await page.locator('.request-flow[data-flow-stage="receipt"]').count(), 1);
 
         const layoutMetrics = await page.evaluate(() => {

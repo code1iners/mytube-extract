@@ -30,6 +30,112 @@ import { getRequestFlowStage } from '../../utils/request-flow.util';
 
 type JobStatus = DownloadResponse | SubtitleJobResponse;
 
+/** 요청 내역 페이지의 flat layout·surface className. */
+const HISTORY_PANEL_CLASS_NAME =
+  'phase-panel history-panel grid min-w-0 w-full max-w-none m-0 gap-mytube-24 border-0 rounded-none bg-transparent p-0 [box-shadow:none]';
+/** 요청 내역 제목에 programmatic focus를 표시하는 className. */
+const HISTORY_FOCUSABLE_TITLE_CLASS_NAME =
+  'focus:outline-2 focus:outline-mytube-focus focus:[outline-offset:2px]';
+/** 요청 내역 설명의 Tailwind typography className. */
+const HISTORY_DESCRIPTION_CLASS_NAME =
+  'history-description m-0 text-mytube-text-secondary text-[16px] leading-[1.5]';
+/** 저장 실패 안내의 Tailwind layout·surface className. */
+const HISTORY_STORAGE_NOTICE_CLASS_NAME =
+  'notice-box grid min-w-0 grid-cols-[28px_minmax(0,1fr)] gap-x-[10px] gap-y-mytube-4 p-[13px] border border-mytube-border rounded-mytube-md bg-mytube-surface-alt';
+/** 저장 실패 안내 아이콘 영역의 Tailwind className. */
+const HISTORY_STORAGE_NOTICE_ICON_CLASS_NAME =
+  'row-span-2 grid size-6 place-items-center text-mytube-text-secondary';
+/** 저장 실패 안내 문장의 Tailwind typography className. */
+const HISTORY_STORAGE_NOTICE_MESSAGE_CLASS_NAME =
+  'm-0 text-mytube-text-secondary text-[14px] leading-[1.4] break-keep';
+/** 빈 요청 내역의 Tailwind layout className. */
+const HISTORY_EMPTY_CLASS_NAME =
+  'history-empty grid min-w-0 gap-mytube-16';
+/** 빈 요청 내역의 시작 문구 className. */
+const HISTORY_EMPTY_PROMPT_CLASS_NAME =
+  'history-empty__prompt m-0 text-mytube-text-primary text-[18px] font-semibold leading-[1.4]';
+/** 빈 요청 내역의 시작 링크 목록 className. */
+const HISTORY_EMPTY_LINKS_CLASS_NAME =
+  'history-empty__links grid min-w-0 grid-cols-2 gap-0 border-y border-mytube-border max-[561px]:grid-cols-1';
+/** 빈 요청 내역 시작 링크의 공통 Tailwind className. */
+const HISTORY_EMPTY_LINK_CLASS_NAME =
+  'history-empty__link grid min-w-0 min-h-[96px] grid-cols-[28px_minmax(0,1fr)] items-start gap-mytube-12 py-mytube-16 pr-mytube-12 pl-0 border-0 bg-transparent text-mytube-text-primary no-underline hover:bg-mytube-surface-alt focus-visible:outline-2 focus-visible:outline-mytube-focus focus-visible:[outline-offset:2px] max-[561px]:px-0';
+/** 두 번째 빈 요청 내역 시작 링크의 분리선 className. */
+const HISTORY_EMPTY_SECOND_LINK_CLASS_NAME =
+  'border-l border-mytube-border pl-mytube-16 max-[561px]:border-t max-[561px]:border-l-0 max-[561px]:border-t-mytube-border';
+/** 빈 요청 내역 시작 링크의 텍스트 묶음 className. */
+const HISTORY_EMPTY_LINK_COPY_CLASS_NAME =
+  'history-empty__link-copy grid min-w-0 gap-mytube-8';
+/** 빈 요청 내역 시작 링크 제목의 typography className. */
+const HISTORY_EMPTY_LINK_TITLE_CLASS_NAME =
+  'text-[18px] leading-[1.4]';
+/** 빈 요청 내역 시작 링크 설명의 typography className. */
+const HISTORY_EMPTY_LINK_DESCRIPTION_CLASS_NAME =
+  'text-mytube-text-secondary text-[14px] leading-[1.5] break-keep';
+/** 빈 요청 내역 보관 안내의 Tailwind surface className. */
+const HISTORY_EMPTY_NOTE_CLASS_NAME =
+  'history-empty__note flex min-w-0 items-start gap-mytube-8 m-0 p-mytube-12 border border-mytube-border rounded-mytube-md bg-mytube-surface-alt';
+/** 빈 요청 내역 보관 안내 아이콘 className. */
+const HISTORY_EMPTY_NOTE_ICON_CLASS_NAME = 'size-5 shrink-0';
+/** 요청 내역 목록의 Tailwind layout className. */
+const HISTORY_LIST_CLASS_NAME =
+  'history-list grid min-w-0 gap-mytube-12 m-0 p-0 list-none';
+/** 요청 내역 항목의 Tailwind surface className. */
+const HISTORY_ITEM_CLASS_NAME =
+  'history-item min-w-0 p-mytube-16 border border-mytube-border rounded-mytube-lg bg-mytube-surface';
+/** deep link로 강조된 요청 내역 항목의 border className. */
+const HISTORY_ITEM_HIGHLIGHTED_CLASS_NAME = 'border-mytube-focus';
+/** 요청 내역 항목 내부의 Tailwind layout className. */
+const HISTORY_ITEM_ARTICLE_CLASS_NAME =
+  'grid min-w-0 gap-mytube-16';
+/** 요청 내역 항목 header의 Tailwind responsive layout className. */
+const HISTORY_ITEM_HEADER_CLASS_NAME =
+  'history-item__header grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-start gap-mytube-12 max-[561px]:grid-cols-1';
+/** 요청 내역 항목 제목의 typography·focus className. */
+const HISTORY_ITEM_TITLE_CLASS_NAME =
+  'm-0 text-[18px] font-semibold leading-[1.4] focus:outline-2 focus:outline-mytube-focus focus:[outline-offset:2px]';
+/** 요청 내역 항목의 API 메타 className. */
+const HISTORY_ITEM_DETAIL_CLASS_NAME =
+  'history-item__header-detail m-0 mt-[4px] text-mytube-text-secondary text-[14px] leading-[1.5] [overflow-wrap:anywhere]';
+/** 요청 내역 상태 label의 공통 Tailwind className. */
+const HISTORY_STATUS_CLASS_NAME =
+  'history-status inline-flex items-center gap-[6px] text-[14px] font-semibold leading-[1.4] whitespace-nowrap';
+/** 요청 내역 상태 tone. */
+type HistoryStatusTone =
+  | 'queued'
+  | 'processing'
+  | 'completed'
+  | 'failed'
+  | 'expired';
+/** 요청 내역 상태별 semantic token className. */
+const HISTORY_STATUS_TONE_CLASS_NAMES: Record<HistoryStatusTone, string> = {
+  queued: 'text-mytube-status-queued',
+  processing: 'text-mytube-status-processing',
+  completed: 'text-mytube-status-completed',
+  failed: 'text-mytube-status-failed',
+  expired: 'text-mytube-status-expired',
+};
+/** 요청 내역 진행률의 Tailwind layout className. */
+const HISTORY_PROGRESS_CLASS_NAME =
+  'history-progress grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-[10px] text-mytube-text-secondary text-[14px]';
+/** 요청 내역 진행률 native control의 Tailwind className. */
+const HISTORY_PROGRESS_BAR_CLASS_NAME =
+  'w-full [accent-color:var(--color-status-processing)]';
+/** 요청 내역 상태 메시지의 typography·overflow className. */
+const HISTORY_MESSAGE_CLASS_NAME =
+  'history-message m-0 mt-[4px] text-mytube-text-secondary text-[14px] leading-[1.5] [overflow-wrap:anywhere]';
+/** 요청 내역 오류 메시지의 semantic token className. */
+const HISTORY_ERROR_MESSAGE_CLASS_NAME = 'text-mytube-status-failed';
+/** 요청 내역 action row의 Tailwind layout className. */
+const HISTORY_ACTIONS_CLASS_NAME =
+  'history-actions flex min-w-0 flex-wrap items-stretch gap-mytube-8';
+/** 요청 내역 primary result link의 Tailwind button className. */
+const HISTORY_PRIMARY_ACTION_CLASS_NAME =
+  'history-primary-action inline-flex min-w-[44px] min-h-[44px] items-center justify-center gap-mytube-8 border border-mytube-action-primary rounded-mytube-md bg-mytube-action-primary px-[14px] text-mytube-on-primary cursor-pointer text-[14px] font-semibold leading-[1] no-underline shadow-mytube-soft focus-visible:outline-2 focus-visible:outline-mytube-focus focus-visible:[outline-offset:2px] hover:brightness-[0.92] active:brightness-[0.84]';
+/** 요청 내역 secondary action의 Tailwind button className. */
+const HISTORY_SECONDARY_ACTION_CLASS_NAME =
+  'history-secondary-action inline-flex min-w-[44px] min-h-[44px] items-center justify-center gap-mytube-8 border border-mytube-border rounded-mytube-md bg-mytube-surface px-[14px] text-mytube-text-primary cursor-pointer text-[14px] font-semibold leading-[1.4] no-underline focus-visible:outline-2 focus-visible:outline-mytube-focus focus-visible:[outline-offset:2px] hover:bg-mytube-surface-alt hover:text-mytube-text-primary disabled:text-mytube-text-disabled disabled:cursor-not-allowed';
+
 /** 삭제한 접수증을 되돌릴 수 있는 제한 시간. */
 const HISTORY_UNDO_WINDOW_MS = 8_000;
 
@@ -306,19 +412,30 @@ export function RequestHistoryPage() {
   }
 
   return (
-    <section className="phase-panel history-panel" aria-labelledby="history-title">
+    <section className={HISTORY_PANEL_CLASS_NAME} aria-labelledby="history-title">
       <div className="panel-title-row">
-        <h2 id="history-title" tabIndex={-1}>
+        <h2
+          className={HISTORY_FOCUSABLE_TITLE_CLASS_NAME}
+          id="history-title"
+          tabIndex={-1}
+        >
           <AppIcon name="queued" />요청 내역
         </h2>
       </div>
-      <p className="history-description">
+      <p className={HISTORY_DESCRIPTION_CLASS_NAME}>
         이 브라우저가 접수한 최근 요청 20건을 API 응답의 최신 상태로 확인합니다.
       </p>
       {storageFailed ? (
-        <div className="notice-box" role="status">
-          <span aria-hidden="true"><AppIcon name="failed" /></span>
-          <p>이 브라우저에 내역을 저장하지 못했습니다. 현재 링크의 요청은 계속 확인할 수 있습니다.</p>
+        <div className={HISTORY_STORAGE_NOTICE_CLASS_NAME} role="status">
+          <span
+            aria-hidden="true"
+            className={HISTORY_STORAGE_NOTICE_ICON_CLASS_NAME}
+          >
+            <AppIcon name="failed" />
+          </span>
+          <p className={HISTORY_STORAGE_NOTICE_MESSAGE_CLASS_NAME}>
+            이 브라우저에 내역을 저장하지 못했습니다. 현재 링크의 요청은 계속 확인할 수 있습니다.
+          </p>
         </div>
       ) : null}
       {undoReceipt ? (
@@ -348,7 +465,7 @@ export function RequestHistoryPage() {
       {visibleReceipts.length === 0 ? (
         <HistoryEmptyState />
       ) : (
-        <ul className="history-list">
+        <ul className={HISTORY_LIST_CLASS_NAME}>
           {visibleReceipts.map((receipt, index) => (
             <HistoryItem
               highlighted={
@@ -370,29 +487,34 @@ export function RequestHistoryPage() {
 /** 요청 내역이 비어 있을 때 두 작업의 시작점과 보관 모델을 안내한다. */
 function HistoryEmptyState() {
   return (
-    <div className="history-empty">
-      <h3 className="history-empty__prompt">시작할 작업을 선택하세요.</h3>
+    <div className={HISTORY_EMPTY_CLASS_NAME}>
+      <h3 className={HISTORY_EMPTY_PROMPT_CLASS_NAME}>시작할 작업을 선택하세요.</h3>
       <RequestFlow current="source" />
-      <div className="history-empty__links">
-        <NavLink className="history-empty__link" to={ROUTE_PATHS.video}>
-          <AppIcon name="video" />
-          <span className="history-empty__link-copy">
-            <strong>영상 추출</strong>
-            <span>
+      <div className={HISTORY_EMPTY_LINKS_CLASS_NAME}>
+        <NavLink className={HISTORY_EMPTY_LINK_CLASS_NAME} to={ROUTE_PATHS.video}>
+          <AppIcon className="size-7 text-mytube-action-primary" name="video" />
+          <span className={HISTORY_EMPTY_LINK_COPY_CLASS_NAME}>
+            <strong className={HISTORY_EMPTY_LINK_TITLE_CLASS_NAME}>영상 추출</strong>
+            <span className={HISTORY_EMPTY_LINK_DESCRIPTION_CLASS_NAME}>
               YouTube URL로 영상(MP4) 또는 오디오(MP3)를 받습니다.
             </span>
           </span>
         </NavLink>
-        <NavLink className="history-empty__link" to={ROUTE_PATHS.subtitles}>
-          <AppIcon name="subtitle" />
-          <span className="history-empty__link-copy">
-            <strong>자막 추출</strong>
-            <span>로컬 영상으로 영어 자막 파일(SRT)을 만듭니다.</span>
+        <NavLink
+          className={`${HISTORY_EMPTY_LINK_CLASS_NAME} ${HISTORY_EMPTY_SECOND_LINK_CLASS_NAME}`}
+          to={ROUTE_PATHS.subtitles}
+        >
+          <AppIcon className="size-7 text-mytube-action-primary" name="subtitle" />
+          <span className={HISTORY_EMPTY_LINK_COPY_CLASS_NAME}>
+            <strong className={HISTORY_EMPTY_LINK_TITLE_CLASS_NAME}>자막 추출</strong>
+            <span className={HISTORY_EMPTY_LINK_DESCRIPTION_CLASS_NAME}>
+              로컬 영상으로 영어 자막 파일(SRT)을 만듭니다.
+            </span>
           </span>
         </NavLink>
       </div>
-      <p className="history-empty__note">
-        <AppIcon name="info" />
+      <p className={HISTORY_EMPTY_NOTE_CLASS_NAME}>
+        <AppIcon className={HISTORY_EMPTY_NOTE_ICON_CLASS_NAME} name="info" />
         <span>
           이력은 이 브라우저에만 저장되며, 완료 파일은 7일 동안 보관됩니다.
         </span>
@@ -416,49 +538,91 @@ function HistoryItem(props: {
   const retryPath =
     receipt.kind === 'video' ? ROUTE_PATHS.video : ROUTE_PATHS.subtitles;
   const titleId = getHistoryTitleId(receipt);
+  /** 현재 요청 항목의 상태 tone. */
+  const statusTone = getStatusTone(job?.displayStatus);
+  /** 현재 상태 tone에 대응하는 Tailwind color className. */
+  const statusClassName = [
+    HISTORY_STATUS_CLASS_NAME,
+    `history-status--${statusTone}`,
+    HISTORY_STATUS_TONE_CLASS_NAMES[statusTone],
+  ].join(' ');
 
   return (
-    <li className={props.highlighted ? 'history-item is-highlighted' : 'history-item'}>
-      <article aria-labelledby={titleId}>
-        <div className="history-item__header">
-          <div>
-            <h3 id={titleId} tabIndex={-1}>
+    <li
+      className={`${HISTORY_ITEM_CLASS_NAME}${props.highlighted ? ` is-highlighted ${HISTORY_ITEM_HIGHLIGHTED_CLASS_NAME}` : ''}`}
+    >
+      <article className={HISTORY_ITEM_ARTICLE_CLASS_NAME} aria-labelledby={titleId}>
+        <div className={HISTORY_ITEM_HEADER_CLASS_NAME}>
+          <div className="min-w-0">
+            <h3
+              className={HISTORY_ITEM_TITLE_CLASS_NAME}
+              id={titleId}
+              tabIndex={-1}
+            >
               {formatKind(receipt.kind)} 요청
             </h3>
-            <p>{job ? formatJobDetail(receipt.kind, job) : `접수 ${formatDate(receipt.acceptedAt)}`}</p>
+            <p className={HISTORY_ITEM_DETAIL_CLASS_NAME}>
+              {job
+                ? formatJobDetail(receipt.kind, job)
+                : `접수 ${formatDate(receipt.acceptedAt)}`}
+            </p>
           </div>
-          <span className={`history-status history-status--${getStatusTone(job?.displayStatus)}`}>
+          <span className={statusClassName}>
             <AppIcon name={getStatusIcon(job?.displayStatus)} />
             {query.isPending ? '상태 확인 중' : formatStatus(job?.displayStatus)}
           </span>
         </div>
         <RequestFlow current={getRequestFlowStage(job?.displayStatus)} />
         {job?.progress !== null && job?.progress !== undefined ? (
-          <div className="history-progress">
-            <progress max={100} value={job.progress}>{job.progress}%</progress>
+          <div className={HISTORY_PROGRESS_CLASS_NAME}>
+            <progress
+              className={HISTORY_PROGRESS_BAR_CLASS_NAME}
+              max={100}
+              value={job.progress}
+            >
+              {job.progress}%
+            </progress>
             <span>{job.progress}%</span>
           </div>
         ) : null}
         {isConnectionError ? (
-          <p className="history-message">서버 연결이 불안정합니다. 내역을 유지하고 다시 확인합니다.</p>
+          <p className={HISTORY_MESSAGE_CLASS_NAME}>
+            서버 연결이 불안정합니다. 내역을 유지하고 다시 확인합니다.
+          </p>
         ) : job ? (
-          <p className="history-message">{job.message}</p>
+          <p className={HISTORY_MESSAGE_CLASS_NAME}>{job.message}</p>
         ) : null}
         {isCompletedWithoutUrl ? (
-          <p className="history-message history-message--error">완료 파일 주소를 받지 못했습니다. 서버 상태를 다시 확인해 주세요.</p>
+          <p
+            className={`${HISTORY_MESSAGE_CLASS_NAME} history-message--error ${HISTORY_ERROR_MESSAGE_CLASS_NAME}`}
+          >
+            완료 파일 주소를 받지 못했습니다. 서버 상태를 다시 확인해 주세요.
+          </p>
         ) : null}
-        <div className="history-actions">
+        <div className={HISTORY_ACTIONS_CLASS_NAME}>
           {job?.displayStatus === 'completed' && job.downloadUrl ? (
-            <a className="primary-button" download href={buildApiUrl(job.downloadUrl, getApiBaseUrl())}>
+            <a
+              className={HISTORY_PRIMARY_ACTION_CLASS_NAME}
+              download
+              href={buildApiUrl(job.downloadUrl, getApiBaseUrl())}
+            >
               <AppIcon name="download" />다운로드
             </a>
           ) : null}
           {job?.displayStatus === 'failed' || job?.displayStatus === 'expired' ? (
-            <NavLink className="primary-button" to={retryPath}>다시 요청</NavLink>
+            <NavLink className={HISTORY_PRIMARY_ACTION_CLASS_NAME} to={retryPath}>
+              다시 요청
+            </NavLink>
           ) : null}
           {(query.isError || isCompletedWithoutUrl) &&
           !(query.error instanceof JobStatusRequestError && query.error.responseStatus === 404) ? (
-            <button className="secondary-button" type="button" onClick={() => void query.refetch()}>다시 확인</button>
+            <button
+              className={HISTORY_SECONDARY_ACTION_CLASS_NAME}
+              type="button"
+              onClick={() => void query.refetch()}
+            >
+              다시 확인
+            </button>
           ) : null}
           <button
             aria-label={`${formatKind(receipt.kind)} 요청 내역에서 삭제`}
@@ -517,7 +681,7 @@ function formatStatus(status?: string) {
   return status === 'queued' ? '대기 중' : '상태 확인 중';
 }
 
-function getStatusTone(status?: string) {
+function getStatusTone(status?: string): HistoryStatusTone {
   if (status === 'completed' || status === 'failed' || status === 'expired') return status;
   return status === 'queued' ? 'queued' : 'processing';
 }

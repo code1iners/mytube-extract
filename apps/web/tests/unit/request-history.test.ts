@@ -40,9 +40,9 @@ describe('request history query contract', () => {
       ),
     );
 
-    expect(markup).toContain('class="phase-panel history-panel"');
+    expect(markup).toContain('class="phase-panel history-panel ');
     expect(markup).not.toContain('class="console-panel history-panel"');
-    expect(markup).toContain('class="history-empty__links"');
+    expect(markup).toContain('class="history-empty__links ');
     expect(markup).toContain('시작할 작업을 선택하세요.');
     expect(markup).toContain('href="/video"');
     expect(markup).toContain('href="/subtitles"');
