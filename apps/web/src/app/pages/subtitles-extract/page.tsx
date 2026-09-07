@@ -47,6 +47,91 @@ const SUBTITLE_FILE_PICKER_LABEL = '영상 선택 또는 드래그 (로컬 영�
 const SUBTITLE_FILE_FEEDBACK_ID = 'subtitle-file-feedback';
 /** 자막 route worker health 제목 id. */
 const SUBTITLE_WORKER_HEALTH_TITLE_ID = 'subtitle-worker-health-title';
+/** 자막 요청 제목 row의 Tailwind margin className. */
+const SUBTITLE_REQUEST_TITLE_CLASS_NAME = '!mb-0';
+/** 자막 요청 panel의 Tailwind layout className. */
+const SUBTITLE_REQUEST_PANEL_CLASS_NAME =
+  'phase-panel subtitle-request-panel grid min-w-0 gap-mytube-24 p-0 max-[561px]:gap-mytube-8';
+/** 자막 요청 form의 Tailwind layout className. */
+const SUBTITLE_REQUEST_FORM_CLASS_NAME =
+  'subtitle-form grid gap-mytube-16 max-[561px]:gap-mytube-4';
+/** 자막 파일 field의 Tailwind layout className. */
+const SUBTITLE_FILE_FIELD_CLASS_NAME = 'field grid gap-mytube-8';
+/** 자막 파일 field label의 Tailwind typography className. */
+const SUBTITLE_FILE_FIELD_LABEL_CLASS_NAME =
+  'field-label text-mytube-text-primary text-[16px] font-semibold leading-[1.4]';
+/** 자막 파일 picker의 Tailwind layout·state className. */
+const SUBTITLE_DROPZONE_CLASS_NAME =
+  'subtitle-dropzone grid min-h-[160px] w-full min-w-0 place-items-center gap-[10px] p-mytube-12 border border-dashed border-mytube-border rounded-mytube-lg bg-mytube-surface-alt text-mytube-text-secondary cursor-pointer font-semibold focus-visible:outline-2 focus-visible:outline-mytube-focus focus-visible:outline-offset-2 hover:border-mytube-text-secondary hover:bg-mytube-surface hover:text-mytube-text-primary max-[561px]:min-h-[140px]';
+/** 자막 파일 picker icon의 Tailwind size·color className. */
+const SUBTITLE_DROPZONE_ICON_CLASS_NAME =
+  '!size-[32px] text-mytube-action-primary';
+/** 자막 파일 picker의 주요 문구 Tailwind typography className. */
+const SUBTITLE_DROPZONE_PRIMARY_COPY_CLASS_NAME =
+  'text-mytube-text-primary text-[16px]';
+/** 자막 파일 picker의 형식 안내 Tailwind typography className. */
+const SUBTITLE_DROPZONE_HINT_CLASS_NAME =
+  'text-mytube-text-secondary text-[14px]';
+/** 자막 파일 검증 feedback의 Tailwind typography className. */
+const SUBTITLE_FILE_FEEDBACK_CLASS_NAME =
+  'field-feedback m-[-2px_0_0] text-mytube-text-secondary text-[14px] leading-[1.4]';
+/** 선택 파일 row의 Tailwind layout·surface className. */
+const SUBTITLE_SELECTED_FILE_ROW_CLASS_NAME =
+  'selected-file-row grid min-w-0 grid-cols-[40px_minmax(0,1fr)_auto] items-center gap-mytube-12 p-mytube-12 border border-mytube-border rounded-mytube-md bg-mytube-surface-alt';
+/** 선택 파일 icon의 Tailwind size·color className. */
+const SUBTITLE_SELECTED_FILE_ICON_CLASS_NAME =
+  '!size-6 text-mytube-text-secondary';
+/** 선택 파일 이름의 Tailwind overflow·typography className. */
+const SUBTITLE_SELECTED_FILE_NAME_CLASS_NAME =
+  'block min-w-0 truncate text-mytube-text-primary text-[16px] font-semibold';
+/** 선택 파일 메타의 Tailwind overflow·typography className. */
+const SUBTITLE_SELECTED_FILE_META_CLASS_NAME =
+  'mt-mytube-4 block min-w-0 truncate text-mytube-text-secondary text-[13px]';
+/** 선택 파일 제거 button의 Tailwind layout·state className. */
+const SUBTITLE_SELECTED_FILE_CLEAR_CLASS_NAME =
+  'inline-flex min-w-[44px] min-h-[44px] items-center justify-center px-mytube-8 border border-mytube-border rounded-mytube-sm bg-mytube-surface text-mytube-text-secondary cursor-pointer text-[13px] font-semibold focus-visible:outline-2 focus-visible:outline-mytube-focus focus-visible:outline-offset-2 hover:bg-mytube-surface-alt hover:text-mytube-text-primary';
+/** 자막 처리 방식 fieldset의 Tailwind layout className. */
+const SUBTITLE_PROCESSING_METHOD_CLASS_NAME =
+  'segmented-control subtitle-processing-method grid min-w-0 grid-cols-1 gap-mytube-8 m-0 border-0 p-0 max-[561px]:gap-mytube-4';
+/** 자막 처리 방식 legend의 Tailwind typography className. */
+const SUBTITLE_PROCESSING_LEGEND_CLASS_NAME =
+  'col-span-full m-0 p-0 text-mytube-text-primary text-[16px] font-semibold leading-[1.4]';
+/** 자막 처리 방식 사용자 안내의 Tailwind typography className. */
+const SUBTITLE_PROCESSING_GUIDANCE_CLASS_NAME =
+  'subtitle-processing-method__description col-span-full m-[0_0_4px] text-mytube-text-secondary text-[14px] leading-[1.4]';
+/** 자막 처리 방식 선택지의 공통 Tailwind layout·state className. */
+const SUBTITLE_PROCESSING_OPTION_BASE_CLASS_NAME =
+  'segment subtitle-processing-option flex min-w-0 w-full min-h-[48px] items-center justify-start gap-mytube-8 px-mytube-12 py-mytube-8 border border-mytube-border rounded-mytube-md bg-mytube-surface text-mytube-text-secondary cursor-pointer text-left font-semibold focus-within:outline-2 focus-within:outline-mytube-focus focus-within:outline-offset-2 hover:bg-mytube-surface-alt hover:text-mytube-text-primary';
+/** 선택된 자막 처리 방식의 Tailwind state className. */
+const SUBTITLE_PROCESSING_OPTION_SELECTED_CLASS_NAME =
+  'is-selected !border-mytube-action-primary bg-mytube-surface !text-mytube-text-primary underline decoration-mytube-text-primary decoration-2 underline-offset-4';
+/** 자막 처리 방식 radio input의 Tailwind visually-hidden className. */
+const SUBTITLE_PROCESSING_OPTION_INPUT_CLASS_NAME =
+  'absolute h-px w-px opacity-0';
+/** 자막 처리 방식 설명 묶음의 Tailwind layout className. */
+const SUBTITLE_PROCESSING_OPTION_COPY_CLASS_NAME =
+  'subtitle-processing-option__copy grid min-w-0 gap-mytube-4';
+/** 자막 처리 방식 제목의 Tailwind typography className. */
+const SUBTITLE_PROCESSING_OPTION_TITLE_CLASS_NAME =
+  'text-mytube-text-primary text-[16px] leading-[1.4]';
+/** 자막 처리 방식 설명의 Tailwind typography className. */
+const SUBTITLE_PROCESSING_OPTION_DESCRIPTION_CLASS_NAME =
+  'subtitle-processing-option__description block text-mytube-text-secondary text-[14px] font-normal leading-[1.4] break-keep';
+/** 자막 기술 정보 disclosure의 Tailwind layout·surface className. */
+const SUBTITLE_PROCESSING_DETAILS_CLASS_NAME =
+  'subtitle-processing-method__details col-span-full border-t border-mytube-border open:bg-mytube-surface-alt open:pb-mytube-8';
+/** 자막 기술 정보 disclosure summary의 Tailwind layout·state className. */
+const SUBTITLE_PROCESSING_SUMMARY_CLASS_NAME =
+  'relative flex min-h-[44px] items-center justify-between pr-mytube-24 text-mytube-text-primary cursor-pointer text-[14px] font-semibold list-none focus-visible:outline-2 focus-visible:outline-mytube-focus focus-visible:outline-offset-2 hover:bg-mytube-surface-alt hover:text-mytube-text-primary';
+/** 자막 기술 정보 내용의 Tailwind layout·typography className. */
+const SUBTITLE_PROCESSING_TECHNICAL_CLASS_NAME =
+  'subtitle-processing-method__technical col-span-full grid gap-mytube-4 m-0 pt-mytube-8 pr-0 pb-0 pl-mytube-16 text-mytube-text-secondary text-[14px] leading-[1.4]';
+/** 자막 제출 button의 Tailwind layout·state className. */
+const SUBTITLE_SUBMIT_BUTTON_CLASS_NAME =
+  'subtitle-submit-button inline-flex w-full min-h-[48px] items-center justify-center gap-mytube-8 border border-mytube-action-primary rounded-mytube-md bg-mytube-action-primary text-mytube-on-primary cursor-pointer text-[18px] font-semibold leading-[1] shadow-mytube-soft focus-visible:outline-2 focus-visible:outline-mytube-focus focus-visible:outline-offset-2 enabled:hover:brightness-[0.92] enabled:active:brightness-[0.84] disabled:border-mytube-border disabled:bg-mytube-surface-alt disabled:text-mytube-text-disabled disabled:cursor-not-allowed disabled:shadow-none';
+/** 자막 제출 불가 사유의 Tailwind typography className. */
+const SUBTITLE_SUBMIT_DISABLED_REASON_CLASS_NAME =
+  'subtitle-submit-disabled-reason m-[-12px_0_0] text-mytube-text-secondary text-[14px] leading-[1.4] break-keep [overflow-wrap:anywhere]';
 
 /** 자막 추출 route page. */
 export function SubtitlesExtractPage() {
@@ -84,10 +169,11 @@ export function SubtitlesExtractPage() {
   }
 
   if (viewPhase === 'request') {
-    return <section className="phase-panel subtitle-request-panel" aria-labelledby="subtitles-title">
-      <PanelTitle
-        icon="subtitle"
-        id="subtitles-title"
+    return <section className={SUBTITLE_REQUEST_PANEL_CLASS_NAME} aria-labelledby="subtitles-title">
+        <PanelTitle
+          className={SUBTITLE_REQUEST_TITLE_CLASS_NAME}
+          icon="subtitle"
+          id="subtitles-title"
         isRefreshing={workerHealthIsRefreshing}
       >
         자막 추출
@@ -102,13 +188,13 @@ export function SubtitlesExtractPage() {
       />
       <RequestFlow current="source" />
       {requestNotice ? <RequestNotice message={requestNotice} /> : null}
-      <form className="subtitle-form" onSubmit={handleSubtitleSubmit}>
-        <div className={fileFeedbackIsError ? 'field has-error' : 'field'}>
-          <span className="field-label">로컬 영상 파일</span>
+      <form className={SUBTITLE_REQUEST_FORM_CLASS_NAME} onSubmit={handleSubtitleSubmit}>
+        <div className={`${SUBTITLE_FILE_FIELD_CLASS_NAME}${fileFeedbackIsError ? ' has-error' : ''}`}>
+          <span className={SUBTITLE_FILE_FIELD_LABEL_CLASS_NAME}>로컬 영상 파일</span>
           <input
             accept="video/mp4,video/quicktime,video/webm,.mp4,.mov,.webm"
             aria-hidden="true"
-            className="subtitle-file-input"
+            className="subtitle-file-input hidden"
             hidden
             ref={fileInputRef}
             tabIndex={-1}
@@ -118,21 +204,21 @@ export function SubtitlesExtractPage() {
           <button
             aria-describedby={fileFeedbackMessage ? SUBTITLE_FILE_FEEDBACK_ID : undefined}
             aria-label={SUBTITLE_FILE_PICKER_LABEL}
-            className="subtitle-dropzone"
+            className={`${SUBTITLE_DROPZONE_CLASS_NAME}${fileFeedbackIsError ? ' !border-mytube-status-failed' : ''}`}
             ref={filePickerButtonRef}
             type="button"
             onClick={handleFilePickerOpen}
             onDragOver={handleDropzoneDragOver}
             onDrop={handleDropzoneDrop}
           >
-            <AppIcon name="subtitle" />
-            <strong>영상 선택 또는 드래그</strong>
-            <span>mp4, mov, webm</span>
+            <AppIcon className={SUBTITLE_DROPZONE_ICON_CLASS_NAME} name="subtitle" />
+            <strong className={SUBTITLE_DROPZONE_PRIMARY_COPY_CLASS_NAME}>영상 선택 또는 드래그</strong>
+            <span className={SUBTITLE_DROPZONE_HINT_CLASS_NAME}>mp4, mov, webm</span>
           </button>
           <p className="keyboard-shortcut-hint"><kbd>F</kbd> 키로 파일 선택에 바로 포커스</p>
           {fileFeedbackMessage ? (
             <p
-              className={fileFeedbackIsError ? 'field-feedback field-feedback--error' : 'field-feedback'}
+              className={`${SUBTITLE_FILE_FEEDBACK_CLASS_NAME}${fileFeedbackIsError ? ' !text-mytube-status-failed' : ''}`}
               id={SUBTITLE_FILE_FEEDBACK_ID}
               role={fileFeedbackIsError ? 'alert' : undefined}
             >
@@ -140,41 +226,42 @@ export function SubtitlesExtractPage() {
             </p>
           ) : null}
         </div>
-        {selectedFile ? <div className="selected-file-row"><AppIcon name="video" /><div><strong>{selectedFile.name}</strong><span>{selectedFileMeta}</span></div><button type="button" onClick={clearSelectedFile}>지우기</button></div> : null}
+        {selectedFile ? <div className={SUBTITLE_SELECTED_FILE_ROW_CLASS_NAME}><AppIcon className={SUBTITLE_SELECTED_FILE_ICON_CLASS_NAME} name="video" /><div className="min-w-0"><strong className={SUBTITLE_SELECTED_FILE_NAME_CLASS_NAME}>{selectedFile.name}</strong><span className={SUBTITLE_SELECTED_FILE_META_CLASS_NAME}>{selectedFileMeta}</span></div><button className={SUBTITLE_SELECTED_FILE_CLEAR_CLASS_NAME} type="button" onClick={clearSelectedFile}>지우기</button></div> : null}
         <fieldset
           aria-describedby="subtitle-processing-guidance"
-          className="segmented-control subtitle-processing-method"
+          className={SUBTITLE_PROCESSING_METHOD_CLASS_NAME}
         >
-          <legend>처리 방식</legend>
-          <p className="subtitle-processing-method__description" id="subtitle-processing-guidance">
+          <legend className={SUBTITLE_PROCESSING_LEGEND_CLASS_NAME}>처리 방식</legend>
+          <p className={SUBTITLE_PROCESSING_GUIDANCE_CLASS_NAME} id="subtitle-processing-guidance">
             {SUBTITLE_PROCESSING_GUIDANCE}
           </p>
           {SUBTITLE_PROCESSING_OPTIONS.map((option) => (
             <label
-              className={selectedWhisperModel === option.value ? 'segment subtitle-processing-option is-selected' : 'segment subtitle-processing-option'}
+              className={`${SUBTITLE_PROCESSING_OPTION_BASE_CLASS_NAME}${selectedWhisperModel === option.value ? ` ${SUBTITLE_PROCESSING_OPTION_SELECTED_CLASS_NAME}` : ''}`}
               key={option.value}
             >
               <input
                 checked={selectedWhisperModel === option.value}
+                className={SUBTITLE_PROCESSING_OPTION_INPUT_CLASS_NAME}
                 disabled={!canChangeWhisperModel}
                 name="subtitle-whisper-model"
                 type="radio"
                 value={option.value}
                 onChange={handleWhisperModelChange}
               />
-              <AppIcon name={option.icon} />
-              <span className="subtitle-processing-option__copy">
-                <strong>{option.label}</strong>
-                <span className="subtitle-processing-option__description">{option.description}</span>
+              <AppIcon className={selectedWhisperModel === option.value ? 'text-mytube-action-primary' : undefined} name={option.icon} />
+              <span className={SUBTITLE_PROCESSING_OPTION_COPY_CLASS_NAME}>
+                <strong className={SUBTITLE_PROCESSING_OPTION_TITLE_CLASS_NAME}>{option.label}</strong>
+                <span className={SUBTITLE_PROCESSING_OPTION_DESCRIPTION_CLASS_NAME}>{option.description}</span>
               </span>
             </label>
           ))}
-          <details className="subtitle-processing-method__details">
-            <summary>기술적인 처리 정보</summary>
-            <div className="subtitle-processing-method__technical">
-              <p>{SUBTITLE_PROCESSING_TECHNICAL_NOTE}</p>
+          <details className={SUBTITLE_PROCESSING_DETAILS_CLASS_NAME}>
+            <summary className={SUBTITLE_PROCESSING_SUMMARY_CLASS_NAME}>기술적인 처리 정보</summary>
+            <div className={SUBTITLE_PROCESSING_TECHNICAL_CLASS_NAME}>
+              <p className="m-0">{SUBTITLE_PROCESSING_TECHNICAL_NOTE}</p>
               {SUBTITLE_PROCESSING_OPTIONS.map((option) => (
-                <p key={option.value}>{option.label}: {option.technicalDetail}</p>
+                <p className="m-0" key={option.value}>{option.label}: {option.technicalDetail}</p>
               ))}
             </div>
           </details>
@@ -185,7 +272,7 @@ export function SubtitlesExtractPage() {
               ? 'subtitle-submit-disabled-reason'
               : undefined
           }
-          className="primary-button"
+          className={SUBTITLE_SUBMIT_BUTTON_CLASS_NAME}
           disabled={!canSubmit}
           type="submit"
         >
@@ -193,7 +280,7 @@ export function SubtitlesExtractPage() {
           {isSubtitlePending ? '요청 중' : '영어 SRT 생성'}
         </button>
         {!canSubmit && submitDisabledReason ? (
-          <p className="submit-disabled-reason" id="subtitle-submit-disabled-reason">
+          <p className={SUBTITLE_SUBMIT_DISABLED_REASON_CLASS_NAME} id="subtitle-submit-disabled-reason">
             {submitDisabledReason}
           </p>
         ) : null}
@@ -256,8 +343,8 @@ export function SubtitlesExtractPage() {
 }
 
 /** 화면별 panel heading을 일정한 구조로 렌더링한다. */
-function PanelTitle(props: { /** 아이콘 이름. */ icon: AppIconName; /** heading id. */ id: string; /** 기존 ready form을 유지한 채 health를 갱신하는지 여부. */ isRefreshing?: boolean; /** 제목. */ children: string }) {
-  return <div className="panel-title-row"><h2 id={props.id}><AppIcon name={props.icon} />{props.children}{props.isRefreshing ? <span aria-hidden="true" className="panel-title__refresh" title="서비스 상태 새로 확인 중"><AppIcon name="processing" /></span> : null}</h2></div>;
+function PanelTitle(props: { /** 아이콘 이름. */ icon: AppIconName; /** heading id. */ id: string; /** 제목 row에 추가할 className. */ className?: string; /** 기존 ready form을 유지한 채 health를 갱신하는지 여부. */ isRefreshing?: boolean; /** 제목. */ children: string }) {
+  return <div className={`panel-title-row${props.className ? ` ${props.className}` : ''}`}><h2 id={props.id}><AppIcon name={props.icon} />{props.children}{props.isRefreshing ? <span aria-hidden="true" className="panel-title__refresh" title="서비스 상태 새로 확인 중"><AppIcon name="processing" /></span> : null}</h2></div>;
 }
 
 /** 상태 제목과 안내 문구를 렌더링한다. */

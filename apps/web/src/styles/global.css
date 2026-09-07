@@ -296,9 +296,7 @@ a {
   border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
 }
 
-.theme-toggle__option input:checked + span,
-.subtitle-request-panel .segment.is-selected,
-.subtitle-request-panel .quality-chip.is-selected {
+.theme-toggle__option input:checked + span {
   border-color: var(--color-action-primary);
   background: var(--color-surface);
   color: var(--color-text-primary);
@@ -311,10 +309,6 @@ a {
 .theme-toggle__option input:checked + span {
   position: relative;
   z-index: 1;
-}
-
-.subtitle-request-panel .segment.is-selected .app-icon {
-  color: var(--color-action-primary);
 }
 
 .theme-toggle__option input:focus-visible + span {
@@ -330,8 +324,7 @@ a {
 }
 
 .request-notice,
-.request-cancel-boundary,
-.keyboard-shortcut-hint {
+.request-cancel-boundary {
   margin: 0;
   color: var(--color-text-secondary);
   font-size: 14px;
@@ -410,25 +403,6 @@ a {
   color: var(--color-action-primary);
 }
 
-/* 자막 요청은 입력 흐름을 먼저 읽도록 외곽 카드 표면을 사용하지 않는다. */
-.subtitle-request-panel {
-  display: grid;
-  gap: 24px;
-  padding: 0;
-  border: 0;
-  border-radius: 0;
-  background: transparent;
-  box-shadow: none;
-}
-
-.subtitle-request-panel .panel-title-row {
-  margin-bottom: 0;
-}
-
-.subtitle-request-panel .subtitle-form {
-  gap: 16px;
-}
-
 .console-panel {
   min-width: 0;
   padding: 20px;
@@ -468,132 +442,6 @@ a {
   height: 16px;
 }
 
-.subtitle-form {
-  display: grid;
-  gap: 20px;
-}
-
-.subtitle-request-panel .field {
-  display: grid;
-  gap: 8px;
-}
-
-.subtitle-request-panel .field-label,
-.subtitle-request-panel .segmented-control legend,
-.subtitle-request-panel .quality-grid legend {
-  color: var(--color-text-primary);
-  font-size: 16px;
-  font-weight: 600;
-}
-
-.subtitle-request-panel .field input {
-  width: 100%;
-  min-width: 0;
-  min-height: 44px;
-  border: 0;
-  background: transparent;
-  color: var(--color-text-primary);
-  padding: 9px 13px 9px 0;
-  outline: none;
-}
-
-.subtitle-request-panel .field.has-error .url-input-frame {
-  border-color: var(--color-status-failed);
-}
-
-.subtitle-request-panel .field-feedback {
-  margin: -2px 0 0;
-  color: var(--color-text-secondary);
-  font-size: 14px;
-  line-height: 1.4;
-}
-
-.subtitle-request-panel .field-feedback--error {
-  color: var(--color-status-failed);
-}
-
-.subtitle-request-panel .segmented-control,
-.subtitle-request-panel .quality-grid {
-  display: grid;
-  gap: 12px 8px;
-  margin: 0;
-  border: 0;
-  padding: 0;
-}
-
-.subtitle-request-panel .segmented-control {
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-}
-
-.subtitle-request-panel .subtitle-processing-method {
-  grid-template-columns: minmax(0, 1fr);
-  gap: 8px;
-}
-
-.subtitle-request-panel .segmented-control legend,
-.subtitle-request-panel .quality-grid legend {
-  grid-column: 1 / -1;
-  /* legend는 grid row-gap이 적용되지 않아 margin으로 직접 여백을 준다. */
-  margin: 0 0 12px;
-  padding: 0;
-}
-
-.subtitle-request-panel .subtitle-processing-method legend {
-  margin-bottom: 0;
-}
-
-.subtitle-request-panel .segment,
-.subtitle-request-panel .quality-chip {
-  display: flex;
-  min-height: 48px;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
-  background: var(--color-surface);
-  color: var(--color-text-secondary);
-  cursor: pointer;
-  font-weight: 600;
-}
-
-.subtitle-processing-method__description {
-  grid-column: 1 / -1;
-  margin: 0 0 4px;
-  color: var(--color-text-secondary);
-  font-size: 14px;
-  line-height: 1.4;
-}
-
-.subtitle-processing-method__technical {
-  grid-column: 1 / -1;
-  display: grid;
-  gap: 4px;
-  margin: 0;
-  color: var(--color-text-secondary);
-  font-size: 14px;
-  line-height: 1.4;
-}
-
-.subtitle-processing-method__details {
-  grid-column: 1 / -1;
-  border-top: 1px solid var(--color-border);
-}
-
-.subtitle-processing-method__details summary {
-  position: relative;
-  display: flex;
-  min-height: 44px;
-  align-items: center;
-  justify-content: space-between;
-  padding-right: 24px;
-  color: var(--color-text-primary);
-  cursor: pointer;
-  font-size: 14px;
-  font-weight: 600;
-  list-style: none;
-}
-
 .subtitle-processing-method__details summary::-webkit-details-marker {
   display: none;
 }
@@ -611,73 +459,9 @@ a {
   transition: transform 150ms ease;
 }
 
-.subtitle-processing-method__details[open] {
-  padding-bottom: 8px;
-  background: var(--color-surface-alt);
-}
-
-.subtitle-processing-method__details[open] summary {
-  color: var(--color-text-primary);
-}
-
 .subtitle-processing-method__details[open] summary::after {
   top: 20px;
   transform: rotate(225deg);
-}
-
-.subtitle-processing-method__details .subtitle-processing-method__technical {
-  padding: 8px 0 0 16px;
-}
-
-.subtitle-processing-method__technical p {
-  margin: 0;
-}
-
-.subtitle-processing-option {
-  min-width: 0;
-  width: 100%;
-  min-height: 48px;
-  align-items: center;
-  justify-content: flex-start;
-  padding: 8px 12px;
-  text-align: left;
-}
-
-.subtitle-processing-option__copy {
-  display: grid;
-  min-width: 0;
-  gap: 4px;
-}
-
-.subtitle-processing-option__copy strong,
-.subtitle-processing-option__copy span {
-  display: block;
-}
-
-.subtitle-processing-option__copy strong {
-  color: var(--color-text-primary);
-  font-size: 16px;
-  line-height: 1.4;
-}
-
-.subtitle-processing-option__copy span {
-  color: var(--color-text-secondary);
-  font-size: 14px;
-  font-weight: 400;
-  line-height: 1.4;
-  word-break: keep-all;
-}
-
-.subtitle-request-panel .segment input,
-.subtitle-request-panel .quality-chip input {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  opacity: 0;
-}
-
-.subtitle-request-panel .quality-grid {
-  grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
 .primary-button,
@@ -735,13 +519,8 @@ a {
 .primary-button:focus-visible,
 .secondary-button:focus-visible,
 .download-button:focus-visible,
-.selected-file-row button:focus-visible,
 .theme-toggle__option input:focus-visible + span,
-input:focus-visible,
-.subtitle-request-panel .segment:focus-within,
-.subtitle-request-panel .quality-chip:focus-within,
-.subtitle-dropzone:focus-visible,
-.subtitle-processing-method__details summary:focus-visible {
+input:focus-visible {
   outline: 2px solid var(--color-focus);
   outline-offset: 2px;
 }
@@ -749,19 +528,9 @@ input:focus-visible,
 @media (hover: hover) {
   .primary-navigation__link:not(.is-active, .is-disabled):hover,
   .secondary-button:not(:disabled):hover,
-  .selected-file-row button:hover,
   .theme-toggle__option:hover span,
-  .subtitle-request-panel .segment:hover,
-  .subtitle-request-panel .quality-chip:hover,
-  .usage-guide summary:hover,
-  .subtitle-processing-method__details summary:hover {
+  .usage-guide summary:hover {
     background: var(--color-surface-alt);
-    color: var(--color-text-primary);
-  }
-
-  .subtitle-dropzone:hover {
-    border-color: var(--color-text-secondary);
-    background: var(--color-surface);
     color: var(--color-text-primary);
   }
 
@@ -797,14 +566,6 @@ input:focus-visible,
 
 .notice-box p {
   margin: 0;
-  color: var(--color-text-secondary);
-  font-size: 14px;
-  line-height: 1.4;
-  word-break: keep-all;
-}
-
-.submit-disabled-reason {
-  margin: -12px 0 0;
   color: var(--color-text-secondary);
   font-size: 14px;
   line-height: 1.4;
@@ -964,98 +725,6 @@ input:focus-visible,
 
 .download-button {
   width: 100%;
-}
-
-/* 프로그램matic file input은 유일한 visible picker 버튼을 중복해서 노출하지 않는다. */
-.field .subtitle-file-input {
-  display: none;
-}
-
-.field.has-error .subtitle-dropzone {
-  border-color: var(--color-status-failed);
-}
-
-.subtitle-dropzone {
-  display: grid;
-  width: 100%;
-  min-width: 0;
-  min-height: 160px;
-  place-items: center;
-  gap: 10px;
-  padding: 12px;
-  border: 1px dashed var(--color-border);
-  border-radius: var(--radius-lg);
-  background: var(--color-surface-alt);
-  color: var(--color-text-secondary);
-  cursor: pointer;
-  font: inherit;
-  font-weight: 600;
-}
-
-.subtitle-dropzone .app-icon {
-  width: 32px;
-  height: 32px;
-  color: var(--color-action-primary);
-}
-
-.subtitle-dropzone strong {
-  color: var(--color-text-primary);
-  font-size: 16px;
-}
-
-.subtitle-dropzone span {
-  color: var(--color-text-secondary);
-  font-size: 14px;
-}
-
-.selected-file-row {
-  display: grid;
-  align-items: center;
-  gap: 12px;
-  grid-template-columns: 40px minmax(0, 1fr) auto;
-  padding: 12px;
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
-  background: var(--color-surface-alt);
-}
-
-.selected-file-row .app-icon {
-  width: 24px;
-  height: 24px;
-  color: var(--color-text-secondary);
-}
-
-.selected-file-row strong,
-.selected-file-row span {
-  display: block;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.selected-file-row strong {
-  color: var(--color-text-primary);
-  font-size: 16px;
-  font-weight: 600;
-}
-
-.selected-file-row span {
-  margin-top: 4px;
-  color: var(--color-text-secondary);
-  font-size: 13px;
-}
-
-.selected-file-row button {
-  min-width: 44px;
-  min-height: 44px;
-  padding: 0 8px;
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-sm);
-  background: var(--color-surface);
-  color: var(--color-text-secondary);
-  cursor: pointer;
-  font-size: 13px;
-  font-weight: 600;
 }
 
 .subtitle-result-actions {
@@ -1351,18 +1020,6 @@ input:focus-visible,
     padding: 16px;
   }
 
-  .subtitle-request-panel .segmented-control {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
-  .subtitle-request-panel .quality-grid {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-  }
-
-  .subtitle-request-panel .subtitle-processing-method {
-    grid-template-columns: minmax(0, 1fr);
-  }
-
   .status-head {
     gap: 12px;
     grid-template-columns: 52px minmax(0, 1fr);
@@ -1389,27 +1046,6 @@ input:focus-visible,
 }
 
 @media (max-width: 560px) {
-  .subtitle-request-panel {
-    gap: 16px;
-  }
-
-  /* 320px 폭에서도 submit이 fixed navigation 뒤로 밀리지 않도록 밀도를 조정한다. */
-  .subtitle-request-panel {
-    gap: 8px;
-  }
-
-  .subtitle-request-panel .subtitle-form {
-    gap: 4px;
-  }
-
-  .subtitle-request-panel .subtitle-processing-method {
-    gap: 4px;
-  }
-
-  .subtitle-dropzone {
-    min-height: 140px;
-  }
-
   .history-item__header {
     grid-template-columns: 1fr;
   }

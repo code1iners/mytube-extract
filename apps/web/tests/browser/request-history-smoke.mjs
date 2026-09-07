@@ -1519,52 +1519,61 @@ async function verifyRequestShortcuts() {
 /** 자막 처리 방식 설명과 처리 단계의 반응형 표시를 검증한다. */
 async function verifySubtitleProcessingChoice() {
   /** 선택 화면과 처리 화면을 확인할 모바일·데스크톱 viewport 폭. */
-  for (const width of [320, 390, 1280]) {
-    /** viewport별 자막 처리 방식 검증 context. */
-    const context = await createContext({
-      viewport: { height: width <= 820 ? 844 : 900, width },
-    });
-    /** 자막 처리 방식 검증 page. */
-    const { page, assertNoRuntimeErrors } = await createPage(context);
-    await page.emulateMedia({ reducedMotion: 'reduce' });
-
-    try {
-      await page.route('https://upload.example/**', async (route) => {
-        await route.fulfill({
-          body: '',
-          headers: {
-            'Access-Control-Allow-Origin': '*',
-            'Access-Control-Expose-Headers': 'ETag',
-            ETag: '"part-1"',
-          },
-          status: 200,
-        });
+  for (const width of [320, 390, 560, 1280]) {
+    /** 각 viewport에서 확인할 theme preference. */
+    for (const theme of ['light', 'dark']) {
+      /** viewport·theme별 자막 처리 방식 검증 context. */
+      const context = await createContext({
+        viewport: { height: width <= 820 ? 844 : 900, width },
       });
-      await routeApi(page, async ({ request, route, url }) => {
-        if (url.pathname === '/health') return fulfillJson(route, healthResponse());
-        if (url.pathname === '/subtitles/uploads' && request.method() === 'POST') {
-          assert.equal(request.postDataJSON().whisperModel, 'small_en');
-          return fulfillJson(route, {
-            expiresAt: '2026-08-13T12:00:00.000Z',
-            objectKey: 'source/video.mp4',
-            partSizeBytes: 1024,
-            parts: [{ partNumber: 1, uploadUrl: 'https://upload.example/part-1' }],
-            uploadId: 'upload-1',
-            uploadToken: 'token-1',
+      /** 자막 처리 방식 검증 page. */
+      const { page, assertNoRuntimeErrors } = await createPage(context);
+      await page.emulateMedia({ reducedMotion: 'reduce' });
+
+      try {
+        await page.addInitScript((preference) => {
+          localStorage.setItem('mytube-extract-theme-preference', preference);
+        }, theme);
+        await page.route('https://upload.example/**', async (route) => {
+          await route.fulfill({
+            body: '',
+            headers: {
+              'Access-Control-Allow-Origin': '*',
+              'Access-Control-Expose-Headers': 'ETag',
+              ETag: '"part-1"',
+            },
+            status: 200,
           });
-        }
-        if (url.pathname === '/subtitles/uploads/complete') {
-          return fulfillJson(route, subtitleJob(SUBTITLE_ID, 'queued'));
-        }
-        if (url.pathname === `/subtitles/jobs/${SUBTITLE_ID}`) {
-          return fulfillJson(route, subtitleJob(SUBTITLE_ID, 'transcribing'));
-        }
-        return fulfillJson(route, {}, 404);
-      });
+        });
+        await routeApi(page, async ({ request, route, url }) => {
+          if (url.pathname === '/health') return fulfillJson(route, healthResponse());
+          if (url.pathname === '/subtitles/uploads' && request.method() === 'POST') {
+            assert.equal(request.postDataJSON().whisperModel, 'small_en');
+            return fulfillJson(route, {
+              expiresAt: '2026-08-13T12:00:00.000Z',
+              objectKey: 'source/video.mp4',
+              partSizeBytes: 1024,
+              parts: [{ partNumber: 1, uploadUrl: 'https://upload.example/part-1' }],
+              uploadId: 'upload-1',
+              uploadToken: 'token-1',
+            });
+          }
+          if (url.pathname === '/subtitles/uploads/complete') {
+            return fulfillJson(route, subtitleJob(SUBTITLE_ID, 'queued'));
+          }
+          if (url.pathname === `/subtitles/jobs/${SUBTITLE_ID}`) {
+            return fulfillJson(route, subtitleJob(SUBTITLE_ID, 'transcribing'));
+          }
+          return fulfillJson(route, {}, 404);
+        });
 
-      await page.goto(`${staticServer.origin}/subtitles`);
-      await page.getByRole('heading', { name: '자막 추출' }).waitFor();
-      await page.locator('.subtitle-form').waitFor();
+        await page.goto(`${staticServer.origin}/subtitles`);
+        await page.getByRole('heading', { name: '자막 추출' }).waitFor();
+        await page.locator('.subtitle-form').waitFor();
+        assert.equal(
+          await page.evaluate(() => document.documentElement.dataset.theme),
+          theme,
+        );
 
       /** 자막 입력 흐름과 readiness 보조 영역의 DOM 위치. */
       const documentOrder = await page.evaluate(() => {
@@ -1577,7 +1586,7 @@ async function verifySubtitleProcessingChoice() {
         /** 처리 방식 선택 fieldset. */
         const processingMethod = form?.querySelector('.subtitle-processing-method');
         /** 영어 SRT 생성 주요 동작. */
-        const submit = form?.querySelector('.primary-button');
+        const submit = form?.querySelector('.subtitle-submit-button');
         /** 입력 흐름 뒤에 표시하는 readiness 보조 영역. */
         const readiness = panel?.querySelector('.worker-health-status');
         /** 전체 문서에서 요소의 읽기 위치를 반환한다. */
@@ -1607,8 +1616,129 @@ async function verifySubtitleProcessingChoice() {
       assert.equal(await processingMethod.locator('legend').innerText(), '처리 방식');
       assert.equal(await processingOptions.count(), 2);
       assert.equal(await speedOption.isChecked(), true);
+      /** 현재 테마가 자막 입력 control에 적용해야 하는 semantic 색상. */
+      const expectedSubtitleInputTheme = theme === 'dark'
+        ? {
+            action: 'rgb(230, 0, 18)',
+            border: 'rgb(118, 118, 118)',
+            danger: 'rgb(255, 138, 128)',
+            disabled: 'rgb(92, 89, 85)',
+            onAction: 'rgb(255, 255, 255)',
+            surface: 'rgb(32, 33, 36)',
+            surfaceAlt: 'rgb(41, 42, 45)',
+            textPrimary: 'rgb(242, 240, 238)',
+            textSecondary: 'rgb(179, 176, 172)',
+          }
+        : {
+            action: 'rgb(230, 0, 18)',
+            border: 'rgb(138, 138, 138)',
+            danger: 'rgb(198, 40, 40)',
+            disabled: 'rgb(200, 200, 200)',
+            onAction: 'rgb(255, 255, 255)',
+            surface: 'rgb(248, 248, 248)',
+            surfaceAlt: 'rgb(239, 239, 239)',
+            textPrimary: 'rgb(72, 72, 72)',
+            textSecondary: 'rgb(114, 114, 114)',
+          };
+      /** 자막 입력 control의 초기 computed style을 읽는다. */
+      const initialInputStyles = await page.evaluate(() => {
+        /** 파일 선택 control. */
+        const dropzone = document.querySelector('.subtitle-dropzone');
+        /** 처리 방식 선택지. */
+        const processingOptions = [...document.querySelectorAll('.subtitle-processing-option')];
+        /** 제출 button. */
+        const submit = document.querySelector('.subtitle-submit-button');
+        /** 선택지 style을 직렬화한다. */
+        const serializeOption = (element) => {
+          const style = getComputedStyle(element);
+          return {
+            borderColor: style.borderTopColor,
+            textColor: style.color,
+            textDecoration: style.textDecorationLine,
+          };
+        };
+        /** 제출 button style을 직렬화한다. */
+        const submitStyle = getComputedStyle(submit);
+        /** 파일 선택 control style을 직렬화한다. */
+        const dropzoneStyle = getComputedStyle(dropzone);
+
+        return {
+          dropzone: {
+            backgroundColor: dropzoneStyle.backgroundColor,
+            borderColor: dropzoneStyle.borderTopColor,
+            borderRadius: dropzoneStyle.borderTopLeftRadius,
+            borderStyle: dropzoneStyle.borderTopStyle,
+            color: dropzoneStyle.color,
+            hintColor: getComputedStyle(dropzone?.querySelector('span')).color,
+            hintFontSize: getComputedStyle(dropzone?.querySelector('span')).fontSize,
+            primaryCopyColor: getComputedStyle(dropzone?.querySelector('strong')).color,
+            primaryCopyFontSize: getComputedStyle(dropzone?.querySelector('strong')).fontSize,
+          },
+          options: processingOptions.map(serializeOption),
+          submit: {
+            backgroundColor: submitStyle.backgroundColor,
+            borderColor: submitStyle.borderTopColor,
+            boxShadow: submitStyle.boxShadow,
+            color: submitStyle.color,
+          },
+        };
+      });
+      assert.deepEqual(initialInputStyles.dropzone, {
+        backgroundColor: expectedSubtitleInputTheme.surfaceAlt,
+        borderColor: expectedSubtitleInputTheme.border,
+        borderRadius: '12px',
+        borderStyle: 'dashed',
+        color: expectedSubtitleInputTheme.textSecondary,
+        hintColor: expectedSubtitleInputTheme.textSecondary,
+        hintFontSize: '14px',
+        primaryCopyColor: expectedSubtitleInputTheme.textPrimary,
+        primaryCopyFontSize: '16px',
+      });
+      assert.equal(initialInputStyles.options[0].borderColor, expectedSubtitleInputTheme.action);
+      assert.equal(initialInputStyles.options[0].textColor, expectedSubtitleInputTheme.textPrimary);
+      assert.equal(initialInputStyles.options[0].textDecoration, 'underline');
+      assert.equal(initialInputStyles.options[1].borderColor, expectedSubtitleInputTheme.border);
+      assert.equal(initialInputStyles.options[1].textColor, expectedSubtitleInputTheme.textSecondary);
+      assert.equal(initialInputStyles.options[1].textDecoration, 'none');
+      assert.equal(initialInputStyles.submit.backgroundColor, expectedSubtitleInputTheme.surfaceAlt);
+      assert.equal(initialInputStyles.submit.borderColor, expectedSubtitleInputTheme.border);
+      assert.doesNotMatch(initialInputStyles.submit.boxShadow, /2px 8px/);
+      assert.equal(initialInputStyles.submit.color, expectedSubtitleInputTheme.disabled);
+      await dispatchSubtitleFileDrop(page, page.locator('.subtitle-dropzone'), {
+        mimeType: 'text/plain',
+        name: 'invalid-video.txt',
+      });
+      await page
+        .getByText('mp4, mov, webm 영상 파일만 사용할 수 있습니다.', { exact: true })
+        .waitFor();
+      /** 잘못된 파일 입력에 적용된 danger 색상. */
+      const invalidInputStyles = await page.evaluate(() => ({
+        dropzoneBorder: getComputedStyle(document.querySelector('.subtitle-dropzone')).borderTopColor,
+        feedbackColor: getComputedStyle(document.querySelector('#subtitle-file-feedback')).color,
+      }));
+      assert.deepEqual(invalidInputStyles, {
+        dropzoneBorder: expectedSubtitleInputTheme.danger,
+        feedbackColor: expectedSubtitleInputTheme.danger,
+      });
+      await page.getByRole('button', { name: '지우기' }).click();
       await accuracyOption.check();
       assert.equal(await accuracyOption.isChecked(), true);
+      /** 두 번째 처리 방식 선택 후의 selected state style. */
+      const selectedProcessingStyles = await processingOptions.evaluateAll((options) =>
+        options.map((option) => {
+          const style = getComputedStyle(option);
+          return {
+            borderColor: style.borderTopColor,
+            textColor: style.color,
+            textDecoration: style.textDecorationLine,
+          };
+        }),
+      );
+      assert.equal(selectedProcessingStyles[0].borderColor, expectedSubtitleInputTheme.border);
+      assert.equal(selectedProcessingStyles[0].textDecoration, 'none');
+      assert.equal(selectedProcessingStyles[1].borderColor, expectedSubtitleInputTheme.action);
+      assert.equal(selectedProcessingStyles[1].textColor, expectedSubtitleInputTheme.textPrimary);
+      assert.equal(selectedProcessingStyles[1].textDecoration, 'underline');
       assert.equal(await page.getByText('파일의 음성을 영어 자막 파일(SRT)로 만들 처리 방향을 선택하세요.', { exact: true }).count(), 1);
       assert.equal(await page.getByText('파일을 빠르게 영어 자막으로 만들고 싶을 때', { exact: true }).count(), 1);
       assert.equal(await page.getByText('음성을 더 꼼꼼하게 영어 자막으로 옮기고 싶을 때', { exact: true }).count(), 1);
@@ -1679,7 +1809,7 @@ async function verifySubtitleProcessingChoice() {
         /** 파일 선택 control. */
         const dropzone = document.querySelector('.subtitle-dropzone');
         /** 주요 요청 동작. */
-        const submit = document.querySelector('.subtitle-form .primary-button');
+        const submit = document.querySelector('.subtitle-form .subtitle-submit-button');
         /** readiness 보조 영역. */
         const readiness = document.querySelector('.worker-health-status');
         /** 처리 방식 fieldset. */
@@ -1729,6 +1859,7 @@ async function verifySubtitleProcessingChoice() {
       assert.ok(layoutMetrics.options.every((option) => option.left >= 0 && option.right <= width));
       assert.ok(layoutMetrics.readiness);
       assert.ok(layoutMetrics.submit);
+      assert.ok(layoutMetrics.submit.height >= 48);
       assert.ok(layoutMetrics.readiness.bottom <= layoutMetrics.dropzone.top);
       assert.equal(await page.locator('.submit-disabled-reason').count(), 0);
       assert.equal(
@@ -1744,7 +1875,7 @@ async function verifySubtitleProcessingChoice() {
           const navigation = [...document.querySelectorAll('nav[aria-label="주요 메뉴"]')]
             .find((element) => getComputedStyle(element).display !== 'none');
           /** 제출 button. */
-          const submit = document.querySelector('.subtitle-form .primary-button');
+          const submit = document.querySelector('.subtitle-form .subtitle-submit-button');
           /** 마지막 서비스 상태 영역. */
           const readiness = document.querySelector('.worker-health-status');
           return {
@@ -1767,6 +1898,19 @@ async function verifySubtitleProcessingChoice() {
         mimeType: 'video/mp4',
         name: 'sample.mp4',
       });
+      await waitForEnabled(submit);
+      const enabledSubmitStyles = await submit.evaluate((element) => {
+        /** 활성 제출 button style. */
+        const style = getComputedStyle(element);
+        return {
+          backgroundColor: style.backgroundColor,
+          boxShadow: style.boxShadow,
+          color: style.color,
+        };
+      });
+      assert.equal(enabledSubmitStyles.backgroundColor, expectedSubtitleInputTheme.action);
+      assert.match(enabledSubmitStyles.boxShadow, /2px 8px/);
+      assert.equal(enabledSubmitStyles.color, expectedSubtitleInputTheme.onAction);
       /** 선택한 파일을 지우는 실제 조작 영역. */
       const clearSelectedFileButton = page.locator('.selected-file-row button');
       const clearSelectedFileBox = await clearSelectedFileButton.boundingBox();
@@ -1797,6 +1941,7 @@ async function verifySubtitleProcessingChoice() {
     } finally {
       await context.close();
     }
+  }
   }
 }
 
