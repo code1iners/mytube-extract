@@ -44,6 +44,8 @@ try {
   await run('video request cancellation restores input and navigation', verifyVideoRequestCancellation);
   await run('receipt storage failure keeps the accepted job history destination', verifyAcceptedJobStorageFallback);
   await run('subtitle in-place success and navigation lock', verifySubtitleRequestFlow);
+  await run('subtitle lifecycle states stay distinct across themes and widths', verifySubtitleLifecycleStatusSurfaces);
+  await run('subtitle accepting and cancellation surfaces restore focus', verifySubtitleAcceptanceAndCancellationSurfaces);
   await run('subtitle receipt storage failure keeps the accepted job history destination', verifySubtitleReceiptStorageFallback);
   await run('subtitle request cancellation cleans upload and restores file input', verifySubtitleRequestCancellation);
   await run('request shortcuts focus only their own action', verifyRequestShortcuts);
@@ -1266,6 +1268,346 @@ async function verifySubtitleRequestFlow() {
   }
 }
 
+/** 자막 요청 생명주기 상태의 tone과 반응형 overflow를 검증한다. */
+async function verifySubtitleLifecycleStatusSurfaces() {
+  /** 실제 자막 lifecycle에서 비교할 처리·terminal 상태. */
+  const lifecycleStates = [
+    {
+      apiStatus: 'queued',
+      expectedHeading: '작업 대기 중입니다',
+      expectedTone: 'queued',
+    },
+    {
+      apiStatus: 'extracting_audio',
+      expectedHeading: '음성을 추출 중입니다',
+      expectedTone: 'processing',
+    },
+    {
+      apiStatus: 'transcribing',
+      expectedHeading: '영어 SRT를 생성 중입니다',
+      expectedTone: 'processing',
+    },
+    {
+      apiStatus: 'completed',
+      expectedHeading: '영어 자막 파일이 준비되었습니다',
+      expectedTone: 'completed',
+    },
+    {
+      apiStatus: 'failed',
+      expectedHeading: '영어 SRT 생성에 실패했습니다',
+      expectedTone: 'failed',
+    },
+    {
+      apiStatus: 'expired',
+      expectedHeading: '영어 SRT 보관 기간이 지났습니다',
+      expectedTone: 'expired',
+    },
+  ];
+  /** 상태 tone별 theme semantic color. */
+  const expectedToneColors = {
+    dark: {
+      completed: 'rgb(143, 214, 160)',
+      expired: 'rgb(92, 89, 85)',
+      failed: 'rgb(255, 138, 128)',
+      processing: 'rgb(169, 180, 242)',
+      queued: 'rgb(179, 176, 172)',
+    },
+    light: {
+      completed: 'rgb(53, 107, 67)',
+      expired: 'rgb(200, 200, 200)',
+      failed: 'rgb(198, 40, 40)',
+      processing: 'rgb(75, 92, 206)',
+      queued: 'rgb(114, 114, 114)',
+    },
+  };
+
+  for (const width of [320, 390, 560, 561, 820, 821, 1280]) {
+    for (const theme of ['light', 'dark']) {
+      for (const lifecycleState of lifecycleStates) {
+        /** 상태·theme·viewport를 독립적으로 확인할 browser context. */
+        const context = await createContext({
+          viewport: { height: width <= 821 ? 844 : 900, width },
+        });
+        /** 상태 surface를 확인할 page. */
+        const { page, assertNoRuntimeErrors } = await createPage(context, {
+          ignoreHttpErrors: true,
+        });
+
+        try {
+          await page.addInitScript((preference) => {
+            localStorage.setItem('mytube-extract-theme-preference', preference);
+          }, theme);
+          await page.route('https://upload.example/**', async (route) => {
+            await route.fulfill({
+              body: '',
+              headers: {
+                'Access-Control-Allow-Origin': '*',
+                'Access-Control-Expose-Headers': 'ETag',
+                ETag: '"subtitle-lifecycle-part"',
+              },
+              status: 200,
+            });
+          });
+          await routeApi(page, async ({ request, route, url }) => {
+            if (url.pathname === '/health') {
+              return fulfillJson(route, healthResponse());
+            }
+            if (url.pathname === '/subtitles/uploads' && request.method() === 'POST') {
+              return fulfillJson(route, {
+                expiresAt: '2026-08-13T12:00:00.000Z',
+                objectKey: 'source/subtitle-lifecycle.mp4',
+                partSizeBytes: 1024,
+                parts: [{ partNumber: 1, uploadUrl: 'https://upload.example/part-1' }],
+                uploadId: 'subtitle-lifecycle-upload',
+                uploadToken: 'subtitle-lifecycle-token',
+              });
+            }
+            if (url.pathname === '/subtitles/uploads/complete') {
+              return fulfillJson(
+                route,
+                subtitleJob(
+                  SUBTITLE_ID,
+                  lifecycleState.apiStatus === 'transcribing'
+                    ? 'queued'
+                    : lifecycleState.apiStatus,
+                  {
+                    fileName: 'a-very-long-original-video-file-name-for-subtitle-result.mp4',
+                    message:
+                      lifecycleState.apiStatus === 'failed'
+                        ? '자막 처리 중 긴 오류 안내가 표시되어도 조작 요소와 겹치지 않아야 합니다.'
+                        : undefined,
+                  },
+                ),
+              );
+            }
+            if (url.pathname === `/subtitles/jobs/${SUBTITLE_ID}`) {
+              return fulfillJson(
+                route,
+                subtitleJob(SUBTITLE_ID, lifecycleState.apiStatus, {
+                  fileName: 'a-very-long-original-video-file-name-for-subtitle-result.mp4',
+                  message:
+                    lifecycleState.apiStatus === 'failed'
+                      ? '자막 처리 중 긴 오류 안내가 표시되어도 조작 요소와 겹치지 않아야 합니다.'
+                      : undefined,
+                }),
+              );
+            }
+            return fulfillJson(route, {}, 404);
+          });
+
+          await page.goto(`${staticServer.origin}/subtitles`);
+          await page.locator('input[type="file"]').setInputFiles({
+            buffer: Buffer.from('subtitle-lifecycle-video'),
+            mimeType: 'video/mp4',
+            name: 'subtitle-lifecycle.mp4',
+          });
+          const submit = page.getByRole('button', { name: '영어 SRT 생성' });
+          await waitForEnabled(submit);
+          await submit.click();
+          await page.locator('.subtitle-status-panel').waitFor();
+          await page
+            .getByRole('heading', { name: lifecycleState.expectedHeading })
+            .waitFor();
+
+          /** 상태 panel과 문서가 viewport 안에 남는지 확인할 측정값. */
+          const layoutMetrics = await page.evaluate(() => {
+            /** 현재 자막 상태 panel. */
+            const panel = document.querySelector('.subtitle-status-panel');
+            /** 상태 아이콘. */
+            const icon = document.querySelector('.subtitle-status-icon');
+            /** 상태 설명. */
+            const message = document.querySelector('.subtitle-status-head p');
+            /** 완료 결과 action 영역. */
+            const actions = document.querySelector('.subtitle-result-actions');
+            /** 완료 결과 다운로드 control. */
+            const download = document.querySelector('.subtitle-download-button');
+            /** 요소의 viewport 사각형. */
+            const toBox = (element) => {
+              const rect = element?.getBoundingClientRect();
+              return rect
+                ? { bottom: rect.bottom, height: rect.height, left: rect.left, right: rect.right, top: rect.top, width: rect.width }
+                : null;
+            };
+
+            return {
+              actions: toBox(actions),
+              document: {
+                clientWidth: document.documentElement.clientWidth,
+                scrollWidth: document.documentElement.scrollWidth,
+              },
+              download: toBox(download),
+              icon: icon ? getComputedStyle(icon).borderTopColor : null,
+              legacyStatusClassCount: document.querySelectorAll(
+                '.console-panel, .status-panel, .status-head, .status-icon, .status-details, .result-actions, .download-button',
+              ).length,
+              message: toBox(message),
+              panel: toBox(panel),
+            };
+          });
+
+          assert.deepEqual(layoutMetrics.document, {
+            clientWidth: width,
+            scrollWidth: width,
+          });
+          assert.equal(layoutMetrics.legacyStatusClassCount, 0);
+          assert.ok(layoutMetrics.panel);
+          assert.ok(layoutMetrics.panel.left >= 0);
+          assert.ok(layoutMetrics.panel.right <= width);
+          assert.equal(
+            layoutMetrics.icon,
+            expectedToneColors[theme][lifecycleState.expectedTone],
+          );
+          assert.ok(layoutMetrics.message);
+
+          if (lifecycleState.apiStatus === 'completed') {
+            assert.ok(layoutMetrics.actions);
+            assert.ok(layoutMetrics.download);
+            assert.ok(layoutMetrics.download.height >= 48);
+            assert.equal(
+              await page.getByText('영어 SRT 다운로드', { exact: true }).count(),
+              1,
+            );
+          }
+
+          if (['queued', 'extracting_audio', 'transcribing'].includes(lifecycleState.apiStatus)) {
+            const stepTabs = page.locator('.subtitle-step-tabs .subtitle-step-tab');
+            assert.equal(await stepTabs.count(), 4);
+            assert.equal(await page.locator('.subtitle-progress-meter').count(), 1);
+          }
+
+          assertNoRuntimeErrors();
+        } finally {
+          await context.close();
+        }
+      }
+    }
+  }
+}
+
+/** 자막 요청 접수 중·중단의 고유 surface와 포커스 복귀를 검증한다. */
+async function verifySubtitleAcceptanceAndCancellationSurfaces() {
+  /** 접수 중 상태를 비교할 대표 폭과 테마. */
+  for (const width of [320, 390, 1280]) {
+    for (const theme of ['light', 'dark']) {
+      const context = await createContext({
+        viewport: { height: width <= 821 ? 844 : 900, width },
+      });
+      const { page, assertNoRuntimeErrors } = await createPage(context, {
+        ignoreHttpErrors: true,
+      });
+      let releaseUploadInit;
+      let uploadInitStarted;
+      let completeCalls = 0;
+      let abortCalls = 0;
+      const uploadInitGate = new Promise((resolve) => {
+        releaseUploadInit = resolve;
+      });
+      const uploadInitStartedPromise = new Promise((resolve) => {
+        uploadInitStarted = resolve;
+      });
+
+      try {
+        await page.addInitScript((preference) => {
+          localStorage.setItem('mytube-extract-theme-preference', preference);
+        }, theme);
+        await routeApi(page, async ({ request, route, url }) => {
+          if (url.pathname === '/health') {
+            return fulfillJson(route, healthResponse());
+          }
+          if (url.pathname === '/subtitles/uploads' && request.method() === 'POST') {
+            uploadInitStarted();
+            await uploadInitGate;
+            try {
+              return await fulfillJson(route, {
+                expiresAt: '2026-08-13T12:00:00.000Z',
+                objectKey: 'source/subtitle-accepting.mp4',
+                partSizeBytes: 1024,
+                parts: [{ partNumber: 1, uploadUrl: 'https://upload.example/part-1' }],
+                uploadId: 'subtitle-accepting-upload',
+                uploadToken: 'subtitle-accepting-token',
+              });
+            } catch {
+              return undefined;
+            }
+          }
+          if (url.pathname === '/subtitles/uploads/abort') {
+            abortCalls += 1;
+            return fulfillJson(route, {});
+          }
+          if (url.pathname === '/subtitles/uploads/complete') {
+            completeCalls += 1;
+          }
+          return fulfillJson(route, {}, 404);
+        });
+
+        await page.goto(`${staticServer.origin}/subtitles`);
+        await page.locator('input[type="file"]').setInputFiles({
+          buffer: Buffer.from('subtitle-accepting-video'),
+          mimeType: 'video/mp4',
+          name: 'subtitle-accepting-video.mp4',
+        });
+        const submit = page.getByRole('button', { name: '영어 SRT 생성' });
+        await waitForEnabled(submit);
+        await submit.click();
+        await uploadInitStartedPromise;
+        await page
+          .getByRole('heading', { name: '영어 SRT 생성 요청을 준비하고 있습니다' })
+          .waitFor();
+
+        /** 접수 중 panel과 navigation이 동일한 surface를 사용하는지 확인한다. */
+        const acceptingMetrics = await page.evaluate(() => {
+          /** 접수 중 상태 panel. */
+          const panel = document.querySelector('.subtitle-status-panel');
+          /** 접수 중 상태 아이콘. */
+          const icon = document.querySelector('.subtitle-status-icon');
+
+          return {
+            document: {
+              clientWidth: document.documentElement.clientWidth,
+              scrollWidth: document.documentElement.scrollWidth,
+            },
+            icon: icon ? getComputedStyle(icon).borderTopColor : null,
+            panel: panel ? panel.getBoundingClientRect().toJSON() : null,
+            progress: document.querySelector('.subtitle-progress-meter'),
+            steps: document.querySelector('.subtitle-step-tabs'),
+          };
+        });
+        assert.deepEqual(acceptingMetrics.document, {
+          clientWidth: width,
+          scrollWidth: width,
+        });
+        assert.equal(acceptingMetrics.icon, theme === 'dark' ? 'rgb(169, 180, 242)' : 'rgb(75, 92, 206)');
+        assert.ok(acceptingMetrics.panel);
+        assert.equal(acceptingMetrics.steps, null);
+        assert.equal(acceptingMetrics.progress, null);
+        assert.equal(
+          await page.getByRole('link', { name: '요청 내역' }).getAttribute('aria-disabled'),
+          'true',
+        );
+
+        await page.getByRole('button', { name: '요청 취소' }).click();
+        const picker = page.getByRole('button', {
+          name: '영상 선택 또는 드래그 (로컬 영상 파일)',
+        });
+        await picker.waitFor();
+        await waitForCondition(async () =>
+          picker.evaluate((element) => document.activeElement === element),
+        );
+        assert.equal(await page.getByText('subtitle-accepting-video.mp4', { exact: true }).count(), 1);
+        assert.equal(await page.getByRole('button', { name: '요청 취소' }).count(), 0);
+        assert.equal(completeCalls, 0);
+        assert.equal(abortCalls, 0);
+        releaseUploadInit();
+        await page.waitForTimeout(100);
+        assertNoRuntimeErrors();
+      } finally {
+        releaseUploadInit?.();
+        await context.close();
+      }
+    }
+  }
+}
+
 /** 자막 접수증 저장 실패 뒤에도 현재 job의 요청 내역 deep link를 보존하는지 검증한다. */
 async function verifySubtitleReceiptStorageFallback() {
   /** 접수증 저장 실패를 재현할 독립 browser context. */
@@ -1921,7 +2263,7 @@ async function verifySubtitleProcessingChoice() {
       assert.equal(await page.locator('.request-flow[data-flow-stage="extract"]').count(), 1);
 
       /** 실제 자막 처리 단계 네 개. */
-      const stepTabs = page.locator('.subtitle-step-tabs .step-tab');
+      const stepTabs = page.locator('.subtitle-step-tabs .subtitle-step-tab');
       assert.equal(await stepTabs.count(), 4);
       assert.deepEqual(await stepTabs.allTextContents(), ['대기', '음성 추출', '영어 SRT 생성', '완료']);
       assert.equal(await page.locator('.subtitle-step-tabs [aria-current="step"]').count(), 1);
@@ -3463,7 +3805,7 @@ function videoJob(jobId, displayStatus) {
   };
 }
 
-function subtitleJob(jobId, displayStatus) {
+function subtitleJob(jobId, displayStatus, overrides = {}) {
   const status = displayStatus === 'expired' ? 'completed' : displayStatus;
   return {
     createdAt: '2026-08-11T00:00:00.000Z',
@@ -3471,9 +3813,9 @@ function subtitleJob(jobId, displayStatus) {
     downloadUrl:
       displayStatus === 'completed' ? `/subtitles/jobs/${jobId}/file` : null,
     errorCode: displayStatus === 'failed' ? 'TRANSCRIPTION_FAILED' : null,
-    fileName: 'sample.mp4',
+    fileName: overrides.fileName ?? 'sample.mp4',
     jobId,
-    message: `subtitle ${displayStatus}`,
+    message: overrides.message ?? `subtitle ${displayStatus}`,
     progress: displayStatus === 'completed' ? 100 : 0,
     retentionDays: 3,
     stage: status,

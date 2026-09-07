@@ -65,6 +65,13 @@ const DEFAULT_WHISPER_MODEL: SubtitleWhisperModel = 'base_en';
 
 /** 화면에 표시하는 자막 처리 단계. */
 export type SubtitleStepKey = 'file_select' | SubtitleJobResponse['stage'];
+/** 자막 상태 제목·아이콘에 사용할 표시 tone. */
+export type SubtitleStatusTone =
+  | 'queued'
+  | 'processing'
+  | 'completed'
+  | 'failed'
+  | 'expired';
 
 /** 자막 추출 route의 file upload, polling, 표시 상태를 lifecycle interface로 정규화한다. */
 export function useSubtitlesExtractLogic() {
@@ -660,7 +667,9 @@ function getStatusIconName(
 }
 
 /** 기존 status CSS tone에 맞춰 자막 상태를 변환한다. */
-function getStatusTone(status: SubtitleJobResponse['displayStatus']) {
+function getStatusTone(
+  status: SubtitleJobResponse['displayStatus'],
+): SubtitleStatusTone {
   if (status === 'extracting_audio' || status === 'transcribing') {
     return 'processing';
   }

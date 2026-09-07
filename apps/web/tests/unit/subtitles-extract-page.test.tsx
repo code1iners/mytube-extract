@@ -260,6 +260,7 @@ describe('subtitles extract page', () => {
 
   it('shows a lightweight acceptance status without processing stages or a progress meter', () => {
     subtitlesExtractLogic.mockReturnValue({
+      cancelRequest: () => undefined,
       statusIconName: 'processing',
       statusMessage: '자막 요청을 접수하고 있습니다.',
       statusTitle: '자막 요청을 접수하고 있습니다',
@@ -274,6 +275,67 @@ describe('subtitles extract page', () => {
     expect(markup).toContain('자막 요청을 접수하고 있습니다');
     expect(markup).not.toContain('progress-meter');
     expect(markup).not.toContain('subtitle-step-tabs');
+  });
+
+  it('keeps subtitle lifecycle surfaces on dedicated Tailwind classes', () => {
+    subtitlesExtractLogic.mockReturnValue({
+      cancelRequest: () => undefined,
+      statusIconName: 'processing',
+      statusMessage: '자막 요청을 접수하고 있습니다.',
+      statusTitle: '자막 요청을 접수하고 있습니다',
+      statusTone: 'processing',
+      viewPhase: 'accepting',
+    });
+
+    /** 자막 접수 중 화면의 정적 HTML. */
+    const acceptingMarkup = renderToStaticMarkup(<SubtitlesExtractPage />);
+
+    expect(acceptingMarkup).toContain('subtitle-status-panel');
+    expect(acceptingMarkup).toContain('subtitle-status-head');
+    expect(acceptingMarkup).not.toContain('console-panel');
+    expect(acceptingMarkup).not.toMatch(/(?:class="| )status-panel(?: |")/);
+    expect(acceptingMarkup).not.toMatch(/(?:class="| )secondary-button(?: |")/);
+
+    subtitlesExtractLogic.mockReturnValue({
+      downloadHref: 'https://api.example.test/subtitles/job-1/file.srt',
+      returnToRequest: () => undefined,
+      statusJob: {
+        fileName: 'sample-video.mp4',
+        retentionDays: 7,
+      },
+      statusMessage: '영어 SRT가 준비되었습니다.',
+      statusTitle: '영어 SRT가 준비되었습니다',
+      viewPhase: 'result',
+    });
+
+    /** 자막 완료 결과 화면의 정적 HTML. */
+    const resultMarkup = renderToStaticMarkup(<SubtitlesExtractPage />);
+
+    expect(resultMarkup).toContain('subtitle-result-actions');
+    expect(resultMarkup).toContain('subtitle-download-button');
+    expect(resultMarkup).not.toMatch(/(?:class="| )result-actions(?: |")/);
+    expect(resultMarkup).not.toMatch(/(?:class="| )download-button(?: |")/);
+
+    subtitlesExtractLogic.mockReturnValue({
+      returnToRequest: () => undefined,
+      statusErrorDetail: {
+        code: 'JOB_ASSET_EXPIRED',
+        guidance: '다시 요청해 주세요.',
+        location: '영어 SRT 생성 상태',
+      },
+      statusIconName: 'expired',
+      statusMessage: '영어 SRT 보관 기간이 지났습니다.',
+      statusTitle: '영어 SRT 보관 기간이 지났습니다',
+      statusTone: 'expired',
+      viewPhase: 'error',
+      workerHealthFailed: false,
+    });
+
+    /** 만료 오류 화면의 정적 HTML. */
+    const expiredMarkup = renderToStaticMarkup(<SubtitlesExtractPage />);
+
+    expect(expiredMarkup).toContain('text-mytube-status-expired');
+    expect(expiredMarkup).not.toContain('text-mytube-status-failed');
   });
 
   it('marks the selected processing step as the current step', () => {
@@ -293,9 +355,11 @@ describe('subtitles extract page', () => {
 
     expect(markup).toContain('aria-current="step"');
     expect(markup).toContain('aria-valuetext="진행률 60%"');
-    expect(markup).toContain('class="progress-label">진행률 60%');
+    expect(markup).toMatch(
+      /class="[^"]*\bsubtitle-progress-label\b[^"]*">진행률 60%/,
+    );
     expect(markup).toContain('영어 SRT 생성');
-    expect(markup.match(/class="step-tab/g)).toHaveLength(4);
+    expect(markup.match(/class="[^"]*\bsubtitle-step-tab\b[^"]*"/g)).toHaveLength(4);
   });
 
   it('renders the completed job download URL in the in-place result panel', () => {
@@ -334,8 +398,10 @@ describe('subtitles extract page', () => {
         responseBody: 'upstream failure',
         responseStatus: 502,
       },
+      statusIconName: 'failed',
       statusMessage: '영어 SRT 생성 요청을 다시 시도해 주세요.',
       statusTitle: '영어 SRT 생성에 실패했습니다',
+      statusTone: 'failed',
       viewPhase: 'error',
       workerHealthFailed: false,
     });
@@ -364,8 +430,10 @@ describe('subtitles extract page', () => {
           guidance: '다시 요청해 주세요.',
           location: '영어 SRT 생성 상태',
         },
+        statusIconName: displayStatus === 'failed' ? 'failed' : 'expired',
         statusMessage: '다시 요청해 주세요.',
         statusTitle: '요청을 완료하지 못했습니다',
+        statusTone: displayStatus === 'failed' ? 'failed' : 'expired',
         viewPhase: 'error',
         workerHealthFailed: false,
       });
