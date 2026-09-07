@@ -3210,7 +3210,7 @@ async function verifyEmptyHistoryProductModel() {
   }
 }
 
-/** 실제 receipt 목록도 긴 파일명에서 좁은 viewport를 밀어내지 않는지 확인한다. */
+/** 실제 receipt 목록도 긴 파일명·상태 안내에서 좁은 viewport를 밀어내지 않는지 확인한다. */
 async function verifyPopulatedHistoryResponsiveLayout() {
   /** 기존 목록의 실제 데이터 경계를 확인할 viewport 폭. */
   for (const width of [320, 390, 1280]) {
@@ -3221,6 +3221,7 @@ async function verifyPopulatedHistoryResponsiveLayout() {
       });
       const { page, assertNoRuntimeErrors } = await createPage(context);
       const longFileName = `${'long-file-name-'.repeat(12)}.mp4`;
+      const longStatusMessage = `${'긴 상태 안내 문구 '.repeat(12)}확인해 주세요.`;
 
       try {
         await page.addInitScript((preference) => {
@@ -3249,7 +3250,12 @@ async function verifyPopulatedHistoryResponsiveLayout() {
             return fulfillJson(route, videoJob(VIDEO_OTHER_ID, 'failed'));
           }
           if (url.pathname === `/subtitles/jobs/${SUBTITLE_OTHER_ID}`) {
-            return fulfillJson(route, subtitleJob(SUBTITLE_OTHER_ID, 'expired'));
+            return fulfillJson(
+              route,
+              subtitleJob(SUBTITLE_OTHER_ID, 'expired', {
+                message: longStatusMessage,
+              }),
+            );
           }
 
           return fulfillJson(route, {}, 404);
@@ -3263,6 +3269,7 @@ async function verifyPopulatedHistoryResponsiveLayout() {
               text.includes(longFileName),
             ),
         );
+        await page.getByText(longStatusMessage, { exact: true }).waitFor();
         assert.equal(await page.locator('.history-item').count(), 4);
         assert.deepEqual(
           await page.locator('.history-item h3').allTextContents(),

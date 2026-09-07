@@ -31,8 +31,10 @@ Status: done (2026-09-07)
 
 - `/history`의 flat panel, 빈 상태 시작 링크·보관 안내, 목록·항목 메타, 상태 tone·progress, 완료 다운로드·실패/만료 재요청·상태 재확인 action을 전용 Tailwind utility class로 전환했다. 기존 route, localStorage receipt identity·최신순·20건 제한, API status polling, RequestFlow, ARIA 구조와 test selector는 유지했다.
 - 상태별 utility map을 정적으로 선언해 `queued`·`processing`·`completed`·`failed`·`expired` 색상이 배포용 CSS에서 누락되지 않도록 했다. 긴 파일명·오류 문구는 `min-w-0`과 `overflow-wrap:anywhere`로 기존 줄바꿈 계약을 유지했다.
+- 결과 action의 hover 효과는 기존 `@media (hover: hover)` 동작을 유지하도록 Tailwind arbitrary variant로 제한했고, populated fixture에 긴 상태 안내 문구도 추가해 긴 파일명·상태 안내의 줄바꿈을 함께 확인했다.
 - 삭제 button, 삭제 후 undo 안내·button 및 해당 focus 동작의 스타일 소유권은 09에 남겼다. 저장 실패 안내는 history 전용 utility로 옮겼다.
 - 기존 browser smoke의 populated history를 영상 processing·completed·failed 및 자막 completed·expired 혼합 fixture로 확장해 최신순, 50/100/0/0 progress, 상태 tone, 다운로드·재요청 링크와 긴 파일명을 확인했다. 빈 상태 링크의 실제 focus·44px 이상 touch target, light/dark × `320x844`·`390x844`·`1280x900` overflow도 재실행했다.
+- 위 fixture는 긴 상태 안내 문구의 실제 렌더링도 확인하며, action hover가 터치 환경에서 고정되지 않는 Tailwind media variant를 build 결과로 확인했다.
 - 검증 결과:
   - `pnpm --filter web run lint`: 통과
   - `pnpm --filter web run test`: 18개 파일 / 137개 테스트 통과

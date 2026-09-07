@@ -131,10 +131,10 @@ const HISTORY_ACTIONS_CLASS_NAME =
   'history-actions flex min-w-0 flex-wrap items-stretch gap-mytube-8';
 /** 요청 내역 primary result link의 Tailwind button className. */
 const HISTORY_PRIMARY_ACTION_CLASS_NAME =
-  'history-primary-action inline-flex min-w-[44px] min-h-[44px] items-center justify-center gap-mytube-8 border border-mytube-action-primary rounded-mytube-md bg-mytube-action-primary px-[14px] text-mytube-on-primary cursor-pointer text-[14px] font-semibold leading-[1] no-underline shadow-mytube-soft focus-visible:outline-2 focus-visible:outline-mytube-focus focus-visible:[outline-offset:2px] hover:brightness-[0.92] active:brightness-[0.84]';
+  'history-primary-action inline-flex min-w-[44px] min-h-[44px] items-center justify-center gap-mytube-8 border border-mytube-action-primary rounded-mytube-md bg-mytube-action-primary px-[14px] text-mytube-on-primary cursor-pointer text-[14px] font-semibold leading-[1] no-underline shadow-mytube-soft focus-visible:outline-2 focus-visible:outline-mytube-focus focus-visible:[outline-offset:2px] [@media(hover:hover)]:hover:brightness-[0.92] active:brightness-[0.84]';
 /** 요청 내역 secondary action의 Tailwind button className. */
 const HISTORY_SECONDARY_ACTION_CLASS_NAME =
-  'history-secondary-action inline-flex min-w-[44px] min-h-[44px] items-center justify-center gap-mytube-8 border border-mytube-border rounded-mytube-md bg-mytube-surface px-[14px] text-mytube-text-primary cursor-pointer text-[14px] font-semibold leading-[1.4] no-underline focus-visible:outline-2 focus-visible:outline-mytube-focus focus-visible:[outline-offset:2px] hover:bg-mytube-surface-alt hover:text-mytube-text-primary disabled:text-mytube-text-disabled disabled:cursor-not-allowed';
+  'history-secondary-action inline-flex min-w-[44px] min-h-[44px] items-center justify-center gap-mytube-8 border border-mytube-border rounded-mytube-md bg-mytube-surface px-[14px] text-mytube-text-primary cursor-pointer text-[14px] font-semibold leading-[1.4] no-underline focus-visible:outline-2 focus-visible:outline-mytube-focus focus-visible:[outline-offset:2px] [@media(hover:hover)]:hover:bg-mytube-surface-alt [@media(hover:hover)]:hover:text-mytube-text-primary disabled:text-mytube-text-disabled disabled:cursor-not-allowed';
 
 /** 삭제한 접수증을 되돌릴 수 있는 제한 시간. */
 const HISTORY_UNDO_WINDOW_MS = 8_000;
