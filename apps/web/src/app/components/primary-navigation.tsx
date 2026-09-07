@@ -95,9 +95,18 @@ export function PrimaryNavigation({
         /** 목적지의 active·disabled 상태를 하나의 판정 결과로 공유한다. */
         const navigationLinkClassName = [
           'primary-navigation__link',
+          'inline-flex min-w-0 min-h-[48px] items-center justify-center gap-mytube-8 border-b border-transparent text-[14px] font-semibold leading-[1] no-underline whitespace-nowrap focus-visible:outline-2 focus-visible:outline-mytube-focus focus-visible:[outline-offset:-2px]',
           linkClassName,
           isActive ? 'is-active' : '',
+          isActive
+            ? 'border-b-mytube-action-primary bg-mytube-surface-alt text-mytube-text-primary'
+            : '',
           blocksNavigation ? 'is-disabled' : '',
+          blocksNavigation
+            ? 'cursor-not-allowed text-mytube-text-disabled'
+            : isActive
+              ? ''
+              : 'text-mytube-text-secondary hover:bg-mytube-surface-alt hover:text-mytube-text-primary',
         ]
           .filter(Boolean)
           .join(' ');
@@ -112,7 +121,10 @@ export function PrimaryNavigation({
             to={destination}
             onClick={handleClick}
           >
-            <AppIcon name={item.icon} />
+            <AppIcon
+              className={isActive ? 'text-mytube-action-primary' : undefined}
+              name={item.icon}
+            />
             <span>{item.label}</span>
           </NavLink>
         );

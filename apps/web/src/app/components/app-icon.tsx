@@ -27,7 +27,12 @@ type AppIconProps = {
 /** Nintendo 스타일 flat stroke 아이콘. currentColor를 상속받는다. */
 export function AppIcon({ className = '', name }: AppIconProps) {
   /** SVG className. */
-  const svgClassName = ['app-icon', className].filter(Boolean).join(' ');
+  const svgClassName = [
+    'app-icon block size-[1.1em] shrink-0',
+    className,
+  ]
+    .filter(Boolean)
+    .join(' ');
 
   return (
     <svg

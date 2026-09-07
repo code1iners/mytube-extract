@@ -1,5 +1,9 @@
 import { Component, type ErrorInfo, type ReactNode } from 'react';
 import type { UserVisibleErrorDetail } from '../../api/mytube-extract.api';
+import {
+  APP_SHELL_CLASS_NAME,
+  WORKSPACE_CLASS_NAME,
+} from './app-layout';
 import { ErrorDetailsDisclosure } from './error-details-disclosure';
 
 /** ErrorBoundary props. */
@@ -50,8 +54,8 @@ export class ErrorBoundary extends Component<
   render() {
     if (this.state.hasError) {
       return (
-        <main className="app-shell">
-          <section className="workspace" aria-labelledby="error-title">
+        <main className={APP_SHELL_CLASS_NAME}>
+          <section className={WORKSPACE_CLASS_NAME} aria-labelledby="error-title">
             <section className="console-panel error-fallback">
               <div className="panel-title-row panel-title-row--mint">
                 <h1 id="error-title">화면을 불러오지 못했습니다</h1>

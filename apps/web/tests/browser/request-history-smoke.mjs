@@ -2738,7 +2738,8 @@ async function verifyPopulatedHistoryResponsiveLayout() {
 }
 
 async function verifyResponsivePrimaryNavigation() {
-  for (const width of [320, 390, 800, 1280]) {
+  // 640px은 1280px CSS viewport를 200% 확대한 환경의 유효 폭을 함께 확인한다.
+  for (const width of [320, 390, 560, 561, 640, 800, 820, 821, 1280]) {
     for (const theme of ['light', 'dark']) {
       /** 모바일 하단 내비게이션의 짧은 viewport 계약도 함께 확인한다. */
       const height = width <= 820 ? 640 : 900;

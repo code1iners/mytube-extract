@@ -18,7 +18,7 @@ describe('app hero theme control', () => {
     expect(markup).not.toContain('type="radio"');
     expect(markup).toContain('href="/settings"');
     expect(markup).toContain('설정');
-    expect(markup).toContain('class="usage-guide"');
+    expect(markup).toMatch(/class="usage-guide(?:\s|[\"])/);
     expect(markup).toContain('더보기');
     expect(markup).not.toContain('aria-haspopup="menu"');
     expect(markup).not.toContain('role="menu"');

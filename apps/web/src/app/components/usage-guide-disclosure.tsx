@@ -105,7 +105,7 @@ export function UsageGuideDisclosure() {
 
   return (
     <details
-      className="usage-guide"
+      className="usage-guide relative z-[3]"
       ref={detailsRef}
       onKeyDown={handleKeyDown}
       onToggle={handleToggle}
@@ -113,6 +113,7 @@ export function UsageGuideDisclosure() {
       <summary
         aria-controls={contentId}
         aria-expanded={isOpen}
+        className={`usage-guide__summary relative inline-flex min-h-[44px] min-w-[44px] items-center gap-[7px] rounded-mytube-md px-mytube-8 text-[14px] font-semibold leading-[1.4] text-mytube-text-secondary cursor-pointer list-none whitespace-nowrap outline-mytube-focus hover:bg-mytube-surface-alt hover:text-mytube-text-primary focus-visible:outline-2 focus-visible:[outline-offset:2px] ${isOpen ? 'bg-mytube-surface-alt text-mytube-text-primary' : ''}`}
         id={summaryId}
         ref={summaryRef}
         onClick={handleSummaryClick}
@@ -121,22 +122,34 @@ export function UsageGuideDisclosure() {
       </summary>
       <div
         aria-labelledby={summaryId}
-        className="usage-guide__content"
+        className="usage-guide__content absolute right-0 top-[calc(100%_+_8px)] w-[min(320px,_calc(100vw_-_32px))] rounded-mytube-md border border-mytube-border bg-mytube-surface p-mytube-16 shadow-mytube-soft"
         id={contentId}
         role="region"
       >
-        <ul>
-          <li>
-            <strong>요청 상태</strong>
-            <span>API 응답을 기준으로 표시합니다.</span>
+        <ul className="m-0 grid list-none gap-mytube-12 p-0">
+          <li className="grid gap-mytube-4">
+            <strong className="text-[14px] font-semibold leading-[1.4] text-mytube-text-primary">
+              요청 상태
+            </strong>
+            <span className="text-[14px] leading-[1.4] text-mytube-text-secondary">
+              API 응답을 기준으로 표시합니다.
+            </span>
           </li>
-          <li>
-            <strong>요청 내역</strong>
-            <span>현재 브라우저에만 남습니다.</span>
+          <li className="grid gap-mytube-4">
+            <strong className="text-[14px] font-semibold leading-[1.4] text-mytube-text-primary">
+              요청 내역
+            </strong>
+            <span className="text-[14px] leading-[1.4] text-mytube-text-secondary">
+              현재 브라우저에만 남습니다.
+            </span>
           </li>
-          <li>
-            <strong>완료 파일</strong>
-            <span>기본 7일 보관됩니다.</span>
+          <li className="grid gap-mytube-4">
+            <strong className="text-[14px] font-semibold leading-[1.4] text-mytube-text-primary">
+              완료 파일
+            </strong>
+            <span className="text-[14px] leading-[1.4] text-mytube-text-secondary">
+              기본 7일 보관됩니다.
+            </span>
           </li>
           <li>
             <strong>단축키</strong>
@@ -152,11 +165,7 @@ export function UsageGuideDisclosure() {
             aria-describedby={
               navigationLocked ? settingsLockDescriptionId : undefined
             }
-            className={
-              navigationLocked
-                ? 'settings-link usage-guide__settings is-disabled'
-                : 'settings-link usage-guide__settings'
-            }
+            className={`settings-link usage-guide__settings inline-flex min-h-[44px] min-w-[44px] w-full items-center justify-start mt-mytube-16 border-t border-mytube-border pt-mytube-12 px-mytube-8 text-[14px] font-semibold text-mytube-text-primary no-underline whitespace-nowrap aria-[current=page]:underline aria-[current=page]:decoration-mytube-action-primary aria-[current=page]:underline-offset-4 focus-visible:outline-2 focus-visible:outline-mytube-focus focus-visible:[outline-offset:4px] ${navigationLocked ? 'is-disabled cursor-not-allowed text-mytube-text-disabled' : ''}`}
             to={ROUTE_PATHS.settings}
             onClick={handleSettingsClick}
           >

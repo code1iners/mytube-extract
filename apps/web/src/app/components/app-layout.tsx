@@ -10,6 +10,15 @@ import {
   type ThemePreference,
 } from '../utils/theme-preference.util';
 
+/** 모든 Web route가 공유하는 app shell의 Tailwind layout className. */
+// Tailwind v4의 max variant는 경계값을 제외하므로 기존 max-width 820/560px를 위해 1px을 더한다.
+export const APP_SHELL_CLASS_NAME =
+  'app-shell min-h-screen px-[var(--layout-content-gutter)] pt-[28px] pb-mytube-32 max-[821px]:pt-[14px] max-[821px]:pb-[calc(var(--layout-bottom-nav-height)_+_var(--layout-bottom-nav-clearance)_+_env(safe-area-inset-bottom))] max-[561px]:px-[10px] max-[561px]:pt-[10px]';
+
+/** 모든 Web route가 공유하는 본문 workspace의 Tailwind layout className. */
+export const WORKSPACE_CLASS_NAME =
+  'workspace mx-auto grid w-full max-w-[var(--layout-content-max-width)] gap-mytube-16 max-[821px]:gap-[14px] min-[821px]:gap-[var(--layout-route-top-gap)]';
+
 /** 모든 web route가 공유하는 화면 레이아웃. */
 export function AppLayout() {
   // States.
@@ -52,8 +61,8 @@ export function AppLayout() {
 
   return (
     <NavigationProvider>
-      <main className="app-shell">
-        <section className="workspace" aria-labelledby="page-title">
+      <main className={APP_SHELL_CLASS_NAME}>
+        <section className={WORKSPACE_CLASS_NAME} aria-labelledby="page-title">
           <AppHero />
           <Suspense fallback={<RouteLoadingFallback />}>
             <Outlet
