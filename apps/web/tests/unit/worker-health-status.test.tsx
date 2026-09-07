@@ -132,7 +132,9 @@ describe('worker health status notice', () => {
     expect(markup).toContain(message);
     expect(markup).toContain('role="alert"');
     expect(markup).toContain('aria-live="assertive"');
-    expect(markup).toContain('class="primary-button worker-health-status__retry"');
+    expect(markup).toMatch(
+      /class="primary-button worker-health-status__retry(?:\s|\")/,
+    );
     expect(markup.indexOf('다시 확인')).toBeLessThan(
       markup.indexOf('상세 원인 보기'),
     );

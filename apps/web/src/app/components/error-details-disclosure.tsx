@@ -9,6 +9,21 @@ type ErrorDetailsDisclosureProps = {
   summary: string;
 };
 
+/** 오류 상세 disclosure wrapper의 Tailwind layout className. */
+const ERROR_DETAILS_CLASS_NAME = 'error-details grid gap-[10px]';
+
+/** 오류 상세 disclosure 평이한 요약의 Tailwind typography className. */
+const ERROR_DETAILS_SUMMARY_CLASS_NAME =
+  'error-details__summary m-0 text-mytube-text-secondary text-[14px] leading-[1.4] break-keep';
+
+/** 오류 상세 disclosure panel의 Tailwind surface className. */
+const ERROR_DETAILS_PANEL_CLASS_NAME =
+  'error-details__panel grid gap-[10px] p-mytube-12 border border-mytube-border rounded-mytube-md bg-mytube-surface-alt';
+
+/** 오류 상세 disclosure log의 Tailwind typography className. */
+const ERROR_DETAILS_LOG_CLASS_NAME =
+  'm-0 overflow-x-auto text-mytube-text-secondary font-mytube-ui text-[13px] leading-[1.5] whitespace-pre-wrap [word-break:break-word]';
+
 /** 클릭하면 열리는 상세 원인 패널. */
 export function ErrorDetailsDisclosure({
   detail,
@@ -46,8 +61,8 @@ export function ErrorDetailsDisclosure({
   }
 
   return (
-    <div className="error-details">
-      <p className="error-details__summary">{summary}</p>
+    <div className={ERROR_DETAILS_CLASS_NAME}>
+      <p className={ERROR_DETAILS_SUMMARY_CLASS_NAME}>{summary}</p>
       <button
         aria-controls={detailId}
         aria-expanded={isOpen}
@@ -60,12 +75,12 @@ export function ErrorDetailsDisclosure({
 
       {isOpen ? (
         <div
-          className="error-details__panel"
+          className={ERROR_DETAILS_PANEL_CLASS_NAME}
           id={detailId}
           role="region"
           aria-label="상세 원인"
         >
-          <pre>{detailText}</pre>
+          <pre className={ERROR_DETAILS_LOG_CLASS_NAME}>{detailText}</pre>
           <button
             className="secondary-button secondary-button--compact"
             type="button"

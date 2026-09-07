@@ -52,7 +52,9 @@ describe('subtitles extract page', () => {
     expect(markup).toContain('data-health-status="ready"');
     expect(markup).toContain('data-health-presentation="compact"');
     expect(markup).toContain('>자막 추출</h2>');
-    expect(markup).toContain('class="phase-panel subtitle-request-panel"');
+    expect(markup).toMatch(
+      /class="phase-panel subtitle-request-panel(?:\s|\")/,
+    );
     expect(markup).toContain('class="subtitle-form"');
     expect(markup).toContain('type="submit"');
     expect(markup).toContain('다시 확인');
@@ -85,7 +87,7 @@ describe('subtitles extract page', () => {
 
     const markup = renderToStaticMarkup(<SubtitlesExtractPage />);
 
-    expect(markup).toContain('class="phase-panel readiness-panel"');
+    expect(markup).toMatch(/class="phase-panel readiness-panel(?:\s|\")/);
     expect(markup).not.toContain('class="subtitle-form"');
     expect(markup).toContain('data-flow-stage="source"');
     expect(markup).toContain('작업 준비 안 됨');
@@ -337,7 +339,7 @@ describe('subtitles extract page', () => {
     /** 오류 화면을 정적 HTML로 렌더링한 결과. */
     const markup = renderToStaticMarkup(<SubtitlesExtractPage />);
 
-    expect(markup).toContain('class="error-details__summary"');
+    expect(markup).toMatch(/class="error-details__summary(?:\s|\")/);
     expect(markup).toContain('영어 SRT 생성 요청이 정상적으로 처리되지 않았습니다.');
     expect(markup).toContain('aria-expanded="false"');
     expect(markup).not.toContain('오류 코드: SUBTITLE_REQUEST_FAILED');

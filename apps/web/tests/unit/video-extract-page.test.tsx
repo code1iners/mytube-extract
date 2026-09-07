@@ -230,7 +230,7 @@ describe('video extract page', () => {
     /** 오류 화면을 정적 HTML로 렌더링한 결과. */
     const markup = renderToStaticMarkup(<VideoExtractPage />);
 
-    expect(markup).toContain('class="error-details__summary"');
+    expect(markup).toMatch(/class="error-details__summary(?:\s|\")/);
     expect(markup).toContain('영상 추출 요청이 정상적으로 처리되지 않았습니다.');
     expect(markup).toContain('aria-expanded="false"');
     expect(markup).not.toContain('오류 코드: VIDEO_REQUEST_FAILED');

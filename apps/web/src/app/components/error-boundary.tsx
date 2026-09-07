@@ -20,6 +20,20 @@ type ErrorBoundaryState = {
   detail?: UserVisibleErrorDetail;
 };
 
+/** 화면 오류 fallback panel의 Tailwind layout className. */
+const ERROR_FALLBACK_CLASS_NAME = 'error-fallback grid gap-[18px]';
+
+/** 화면 오류 fallback heading의 Tailwind typography className. */
+const ERROR_FALLBACK_HEADING_CLASS_NAME =
+  'm-0 text-mytube-status-failed text-[28px] font-semibold leading-[1.3]';
+
+/** 화면 오류 fallback 안내 문구의 Tailwind typography className. */
+const ERROR_FALLBACK_MESSAGE_CLASS_NAME =
+  'm-0 text-mytube-text-secondary text-[16px] leading-[1.4] break-keep';
+
+/** 화면 오류 fallback action 영역의 Tailwind layout className. */
+const ERROR_FALLBACK_ACTIONS_CLASS_NAME = 'error-actions grid gap-[14px]';
+
 /** React 렌더링 오류를 빈 화면 대신 fallback UI로 바꾼다. */
 export class ErrorBoundary extends Component<
   ErrorBoundaryProps,
@@ -56,14 +70,19 @@ export class ErrorBoundary extends Component<
       return (
         <main className={APP_SHELL_CLASS_NAME}>
           <section className={WORKSPACE_CLASS_NAME} aria-labelledby="error-title">
-            <section className="console-panel error-fallback">
-              <div className="panel-title-row panel-title-row--mint">
-                <h1 id="error-title">화면을 불러오지 못했습니다</h1>
+            <section className={`console-panel ${ERROR_FALLBACK_CLASS_NAME}`}>
+              <div className="flex items-center mb-mytube-16">
+                <h1
+                  className={ERROR_FALLBACK_HEADING_CLASS_NAME}
+                  id="error-title"
+                >
+                  화면을 불러오지 못했습니다
+                </h1>
               </div>
-              <p role="alert">
+              <p className={ERROR_FALLBACK_MESSAGE_CLASS_NAME} role="alert">
                 일시적인 문제가 발생했습니다. 새로고침 후 다시 시도해 주세요.
               </p>
-              <div className="error-actions">
+              <div className={ERROR_FALLBACK_ACTIONS_CLASS_NAME}>
                 <button
                   className="primary-button"
                   type="button"
