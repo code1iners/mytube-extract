@@ -1,3 +1,41 @@
+@import "tailwindcss/theme.css" layer(theme);
+@import "tailwindcss/utilities.css" layer(utilities);
+
+/* Tailwind utility가 기존 semantic token과 theme 전환을 공유하도록 alias한다. */
+@theme inline {
+  --color-mytube-action-primary: var(--color-action-primary);
+  --color-mytube-on-primary: var(--color-on-primary);
+  --color-mytube-canvas: var(--color-canvas);
+  --color-mytube-surface: var(--color-surface);
+  --color-mytube-surface-alt: var(--color-surface-alt);
+  --color-mytube-text-primary: var(--color-text-primary);
+  --color-mytube-text-secondary: var(--color-text-secondary);
+  --color-mytube-text-disabled: var(--color-text-disabled);
+  --color-mytube-border: var(--color-border);
+  --color-mytube-focus: var(--color-focus);
+  --color-mytube-status-queued: var(--color-status-queued);
+  --color-mytube-status-processing: var(--color-status-processing);
+  --color-mytube-status-completed: var(--color-status-completed);
+  --color-mytube-status-failed: var(--color-status-failed);
+  --color-mytube-status-expired: var(--color-status-expired);
+  --font-mytube-ui: var(--font-ui);
+  --radius-mytube-xs: var(--radius-xs);
+  --radius-mytube-sm: var(--radius-sm);
+  --radius-mytube-md: var(--radius-md);
+  --radius-mytube-lg: var(--radius-lg);
+  --radius-mytube-pill: var(--radius-pill);
+  --radius-mytube-full: var(--radius-full);
+  --shadow-mytube-soft: var(--shadow-soft);
+  --shadow-mytube-card: var(--shadow-card);
+  --spacing-mytube-4: 4px;
+  --spacing-mytube-8: 8px;
+  --spacing-mytube-12: 12px;
+  --spacing-mytube-16: 16px;
+  --spacing-mytube-24: 24px;
+  --spacing-mytube-32: 32px;
+  --spacing-mytube-48: 48px;
+}
+
 @font-face {
   font-display: swap;
   font-family: 'Pretendard Variable';
@@ -184,12 +222,6 @@ a {
   flex: 0 0 auto;
   width: 40px;
   height: 40px;
-}
-
-.app-mark {
-  display: block;
-  width: 100%;
-  height: 100%;
 }
 
 .page-title {

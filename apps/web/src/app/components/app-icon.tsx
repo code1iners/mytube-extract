@@ -55,14 +55,18 @@ export function AppMark() {
   return (
     <svg
       aria-hidden="true"
-      className="app-mark"
+      className="app-mark block size-full"
       focusable="false"
       viewBox="0 0 512 512"
     >
-      <rect width="512" height="512" rx="112" fill="#e60012" />
+      <rect
+        className="fill-mytube-action-primary"
+        height="512"
+        rx="112"
+        width="512"
+      />
       <g
-        fill="none"
-        stroke="#ffffff"
+        className="fill-none stroke-mytube-on-primary"
         strokeWidth="34"
         strokeLinecap="round"
         strokeLinejoin="round"

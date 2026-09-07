@@ -22,11 +22,13 @@
     "zod": "^4.4.3"
   },
   "devDependencies": {
-    "@types/react-test-renderer": "19.1.0",
+    "@tailwindcss/vite": "^4.3.3",
     "@types/react": "^19.2.17",
     "@types/react-dom": "^19.2.3",
+    "@types/react-test-renderer": "19.1.0",
     "@vitejs/plugin-react": "6.0.2",
     "react-test-renderer": "19.2.7",
+    "tailwindcss": "^4.3.3",
     "typescript": "5.9.3",
     "vite": "8.0.16",
     "vitest": "4.1.9"
