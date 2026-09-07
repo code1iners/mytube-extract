@@ -520,18 +520,21 @@ async function verifyUsageGuideDisclosure() {
         assert.equal(await summary.evaluate((element) => document.activeElement === element), true);
 
         if (width <= 560) {
+          /** 높이가 다른 로고와 더보기 영역의 수직 중심을 비교한다. */
           const headerMetrics = await page.evaluate(() => {
+            /** 헤더 브랜드의 실제 경계. */
             const brand = document.querySelector('.brand-lockup')?.getBoundingClientRect();
+            /** 더보기 조작 영역을 포함한 유틸리티 경계. */
             const utilities = document.querySelector('.hero-utilities')?.getBoundingClientRect();
             return {
-              brandTop: brand?.top,
+              brandCenter: brand ? brand.top + brand.height / 2 : undefined,
               utilitiesRight: utilities?.right,
-              utilitiesTop: utilities?.top,
+              utilitiesCenter: utilities ? utilities.top + utilities.height / 2 : undefined,
             };
           });
-          assert.ok(headerMetrics.brandTop !== undefined);
-          assert.ok(headerMetrics.utilitiesTop !== undefined);
-          assert.ok(Math.abs(headerMetrics.brandTop - headerMetrics.utilitiesTop) <= 1);
+          assert.ok(headerMetrics.brandCenter !== undefined);
+          assert.ok(headerMetrics.utilitiesCenter !== undefined);
+          assert.ok(Math.abs(headerMetrics.brandCenter - headerMetrics.utilitiesCenter) <= 1);
           assert.ok(headerMetrics.utilitiesRight !== undefined && headerMetrics.utilitiesRight <= width);
         }
 

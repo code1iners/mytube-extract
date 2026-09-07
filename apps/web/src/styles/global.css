@@ -814,6 +814,11 @@ a {
   border-color: var(--color-focus);
 }
 
+/* 입력 포커스는 전체 프레임으로 옮기고 지우기 버튼의 개별 포커스는 유지한다. */
+.url-input-frame input:focus-visible {
+  outline: none;
+}
+
 .input-icon {
   justify-self: center;
   color: var(--color-text-secondary);
@@ -1091,6 +1096,7 @@ a {
 .selected-file-row button:focus-visible,
 .theme-toggle__option input:focus-visible + span,
 input:focus-visible,
+.url-input-frame:has(input:focus-visible),
 .segment:focus-within,
 .quality-chip:focus-within,
 .subtitle-dropzone:focus-visible,
@@ -2072,10 +2078,6 @@ input:focus-visible,
   .brand-mark {
     width: 26px;
     height: 26px;
-  }
-
-  .app-header {
-    align-items: start;
   }
 
   .video-request-panel,
