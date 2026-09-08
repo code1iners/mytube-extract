@@ -38,7 +38,6 @@ import {
   setSubtitleWhisperModelPreference,
 } from '../../../utils/request-preference.util';
 import { getWorkerHealthSubmitReason } from '../../../utils/worker-health-notice.util';
-import { isUnmodifiedShortcut } from '../../../utils/keyboard-shortcut.util';
 
 /** worker 미가용 안내 문구. */
 const WORKER_UNAVAILABLE_MESSAGE =
@@ -211,27 +210,6 @@ export function useSubtitlesExtractLogic() {
     [selectedWhisperModel],
   );
 
-  useEffect(
-    function registerSubtitleRequestShortcut() {
-      function handleShortcut(event: KeyboardEvent) {
-        if (!isUnmodifiedShortcut(event, 'KeyF')) {
-          return;
-        }
-
-        const filePickerButton = filePickerButtonRef.current;
-
-        if (!filePickerButton) {
-          return;
-        }
-
-        event.preventDefault();
-        filePickerButton.focus();
-      }
-
-      window.addEventListener('keydown', handleShortcut);
-      return () => window.removeEventListener('keydown', handleShortcut);
-    },
-  );
 
   // Functions.
 

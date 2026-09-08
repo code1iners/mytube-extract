@@ -293,7 +293,6 @@ export function VideoExtractPage() {
               ) : null}
             </span>
             {validation.kind !== 'ready' ? <p className={`${VIDEO_FIELD_FEEDBACK_CLASS_NAME}${validation.kind === 'invalid' ? ' text-mytube-status-failed' : ''}`} id="video-source-url-feedback" role={validation.kind === 'invalid' ? 'alert' : undefined}>{validation.message}</p> : null}
-            <p className="keyboard-shortcut-hint"><kbd>U</kbd> 키로 URL 입력에 바로 포커스</p>
           </label>
 
           <fieldset className={VIDEO_FORMAT_FIELDSET_CLASS_NAME}>

@@ -48,7 +48,7 @@ try {
   await run('subtitle accepting and cancellation surfaces restore focus', verifySubtitleAcceptanceAndCancellationSurfaces);
   await run('subtitle receipt storage failure keeps the accepted job history destination', verifySubtitleReceiptStorageFallback);
   await run('subtitle request cancellation cleans upload and restores file input', verifySubtitleRequestCancellation);
-  await run('request shortcuts focus only their own action', verifyRequestShortcuts);
+  await run('U/F keys do not move request focus', verifyRequestShortcuts);
   await run('subtitle task-first mobile density and processing choices', verifySubtitleProcessingChoice);
   await run('accessible subtitle file picker keeps one control and all input paths', verifySubtitleFilePicker);
   await run('active request status errors stay actionable', verifyActiveRequestStatusErrors);
@@ -491,8 +491,8 @@ async function verifyUsageGuideDisclosure() {
         assert.equal(await guide.getByText('API 응답을 기준으로 표시합니다.', { exact: true }).count(), 1);
         assert.equal(await guide.getByText('현재 브라우저에만 남습니다.', { exact: true }).count(), 1);
         assert.equal(await guide.getByText('기본 7일 보관됩니다.', { exact: true }).count(), 1);
-        assert.equal(await guide.getByText('U', { exact: true }).count(), 1);
-        assert.equal(await guide.getByText('F', { exact: true }).count(), 1);
+        assert.equal(await guide.getByText('U', { exact: true }).count(), 0);
+        assert.equal(await guide.getByText('F', { exact: true }).count(), 0);
 
         /** 닫힌 chevron transform. */
         const closedChevron = await summary.evaluate((element) =>
@@ -1806,7 +1806,7 @@ async function verifySubtitleRequestCancellation() {
   }
 }
 
-/** U/F 단축키가 입력 중에는 개입하지 않고 브라우저 기본 조합과 겹치지 않는지 확인한다. */
+/** U/F 키가 요청 control로 포커스를 이동시키지 않고 URL에는 일반 문자로 입력되는지 확인한다. */
 async function verifyRequestShortcuts() {
   const context = await createContext({ viewport: { height: 844, width: 390 } });
   const { page, assertNoRuntimeErrors } = await createPage(context);
@@ -1827,7 +1827,7 @@ async function verifyRequestShortcuts() {
     await page.keyboard.press('u');
     assert.equal(
       await sourceUrl.evaluate((element) => document.activeElement === element),
-      true,
+      false,
     );
     await sourceUrl.fill('https://youtu.be/abc123_DEF0');
     await page.keyboard.press('u');
@@ -1852,7 +1852,7 @@ async function verifyRequestShortcuts() {
     await page.keyboard.press('f');
     assert.equal(
       await picker.evaluate((element) => document.activeElement === element),
-      true,
+      false,
     );
     await page.evaluate(() => document.body.focus());
     await page.keyboard.press('Control+f');

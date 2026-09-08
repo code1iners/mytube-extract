@@ -240,7 +240,7 @@ Web의 요청 설정 화면은 app shell과 workspace가 정렬을 담당하고,
 
 Web 헤더는 workspace에 직접 놓는 flat row로 사용한다. 외곽 카드, shadow, 장식용 제목 수평선은 사용하지 않는다. 각 요청 화면은 `YouTube URL` 또는 `로컬 영상 파일`을 첫 번째 작업 대상으로 분명하게 보여준다. 좁은 화면에서도 utility는 한 줄을 유지하고, `사용 안내`와 `설정`은 접근 가능한 `더보기` disclosure 안에서 함께 제공한다. disclosure는 Enter·Space로 열고 닫으며 Escape와 바깥 pointer 입력으로 닫을 수 있고, 닫을 때 summary로 focus를 돌린다.
 
-자막 요청의 파일 선택 영역은 좁은 화면에서 140–160px 높이의 compact control로 유지하고, `속도 우선`과 `정확도 우선`은 모든 폭에서 비교 가능한 full-width row로 표시한다. 처리 방식 설명은 사용자가 얻는 영어 자막 파일(SRT) 결과를 먼저 설명하고 `base.en`, `small.en`, 로컬 Whisper 같은 기술 정보는 기본으로 접힌 native disclosure 뒤에 둔다. 완료 receipt에는 API 응답의 원본 파일명·`영어 SRT` 결과 형식·`retentionDays` 보관 기간과 다운로드·새 요청 동작을 함께 표시한다. 영상·자막·요청 내역은 `원본 → 추출 → 파일 수령` 공통 흐름 trail을 현재 API 상태에 맞춰 표시하며, 진행률을 임의로 만들어 표시하지 않는다. 요청 전 `U`/`F` 단축키는 각각 URL 입력과 자막 파일 선택 동작에 연결하되 텍스트 편집 중이거나 수정키가 함께 눌리면 작동하지 않는다.
+자막 요청의 파일 선택 영역은 좁은 화면에서 140–160px 높이의 compact control로 유지하고, `속도 우선`과 `정확도 우선`은 모든 폭에서 비교 가능한 full-width row로 표시한다. 처리 방식 설명은 사용자가 얻는 영어 자막 파일(SRT) 결과를 먼저 설명하고 `base.en`, `small.en`, 로컬 Whisper 같은 기술 정보는 기본으로 접힌 native disclosure 뒤에 둔다. 완료 receipt에는 API 응답의 원본 파일명·`영어 SRT` 결과 형식·`retentionDays` 보관 기간과 다운로드·새 요청 동작을 함께 표시한다. 영상·자막·요청 내역은 `원본 → 추출 → 파일 수령` 공통 흐름 trail을 현재 API 상태에 맞춰 표시하며, 진행률을 임의로 만들어 표시하지 않는다. URL 입력과 자막 파일 선택으로 포커스를 이동하는 `U`/`F` 단축키는 제공하지 않는다.
 
 `/settings`는 외곽 card elevation 없이 `화면 표시` preference group을 workspace의
 직접적인 세로 흐름으로 보여준다. 시스템·라이트·다크 선택과 설명은 같은 flat 표면에

@@ -26,8 +26,8 @@ describe('app hero theme control', () => {
     expect(markup).toContain('API 응답을 기준으로 표시합니다.');
     expect(markup).toContain('현재 브라우저에만 남습니다.');
     expect(markup).toContain('기본 7일 보관됩니다.');
-    expect(markup).toContain('U');
-    expect(markup).toContain('F');
+    expect(markup).not.toContain('단축키');
+    expect(markup).not.toContain('<kbd>');
   });
 
   it('always exposes the request history link', () => {

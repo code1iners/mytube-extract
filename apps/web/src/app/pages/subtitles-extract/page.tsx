@@ -326,7 +326,6 @@ export function SubtitlesExtractPage() {
             <strong className={SUBTITLE_DROPZONE_PRIMARY_COPY_CLASS_NAME}>영상 선택 또는 드래그</strong>
             <span className={SUBTITLE_DROPZONE_HINT_CLASS_NAME}>mp4, mov, webm</span>
           </button>
-          <p className="keyboard-shortcut-hint"><kbd>F</kbd> 키로 파일 선택에 바로 포커스</p>
           {fileFeedbackMessage ? (
             <p
               className={`${SUBTITLE_FILE_FEEDBACK_CLASS_NAME}${fileFeedbackIsError ? ' !text-mytube-status-failed' : ''}`}

@@ -151,13 +151,6 @@ export function UsageGuideDisclosure() {
               기본 7일 보관됩니다.
             </span>
           </li>
-          <li>
-            <strong>단축키</strong>
-            <span>
-              <kbd>U</kbd>는 영상 URL 입력, <kbd>F</kbd>는 자막 파일 선택에
-              포커스합니다.
-            </span>
-          </li>
         </ul>
         <div className="usage-guide__menu">
           <NavLink

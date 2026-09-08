@@ -36,7 +36,6 @@ import {
 import {
   getWorkerHealthSubmitReason,
 } from '../../../utils/worker-health-notice.util';
-import { isUnmodifiedShortcut } from '../../../utils/keyboard-shortcut.util';
 
 /** worker 미가용 안내 문구. */
 const WORKER_UNAVAILABLE_MESSAGE =
@@ -206,29 +205,6 @@ export function useVideoExtractLogic() {
     [draft.mode, draft.quality],
   );
 
-  useEffect(
-    function registerVideoRequestShortcut() {
-      function handleShortcut(event: KeyboardEvent) {
-        if (!isUnmodifiedShortcut(event, 'KeyU')) {
-          return;
-        }
-
-        const sourceUrlInput = document.querySelector<HTMLInputElement>(
-          'input[name="sourceUrl"]',
-        );
-
-        if (!sourceUrlInput) {
-          return;
-        }
-
-        event.preventDefault();
-        sourceUrlInput.focus();
-      }
-
-      window.addEventListener('keydown', handleShortcut);
-      return () => window.removeEventListener('keydown', handleShortcut);
-    },
-  );
 
   // Handlers.
 
