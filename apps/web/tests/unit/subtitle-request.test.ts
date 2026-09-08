@@ -23,6 +23,17 @@ describe('subtitle request', () => {
     expect(validation.kind).toBe('ready');
   });
 
+  it.each([
+    ['mp4', 'video/mp4'],
+    ['mov', 'video/quicktime'],
+    ['webm', 'video/webm'],
+  ])('accepts the supported %s extension and MIME type pair', (extension, type) => {
+    /** 지원 형식에 맞는 파일. */
+    const file = new File(['video'], `sample-video.${extension}`, { type });
+
+    expect(validateSubtitleFile(file).kind).toBe('ready');
+  });
+
   it('rejects unsupported files', () => {
     /** 검증 결과. */
     const validation = validateSubtitleFile(
@@ -30,6 +41,16 @@ describe('subtitle request', () => {
     );
 
     expect(validation.kind).toBe('invalid');
+  });
+
+  it.each([
+    ['video/mp4', 'sample-video.txt'],
+    ['', 'sample-video.mp4'],
+  ])('rejects a file when its extension or MIME type is unsupported', (type, name) => {
+    /** 지원 목록에서 벗어난 파일. */
+    const file = new File(['video'], name, { type });
+
+    expect(validateSubtitleFile(file).kind).toBe('invalid');
   });
 
   it('keeps terminal status logic in the domain layer', () => {

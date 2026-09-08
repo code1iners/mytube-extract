@@ -51,6 +51,8 @@ try {
   await run('U/F keys do not move request focus', verifyRequestShortcuts);
   await run('subtitle task-first mobile density and processing choices', verifySubtitleProcessingChoice);
   await run('accessible subtitle file picker keeps one control and all input paths', verifySubtitleFilePicker);
+  await run('invalid subtitle drops preserve the current request target', verifyInvalidSubtitleDropPreservesSelection);
+  await run('invalid subtitle drops keep empty selection and recover on valid files', verifyInvalidSubtitleDropWithoutSelection);
   await run('active request status errors stay actionable', verifyActiveRequestStatusErrors);
   await run('active polling stops at terminal status', verifyTerminalPolling);
   await run('network and 5xx retain receipts while 404 removes one', verifyReceiptErrorHandling);
@@ -2077,7 +2079,11 @@ async function verifySubtitleProcessingChoice() {
         dropzoneBorder: expectedSubtitleInputTheme.danger,
         feedbackColor: expectedSubtitleInputTheme.danger,
       });
-      await page.getByRole('button', { name: '지우기' }).click();
+      assert.equal(await page.locator('.selected-file-row').count(), 0);
+      assert.equal(
+        await page.getByRole('button', { name: '영어 SRT 생성' }).isDisabled(),
+        true,
+      );
       await accuracyOption.check();
       assert.equal(await accuracyOption.isChecked(), true);
       /** 두 번째 처리 방식 선택 후의 selected state style. */
@@ -2456,11 +2462,12 @@ async function verifySubtitleFilePicker() {
     );
     assert.equal(
       await page.getByRole('button', { name: '영어 SRT 생성' }).isDisabled(),
-      true,
+      false,
     );
+    assert.equal(await page.getByText('dropped-video.webm', { exact: true }).count(), 1);
 
     await page.getByRole('button', { name: '지우기' }).click();
-    assert.equal(await page.getByText('invalid-video.txt', { exact: true }).count(), 0);
+    assert.equal(await page.getByText('dropped-video.webm', { exact: true }).count(), 0);
     assert.equal(
       await picker.evaluate((element) => document.activeElement === element),
       true,
@@ -2502,6 +2509,189 @@ async function verifySubtitleFilePicker() {
   }
 }
 
+/** 정상 영상이 있는 상태에서 잘못된 drop이 선택·처리 방식·실제 요청 대상을 보존하는지 검증한다. */
+async function verifyInvalidSubtitleDropPreservesSelection() {
+  /** 잘못된 drop 보존 흐름을 확인할 독립 browser context. */
+  const context = await createContext({ viewport: { height: 844, width: 390 } });
+  /** 잘못된 drop 뒤 제출 가능 상태와 요청 body를 확인할 page. */
+  const { page, assertNoRuntimeErrors } = await createPage(context);
+  /** 자막 업로드 session 생성 요청에서 확인할 원본 정보. */
+  const uploadRequests = [];
+
+  try {
+    await page.route('https://upload.example/**', async (route) => {
+      await route.fulfill({
+        body: '',
+        headers: {
+          'Access-Control-Allow-Origin': '*',
+          'Access-Control-Expose-Headers': 'ETag',
+          ETag: '"preserved-file-part"',
+        },
+        status: 200,
+      });
+    });
+    await routeApi(page, async ({ request, route, url }) => {
+      if (url.pathname === '/health') return fulfillJson(route, healthResponse());
+      if (url.pathname === '/subtitles/uploads' && request.method() === 'POST') {
+        uploadRequests.push(request.postDataJSON());
+        return fulfillJson(route, {
+          expiresAt: '2026-08-13T12:00:00.000Z',
+          objectKey: 'source/preserved-video.mp4',
+          partSizeBytes: 1024,
+          parts: [{ partNumber: 1, uploadUrl: 'https://upload.example/preserved-file-part' }],
+          uploadId: 'preserved-upload-1',
+          uploadToken: 'preserved-upload-token',
+        });
+      }
+      if (url.pathname === '/subtitles/uploads/complete') {
+        return fulfillJson(
+          route,
+          subtitleJob(SUBTITLE_ID, 'completed', {
+            fileName: 'preserved-video.mp4',
+          }),
+        );
+      }
+      if (url.pathname === `/subtitles/jobs/${SUBTITLE_ID}`) {
+        return fulfillJson(
+          route,
+          subtitleJob(SUBTITLE_ID, 'completed', {
+            fileName: 'preserved-video.mp4',
+          }),
+        );
+      }
+      return fulfillJson(route, {}, 404);
+    });
+
+    await page.goto(`${staticServer.origin}/subtitles`);
+    /** 현재 선택을 조작할 자막 file picker. */
+    const picker = page.getByRole('button', {
+      name: '영상 선택 또는 드래그 (로컬 영상 파일)',
+    });
+    await picker.waitFor();
+    await dispatchSubtitleFileDrop(page, picker, {
+      mimeType: 'video/mp4',
+      name: 'preserved-video.mp4',
+    });
+    await page.getByText('preserved-video.mp4', { exact: true }).waitFor();
+
+    /** 기존 선택에서 유지해야 하는 처리 방식. */
+    const accuracyOption = page.getByRole('radio', { name: /정확도 우선/ });
+    await accuracyOption.check();
+    await dispatchSubtitleFileDrop(page, picker, {
+      mimeType: 'text/plain',
+      name: 'rejected-video.txt',
+    });
+    await page
+      .getByText('mp4, mov, webm 영상 파일만 사용할 수 있습니다.', { exact: true })
+      .waitFor();
+
+    assert.equal(await page.getByText('preserved-video.mp4', { exact: true }).count(), 1);
+    assert.equal(await page.getByText('rejected-video.txt', { exact: true }).count(), 0);
+    assert.equal(
+      await page.getByRole('button', { name: '영어 SRT 생성' }).isDisabled(),
+      false,
+    );
+    assert.equal(await accuracyOption.isChecked(), true);
+
+    await page.getByRole('button', { name: '영어 SRT 생성' }).click();
+    await page
+      .getByRole('heading', { name: '영어 자막 파일이 준비되었습니다' })
+      .waitFor();
+    await waitForCondition(async () => uploadRequests.length === 1);
+    assert.equal(uploadRequests[0].fileName, 'preserved-video.mp4');
+    assert.equal(uploadRequests[0].contentType, 'video/mp4');
+    assert.equal(uploadRequests[0].whisperModel, 'small_en');
+    assertNoRuntimeErrors();
+  } finally {
+    await context.close();
+  }
+}
+
+/** 선택이 없거나 파일이 아닌 drop에서도 오류·첫 파일 정책·정상 복구를 검증한다. */
+async function verifyInvalidSubtitleDropWithoutSelection() {
+  /** 선택 보존 경계를 확인할 독립 browser context. */
+  const context = await createContext({ viewport: { height: 844, width: 390 } });
+  /** 빈 선택과 재선택 경로를 확인할 page. */
+  const { page, assertNoRuntimeErrors } = await createPage(context);
+
+  try {
+    await routeApi(page, async ({ route, url }) => {
+      if (url.pathname === '/health') return fulfillJson(route, healthResponse());
+      return fulfillJson(route, {}, 404);
+    });
+
+    await page.goto(`${staticServer.origin}/subtitles`);
+    /** 선택·오류 상태를 확인할 자막 file picker. */
+    const picker = page.getByRole('button', {
+      name: '영상 선택 또는 드래그 (로컬 영상 파일)',
+    });
+    /** 현재 선택이 없을 때 비활성화되어야 하는 제출 button. */
+    const submit = page.getByRole('button', { name: '영어 SRT 생성' });
+    await picker.waitFor();
+    await dispatchSubtitleFileDrop(page, picker, {
+      mimeType: 'video/mp4',
+      name: 'kept-video.mp4',
+    });
+    await page.getByText('kept-video.mp4', { exact: true }).waitFor();
+
+    await dispatchSubtitleDataTransferDrop(page, picker, {
+      text: 'https://example.test/video',
+    });
+    assert.equal(await page.getByText('kept-video.mp4', { exact: true }).count(), 1);
+
+    await dispatchSubtitleDataTransferDrop(page, picker, {
+      files: [
+        { mimeType: 'video/mp4', name: 'first-rejected.txt' },
+        { mimeType: 'video/mp4', name: 'second-valid.mp4' },
+      ],
+    });
+    await page
+      .getByText('mp4, mov, webm 영상 파일만 사용할 수 있습니다.', { exact: true })
+      .waitFor();
+    assert.equal(await page.getByText('kept-video.mp4', { exact: true }).count(), 1);
+    assert.equal(await page.getByText('second-valid.mp4', { exact: true }).count(), 0);
+    assert.equal(await submit.isDisabled(), false);
+
+    await dispatchSubtitleFileDrop(page, picker, {
+      mimeType: '',
+      name: 'empty-mime.mp4',
+    });
+    await page
+      .getByText('mp4, mov, webm 영상 파일만 사용할 수 있습니다.', { exact: true })
+      .waitFor();
+    assert.equal(await page.getByText('kept-video.mp4', { exact: true }).count(), 1);
+
+    await page.getByRole('button', { name: '지우기' }).click();
+    assert.equal(await page.locator('.selected-file-row').count(), 0);
+    assert.equal(await submit.isDisabled(), true);
+
+    await dispatchSubtitleFileDrop(page, picker, {
+      mimeType: 'text/plain',
+      name: 'rejected-without-selection.txt',
+    });
+    await page
+      .getByText('mp4, mov, webm 영상 파일만 사용할 수 있습니다.', { exact: true })
+      .waitFor();
+    assert.equal(await page.locator('.selected-file-row').count(), 0);
+    assert.equal(await page.getByText('rejected-without-selection.txt', { exact: true }).count(), 0);
+    assert.equal(await submit.isDisabled(), true);
+
+    await dispatchSubtitleFileDrop(page, picker, {
+      mimeType: 'video/webm',
+      name: 'replacement-video.webm',
+    });
+    await page.getByText('replacement-video.webm', { exact: true }).waitFor();
+    assert.equal(
+      await page.getByText('mp4, mov, webm 영상 파일만 사용할 수 있습니다.', { exact: true }).count(),
+      0,
+    );
+    assert.equal(await submit.isDisabled(), false);
+    assertNoRuntimeErrors();
+  } finally {
+    await context.close();
+  }
+}
+
 /** native file picker를 열고 파일 선택 결과를 전달한다. */
 async function chooseSubtitleFileThroughPicker(page, picker, trigger, file) {
   /** native file picker 이벤트 대기. */
@@ -2522,15 +2712,25 @@ async function chooseSubtitleFileThroughPicker(page, picker, trigger, file) {
 
 /** 브라우저 DataTransfer로 자막 파일 drop을 발생시킨다. */
 async function dispatchSubtitleFileDrop(page, picker, file) {
+  await dispatchSubtitleDataTransferDrop(page, picker, { files: [file] });
+}
+
+/** 브라우저 DataTransfer로 파일·링크·텍스트 drop을 발생시킨다. */
+async function dispatchSubtitleDataTransferDrop(page, picker, input = {}) {
   await picker.evaluate(
-    (element, droppedFile) => {
+    (element, dropInput) => {
       /** 브라우저가 전달할 파일 묶음. */
       const dataTransfer = new DataTransfer();
-      dataTransfer.items.add(
-        new File(['subtitle-picker-test'], droppedFile.name, {
-          type: droppedFile.mimeType,
-        }),
-      );
+      for (const droppedFile of dropInput.files ?? []) {
+        dataTransfer.items.add(
+          new File(['subtitle-picker-test'], droppedFile.name, {
+            type: droppedFile.mimeType,
+          }),
+        );
+      }
+      if (dropInput.text) {
+        dataTransfer.setData('text/plain', dropInput.text);
+      }
       element.dispatchEvent(
         new DragEvent('drop', {
           bubbles: true,
@@ -2539,7 +2739,7 @@ async function dispatchSubtitleFileDrop(page, picker, file) {
         }),
       );
     },
-    file,
+    input,
   );
 }
 

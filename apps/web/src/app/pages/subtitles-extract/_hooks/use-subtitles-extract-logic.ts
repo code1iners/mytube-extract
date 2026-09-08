@@ -99,6 +99,8 @@ export function useSubtitlesExtractLogic() {
   const [uploadProgress, setUploadProgress] = useState<number | null>(null);
   /** 업로드 용량 초과를 파일 feedback으로 유지할 안내. */
   const [fileUploadErrorMessage, setFileUploadErrorMessage] = useState('');
+  /** 마지막으로 drop에서 거부한 파일의 안내. */
+  const [fileDropErrorMessage, setFileDropErrorMessage] = useState('');
 
   // Hooks.
 
@@ -224,6 +226,7 @@ export function useSubtitlesExtractLogic() {
   /** 선택 파일과 현재 lifecycle 결과를 초기화한다. */
   function clearSelectedFile() {
     setSelectedFile(null);
+    setFileDropErrorMessage('');
     setFileUploadErrorMessage('');
     setUploadProgress(null);
     requestLifecycle.actions.reset?.();
@@ -239,6 +242,7 @@ export function useSubtitlesExtractLogic() {
   /** 파일 선택과 이전 요청 오류를 상태에 반영한다. */
   function selectFile(file: File | null) {
     setSelectedFile(file);
+    setFileDropErrorMessage('');
     setFileUploadErrorMessage('');
     setUploadProgress(null);
     requestLifecycle.actions.clearRequestError();
@@ -298,7 +302,28 @@ export function useSubtitlesExtractLogic() {
   /** dropzone 파일 drop 이벤트를 처리한다. */
   function handleDropzoneDrop(event: DragEvent<HTMLButtonElement>) {
     event.preventDefault();
-    selectFile(event.dataTransfer.files[0] ?? null);
+
+    /** 현재 drop 정책에 따라 판단할 첫 번째 파일. */
+    const droppedFile = event.dataTransfer.files[0];
+
+    // 파일이 없는 링크·텍스트 drop은 현재 선택과 feedback을 유지한다.
+    if (!droppedFile) {
+      return;
+    }
+
+    /** drop한 파일의 기존 자막 파일 검증 결과. */
+    const droppedFileValidation = validateSubtitleFile(droppedFile);
+
+    // 거부한 파일은 현재 선택으로 반영하지 않고 drop 오류만 갱신한다.
+    if (droppedFileValidation.kind === 'invalid') {
+      setFileDropErrorMessage(droppedFileValidation.message);
+      setFileUploadErrorMessage('');
+      setUploadProgress(null);
+      requestLifecycle.actions.clearRequestError();
+      return;
+    }
+
+    selectFile(droppedFile);
   }
 
   /** 영어 SRT 생성 submit 이벤트를 처리한다. */
@@ -342,13 +367,16 @@ export function useSubtitlesExtractLogic() {
     fileInputRef,
     filePickerButtonRef,
     fileFeedbackIsError:
-      validation.kind === 'invalid' || hasSubtitleUploadTooLargeError,
+      Boolean(fileDropErrorMessage) ||
+      validation.kind === 'invalid' ||
+      hasSubtitleUploadTooLargeError,
     fileFeedbackMessage:
-      hasSubtitleUploadTooLargeError
+      fileDropErrorMessage ||
+      (hasSubtitleUploadTooLargeError
         ? requestError
         : validation.kind !== 'ready'
           ? validation.message
-          : '',
+          : ''),
     filledProgressCells,
     handleDropzoneDragOver,
     handleDropzoneDrop,
