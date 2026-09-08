@@ -55,6 +55,8 @@ try {
   await run('active polling stops at terminal status', verifyTerminalPolling);
   await run('network and 5xx retain receipts while 404 removes one', verifyReceiptErrorHandling);
   await run('history deletion offers one eight-second undo', verifyHistoryDeleteUndo);
+  await run('history delete and undo surfaces stay responsive', verifyHistoryDeleteUndoResponsiveLayout);
+  await run('blocked storage keeps the history item when delete fails', verifyHistoryDeleteStorageFailure);
   await run('blocked storage reports undo restoration failure', verifyHistoryUndoStorageFailure);
   await run('cross-tab delete and re-add stay synchronized', verifyCrossTabStorage);
   await run('blocked localStorage keeps the deep-link item', verifyBlockedStorageFallback);
@@ -2605,7 +2607,7 @@ async function verifyTerminalPolling() {
       const announcementObserver = new MutationObserver(() => {
         /** 현재 live region에 표시된 공지. */
         const message = document
-          .querySelector('.history-panel > .visually-hidden')
+          .querySelector('.history-panel > .history-announcement')
           ?.textContent?.trim();
 
         if (message) {
@@ -2873,6 +2875,169 @@ async function verifyHistoryDeleteUndo() {
       .waitFor();
     await waitForHistoryCount(page, 0);
     assert.equal(await page.getByRole('button', { name: /되돌리기/ }).count(), 0);
+    assertNoRuntimeErrors();
+  } finally {
+    await context.close();
+  }
+}
+
+/** 삭제 후 undo 안내와 빈 상태가 viewport·하단 navigation을 침범하지 않는지 검증한다. */
+async function verifyHistoryDeleteUndoResponsiveLayout() {
+  /** 삭제·복원 표면을 확인할 viewport 폭. */
+  for (const width of [320, 390, 1280]) {
+    /** 삭제·복원 표면을 확인할 테마. */
+    for (const theme of ['light', 'dark']) {
+      /** 현재 viewport에 맞춘 독립 browser context. */
+      const context = await createContext({
+        viewport: { height: width <= 820 ? 844 : 900, width },
+      });
+      /** 현재 theme와 viewport의 history page. */
+      const { page, assertNoRuntimeErrors } = await createPage(context);
+
+      try {
+        await page.addInitScript((preference) => {
+          localStorage.setItem(
+            'mytube-extract-theme-preference',
+            preference,
+          );
+        }, theme);
+        await seedReceipts(page, [
+          ['video', VIDEO_ID, '2026-08-11T00:00:00.000Z'],
+        ]);
+        await routeApi(page, async ({ route, url }) => {
+          if (url.pathname === `/downloads/${VIDEO_ID}`) {
+            return fulfillJson(route, videoJob(VIDEO_ID, 'completed'));
+          }
+
+          return fulfillJson(route, {}, 404);
+        });
+
+        await page.goto(`${staticServer.origin}/history`);
+        await waitForHistoryCount(page, 1);
+        await page.locator('.history-remove-button').click();
+        await waitForHistoryCount(page, 0);
+        await page.getByText('시작할 작업을 선택하세요.', { exact: true }).waitFor();
+        await page
+          .getByRole('button', { name: '삭제한 영상 요청 되돌리기' })
+          .waitFor();
+
+        /** 삭제 후 undo·빈 상태의 실제 viewport 영역. */
+        const layoutMetrics = await page.evaluate(() => {
+          /** 요소의 viewport 사각형을 직렬화한다. */
+          const toBox = (element) => {
+            const rect = element?.getBoundingClientRect();
+            return rect
+              ? {
+                  bottom: rect.bottom,
+                  height: rect.height,
+                  left: rect.left,
+                  right: rect.right,
+                  top: rect.top,
+                  width: rect.width,
+                }
+              : null;
+          };
+          /** 삭제 직후 표시되는 undo 안내. */
+          const undo = document.querySelector('.history-undo');
+          /** undo 안내의 실제 조작 button. */
+          const undoButton = document.querySelector('.history-undo__button');
+          /** 삭제 직후 함께 표시되는 빈 history surface. */
+          const emptyState = document.querySelector('.history-empty');
+
+          return {
+            document: {
+              clientWidth: document.documentElement.clientWidth,
+              scrollWidth: document.documentElement.scrollWidth,
+            },
+            emptyState: toBox(emptyState),
+            undo: undo
+              ? {
+                  box: toBox(undo),
+                  clientWidth: undo.clientWidth,
+                  scrollWidth: undo.scrollWidth,
+                }
+              : null,
+            undoButton: toBox(undoButton),
+          };
+        });
+
+        assert.deepEqual(layoutMetrics.document, {
+          clientWidth: width,
+          scrollWidth: width,
+        });
+        assert.ok(
+          layoutMetrics.undo?.box &&
+            layoutMetrics.undo.box.left >= 0 &&
+            layoutMetrics.undo.box.right <= width &&
+            layoutMetrics.undo.scrollWidth <= layoutMetrics.undo.clientWidth,
+        );
+        assert.ok(
+          layoutMetrics.undoButton &&
+            layoutMetrics.undoButton.width >= 44 &&
+            layoutMetrics.undoButton.height >= 44 &&
+            layoutMetrics.undoButton.left >= 0 &&
+            layoutMetrics.undoButton.right <= width,
+        );
+        assert.ok(layoutMetrics.emptyState);
+        await verifyResponsiveNavigationLayout(page, width, '/history');
+        assertNoRuntimeErrors();
+      } finally {
+        await context.close();
+      }
+    }
+  }
+}
+
+/** 삭제 storage 접근 실패 시 기존 항목과 실패 공지를 유지하는지 검증한다. */
+async function verifyHistoryDeleteStorageFailure() {
+  /** 삭제 storage 실패를 확인할 독립 browser context. */
+  const context = await createContext();
+  /** 삭제 storage 실패를 확인할 history page. */
+  const { page, assertNoRuntimeErrors } = await createPage(context);
+
+  try {
+    await page.addInitScript(({ key, prefix }) => {
+      localStorage.setItem(key, JSON.stringify({ acceptedAt: '2026-08-11T00:00:00.000Z' }));
+
+      /** 원래 removeItem 함수. */
+      const removeItem = Storage.prototype.removeItem;
+
+      Storage.prototype.removeItem = function blockReceiptRemoval(storageKey) {
+        if (storageKey.startsWith(prefix)) {
+          throw new DOMException('Receipt storage is disabled.', 'SecurityError');
+        }
+
+        return removeItem.call(this, storageKey);
+      };
+    }, { key: receiptKey('video', VIDEO_ID), prefix: RECEIPT_PREFIX });
+    await routeApi(page, async ({ route, url }) => {
+      if (url.pathname === `/downloads/${VIDEO_ID}`) {
+        return fulfillJson(route, videoJob(VIDEO_ID, 'completed'));
+      }
+
+      return fulfillJson(route, {}, 404);
+    });
+
+    await page.goto(`${staticServer.origin}/history`);
+    await waitForHistoryCount(page, 1);
+    await page.locator('.history-remove-button').click();
+
+    /** 삭제 실패를 전달한 alert 문장. */
+    const alertMessage = page.getByRole('alert');
+    await alertMessage.waitFor();
+    const alertText = await alertMessage.textContent();
+
+    assert.match(alertText ?? '', /삭제하지 못했습니다/);
+    assert.doesNotMatch(alertText ?? '', /내역에서 삭제했습니다/);
+    assert.equal(await page.locator('.history-item').count(), 1);
+    assert.equal(await page.getByRole('heading', { name: '영상 요청' }).count(), 1);
+    assert.equal(await page.getByRole('button', { name: /되돌리기/ }).count(), 0);
+    assert.notEqual(
+      await page.evaluate((key) => localStorage.getItem(key), receiptKey('video', VIDEO_ID)),
+      null,
+    );
+    assert.equal(await page.getByRole('alert').count(), 1);
+    assert.equal(await page.getByRole('status').count(), 0);
     assertNoRuntimeErrors();
   } finally {
     await context.close();

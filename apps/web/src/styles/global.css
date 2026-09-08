@@ -529,38 +529,6 @@ input:focus-visible {
   gap: 18px;
 }
 
-.history-undo {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 12px;
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
-  background: var(--color-surface-alt);
-}
-
-.history-undo p {
-  margin: 0;
-  color: var(--color-text-primary);
-  font-size: 14px;
-  line-height: 1.4;
-}
-
-.history-undo__button {
-  flex: 0 0 auto;
-  min-height: 44px;
-  padding: 0 12px;
-  font-size: 14px;
-}
-
-.history-actions .history-remove-button {
-  min-width: 44px;
-  min-height: 44px;
-  padding: 0 14px;
-  font-size: 14px;
-}
-
 .visually-hidden {
   position: absolute;
   width: 1px;
@@ -599,17 +567,6 @@ input:focus-visible {
     padding: 16px;
   }
 
-}
-
-@media (max-width: 560px) {
-  .history-undo {
-    align-items: stretch;
-    flex-direction: column;
-  }
-
-  .history-undo__button {
-    width: 100%;
-  }
 }
 
 @media (min-width: 821px) {

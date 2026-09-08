@@ -132,9 +132,24 @@ const HISTORY_ACTIONS_CLASS_NAME =
 /** 요청 내역 primary result link의 Tailwind button className. */
 const HISTORY_PRIMARY_ACTION_CLASS_NAME =
   'history-primary-action inline-flex min-w-[44px] min-h-[44px] items-center justify-center gap-mytube-8 border border-mytube-action-primary rounded-mytube-md bg-mytube-action-primary px-[14px] text-mytube-on-primary cursor-pointer text-[14px] font-semibold leading-[1] no-underline shadow-mytube-soft focus-visible:outline-2 focus-visible:outline-mytube-focus focus-visible:[outline-offset:2px] [@media(hover:hover)]:hover:brightness-[0.92] active:brightness-[0.84]';
-/** 요청 내역 secondary action의 Tailwind button className. */
-const HISTORY_SECONDARY_ACTION_CLASS_NAME =
-  'history-secondary-action inline-flex min-w-[44px] min-h-[44px] items-center justify-center gap-mytube-8 border border-mytube-border rounded-mytube-md bg-mytube-surface px-[14px] text-mytube-text-primary cursor-pointer text-[14px] font-semibold leading-[1.4] no-underline focus-visible:outline-2 focus-visible:outline-mytube-focus focus-visible:[outline-offset:2px] [@media(hover:hover)]:hover:bg-mytube-surface-alt [@media(hover:hover)]:hover:text-mytube-text-primary disabled:text-mytube-text-disabled disabled:cursor-not-allowed';
+/** 요청 내역 secondary action이 공유하는 Tailwind button className. */
+const HISTORY_SECONDARY_BUTTON_BASE_CLASS_NAME =
+  'inline-flex min-w-[44px] min-h-[44px] items-center justify-center gap-mytube-8 border border-mytube-border rounded-mytube-md bg-mytube-surface text-mytube-text-primary cursor-pointer text-[14px] font-semibold leading-[1.4] no-underline focus-visible:outline-2 focus-visible:outline-mytube-focus focus-visible:[outline-offset:2px] [@media(hover:hover)]:hover:bg-mytube-surface-alt [@media(hover:hover)]:hover:text-mytube-text-primary disabled:text-mytube-text-disabled disabled:cursor-not-allowed';
+/** 요청 상태 재확인 action의 Tailwind button className. */
+const HISTORY_SECONDARY_ACTION_CLASS_NAME = `${HISTORY_SECONDARY_BUTTON_BASE_CLASS_NAME} history-secondary-action px-[14px]`;
+/** 요청 내역 삭제 action의 Tailwind button className. */
+const HISTORY_REMOVE_ACTION_CLASS_NAME = `${HISTORY_SECONDARY_BUTTON_BASE_CLASS_NAME} history-remove-button px-[14px]`;
+/** 삭제 직후 표시하는 undo 안내의 Tailwind layout·surface className. */
+const HISTORY_UNDO_CLASS_NAME =
+  'history-undo flex min-w-0 items-center justify-between gap-mytube-12 p-mytube-12 border border-mytube-border rounded-mytube-md bg-mytube-surface-alt max-[561px]:items-stretch max-[561px]:flex-col';
+/** 삭제 직후 표시하는 undo 안내 문장의 Tailwind typography className. */
+const HISTORY_UNDO_MESSAGE_CLASS_NAME =
+  'history-undo__message m-0 min-w-0 text-mytube-text-primary text-[14px] leading-[1.4]';
+/** 삭제 직후 표시하는 undo button의 Tailwind button className. */
+const HISTORY_UNDO_BUTTON_CLASS_NAME = `${HISTORY_SECONDARY_BUTTON_BASE_CLASS_NAME} history-undo__button flex-none px-mytube-12 max-[561px]:w-full`;
+/** 삭제·복원 결과를 보조 기술에만 전달하는 live region utility className. */
+const HISTORY_ANNOUNCEMENT_CLASS_NAME =
+  'history-announcement absolute size-px overflow-hidden whitespace-nowrap [clip:rect(0_0_0_0)]';
 
 /** 삭제한 접수증을 되돌릴 수 있는 제한 시간. */
 const HISTORY_UNDO_WINDOW_MS = 8_000;
@@ -439,14 +454,14 @@ export function RequestHistoryPage() {
         </div>
       ) : null}
       {undoReceipt ? (
-        <div className="history-undo">
-          <p>
+        <div className={HISTORY_UNDO_CLASS_NAME}>
+          <p className={HISTORY_UNDO_MESSAGE_CLASS_NAME}>
             {formatKind(undoReceipt.kind)} 요청을 삭제했습니다. 8초 동안 되돌릴 수
             있습니다.
           </p>
           <button
             aria-label={`삭제한 ${formatKind(undoReceipt.kind)} 요청 되돌리기`}
-            className="secondary-button history-undo__button"
+            className={HISTORY_UNDO_BUTTON_CLASS_NAME}
             type="button"
             onClick={handleUndo}
           >
@@ -457,7 +472,7 @@ export function RequestHistoryPage() {
       <p
         aria-atomic="true"
         aria-live={announcement.role === 'status' ? 'polite' : undefined}
-        className="visually-hidden"
+        className={HISTORY_ANNOUNCEMENT_CLASS_NAME}
         role={announcement.role}
       >
         {announcement.message}
@@ -626,7 +641,7 @@ function HistoryItem(props: {
           ) : null}
           <button
             aria-label={`${formatKind(receipt.kind)} 요청 내역에서 삭제`}
-            className="secondary-button history-remove-button"
+            className={HISTORY_REMOVE_ACTION_CLASS_NAME}
             type="button"
             onClick={props.onRemove}
           >
