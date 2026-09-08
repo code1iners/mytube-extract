@@ -1,10 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import {
+  classifySubtitleVideoMimeType,
   isSubtitleTerminalStatus,
   type SubtitleJobResponse,
   validateSubtitleFile,
 } from '../../src/domain/subtitle-request/subtitle-request';
-import { createSubtitleStepKey } from '../../src/app/pages/subtitles-extract/_hooks/use-subtitles-extract-logic';
+import {
+  createSubtitleStepKey,
+  getSubtitleDragFeedback,
+} from '../../src/app/pages/subtitles-extract/_hooks/use-subtitles-extract-logic';
 
 describe('subtitle request', () => {
   it('requires a local video file', () => {
@@ -42,6 +46,46 @@ describe('subtitle request', () => {
 
     expect(validation.kind).toBe('invalid');
   });
+
+  it.each([
+    ['video/mp4', 'supported'],
+    ['video/quicktime', 'supported'],
+    ['video/webm', 'supported'],
+    ['', 'unknown'],
+    ['application/octet-stream', 'unknown'],
+    ['image/png', 'unsupported'],
+    ['text/plain', 'unsupported'],
+  ] as const)('classifies the %s MIME type as %s before drop', (mimeType, expected) => {
+    expect(classifySubtitleVideoMimeType(mimeType)).toBe(expected);
+  });
+
+  it('uses the first file drag item and does not reject uncertain or non-file data', () => {
+    /** 지원 형식 뒤의 비지원 형식을 포함한 복수 파일 drag item. */
+    const supportedFirstItems = [
+      { kind: 'file', type: 'video/mp4' },
+      { kind: 'file', type: 'image/png' },
+    ] as const;
+    /** 정보가 불명확한 첫 파일 drag item. */
+    const uncertainItems = [
+      { kind: 'file', type: 'application/octet-stream' },
+    ] as const;
+    /** 파일이 아닌 링크 drag item. */
+    const linkItems = [{ kind: 'string', type: 'text/uri-list' }] as const;
+
+    expect(getSubtitleDragFeedback(supportedFirstItems)).toBe('location');
+    expect(getSubtitleDragFeedback(uncertainItems)).toBe('location');
+    expect(getSubtitleDragFeedback(linkItems)).toBe('none');
+  });
+
+  it.each(['image/png', 'text/plain'])(
+    'marks a clear unsupported %s file drag as unsupported',
+    (mimeType) => {
+      /** 명확히 지원하지 않는 첫 파일 drag item. */
+      const items = [{ kind: 'file', type: mimeType }] as const;
+
+      expect(getSubtitleDragFeedback(items)).toBe('unsupported');
+    },
+  );
 
   it.each([
     ['video/mp4', 'sample-video.txt'],

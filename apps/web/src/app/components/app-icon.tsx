@@ -10,6 +10,7 @@ export type AppIconName =
   | 'link'
   | 'newRequest'
   | 'processing'
+  | 'prohibited'
   | 'queued'
   | 'server'
   | 'settings'
@@ -186,6 +187,15 @@ function renderAppIcon(name: AppIconName) {
         <path d="M20 5v4h-4" />
         <path d="M20 12a8 8 0 0 1-13.66 5.66L4 15" />
         <path d="M4 19v-4h4" />
+      </>
+    );
+  }
+
+  if (name === 'prohibited') {
+    return (
+      <>
+        <circle cx="12" cy="12" r="9" />
+        <path d="M5.6 5.6l12.8 12.8" />
       </>
     );
   }

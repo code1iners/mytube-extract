@@ -71,24 +71,36 @@ const SUBTITLE_DROPZONE_CLASS_NAME =
 /** 자막 파일 picker의 파일 drag 위치 강조 state className. */
 const SUBTITLE_DROPZONE_DRAG_ACTIVE_CLASS_NAME =
   'is-drag-active !border-mytube-status-processing !bg-mytube-surface';
+/** 자막 파일 picker의 명확한 비지원 drag state className. */
+const SUBTITLE_DROPZONE_DRAG_UNSUPPORTED_CLASS_NAME =
+  'is-drag-unsupported !border-mytube-status-failed !bg-mytube-surface';
 /** 자막 파일 picker icon의 Tailwind size·color className. */
 const SUBTITLE_DROPZONE_ICON_CLASS_NAME =
   'pointer-events-none !size-[32px] text-mytube-action-primary';
 /** 자막 파일 picker의 drag 위치 강조 icon className. */
 const SUBTITLE_DROPZONE_DRAG_ACTIVE_ICON_CLASS_NAME =
   '!text-mytube-status-processing';
+/** 자막 파일 picker의 비지원 drag icon className. */
+const SUBTITLE_DROPZONE_DRAG_UNSUPPORTED_ICON_CLASS_NAME =
+  '!text-mytube-status-failed';
 /** 자막 파일 picker의 주요 문구 Tailwind typography className. */
 const SUBTITLE_DROPZONE_PRIMARY_COPY_CLASS_NAME =
   'pointer-events-none text-mytube-text-primary text-[16px]';
 /** 자막 파일 picker의 drag 위치 강조 주요 문구 className. */
 const SUBTITLE_DROPZONE_DRAG_ACTIVE_COPY_CLASS_NAME =
   '!text-mytube-status-processing';
+/** 자막 파일 picker의 비지원 drag 주요 문구 className. */
+const SUBTITLE_DROPZONE_DRAG_UNSUPPORTED_COPY_CLASS_NAME =
+  '!text-mytube-status-failed';
 /** 자막 파일 picker의 형식 안내 Tailwind typography className. */
 const SUBTITLE_DROPZONE_HINT_CLASS_NAME =
   'pointer-events-none text-mytube-text-secondary text-[14px]';
 /** 자막 파일 검증 feedback의 Tailwind typography className. */
 const SUBTITLE_FILE_FEEDBACK_CLASS_NAME =
   'field-feedback m-[-2px_0_0] text-mytube-text-secondary text-[14px] leading-[1.4]';
+/** 명확한 비지원 drag 사전 안내를 연결할 id. */
+const SUBTITLE_DRAG_UNSUPPORTED_FEEDBACK_ID =
+  'subtitle-drag-unsupported-feedback';
 /** 선택 파일 row의 Tailwind layout·surface className. */
 const SUBTITLE_SELECTED_FILE_ROW_CLASS_NAME =
   'selected-file-row grid min-w-0 grid-cols-[40px_minmax(0,1fr)_auto] items-center gap-mytube-12 p-mytube-12 border border-mytube-border rounded-mytube-md bg-mytube-surface-alt';
@@ -268,11 +280,38 @@ export function SubtitlesExtractPage() {
     filledProgressCells, handleDropzoneDragEnd, handleDropzoneDragEnter, handleDropzoneDragLeave,
     handleDropzoneDragOver, handleDropzoneDrop, handleFileInputChange,
     handleFilePickerOpen, handleSubtitleSubmit, handleWhisperModelChange, isSubtitlePending,
-    isDropzoneDragActive, requestNotice, retryWorkerHealth, returnToRequest, selectedFile, selectedFileMeta,
+    isDropzoneDragActive, isDropzoneDragUnsupported, requestNotice, retryWorkerHealth, returnToRequest, selectedFile, selectedFileMeta,
     selectedWhisperModel, statusErrorDetail, statusIconName, statusJob, statusMessage, statusTitle,
     statusTone, submitDisabledReason, viewPhase, workerHealthCheckedAt, workerHealthFailed,
     workerHealthDetail, workerHealthIsFetching, workerHealthIsRefreshing, workerHealthStatus,
   } = useSubtitlesExtractLogic();
+  /** 파일 picker가 현재 drag 사전 안내와 기존 오류를 함께 설명하도록 연결할 id 목록. */
+  const filePickerDescribedBy = [
+    fileFeedbackMessage ? SUBTITLE_FILE_FEEDBACK_ID : undefined,
+    isDropzoneDragUnsupported
+      ? SUBTITLE_DRAG_UNSUPPORTED_FEEDBACK_ID
+      : undefined,
+  ]
+    .filter(Boolean)
+    .join(' ') || undefined;
+  /** 파일 picker의 현재 drag 상태 className. */
+  const dropzoneDragStateClassName = isDropzoneDragUnsupported
+    ? ` ${SUBTITLE_DROPZONE_DRAG_UNSUPPORTED_CLASS_NAME}`
+    : isDropzoneDragActive
+      ? ` ${SUBTITLE_DROPZONE_DRAG_ACTIVE_CLASS_NAME}`
+      : '';
+  /** 파일 picker icon의 현재 drag 상태 className. */
+  const dropzoneDragIconClassName = isDropzoneDragUnsupported
+    ? ` ${SUBTITLE_DROPZONE_DRAG_UNSUPPORTED_ICON_CLASS_NAME}`
+    : isDropzoneDragActive
+      ? ` ${SUBTITLE_DROPZONE_DRAG_ACTIVE_ICON_CLASS_NAME}`
+      : '';
+  /** 파일 picker 주요 문구의 현재 drag 상태 className. */
+  const dropzoneDragCopyClassName = isDropzoneDragUnsupported
+    ? ` ${SUBTITLE_DROPZONE_DRAG_UNSUPPORTED_COPY_CLASS_NAME}`
+    : isDropzoneDragActive
+      ? ` ${SUBTITLE_DROPZONE_DRAG_ACTIVE_COPY_CLASS_NAME}`
+      : '';
 
   if (
     viewPhase === 'request' &&
@@ -327,9 +366,9 @@ export function SubtitlesExtractPage() {
             onChange={handleFileInputChange}
           />
           <button
-            aria-describedby={fileFeedbackMessage ? SUBTITLE_FILE_FEEDBACK_ID : undefined}
+            aria-describedby={filePickerDescribedBy}
             aria-label={SUBTITLE_FILE_PICKER_LABEL}
-            className={`${SUBTITLE_DROPZONE_CLASS_NAME}${fileFeedbackIsError && !isDropzoneDragActive ? ' !border-mytube-status-failed' : ''}${isDropzoneDragActive ? ` ${SUBTITLE_DROPZONE_DRAG_ACTIVE_CLASS_NAME}` : ''}`}
+            className={`${SUBTITLE_DROPZONE_CLASS_NAME}${fileFeedbackIsError && !isDropzoneDragActive ? ' !border-mytube-status-failed' : ''}${dropzoneDragStateClassName}`}
             ref={filePickerButtonRef}
             type="button"
             onClick={handleFilePickerOpen}
@@ -340,13 +379,18 @@ export function SubtitlesExtractPage() {
             onDrop={handleDropzoneDrop}
           >
             <AppIcon
-              className={`${SUBTITLE_DROPZONE_ICON_CLASS_NAME}${isDropzoneDragActive ? ` ${SUBTITLE_DROPZONE_DRAG_ACTIVE_ICON_CLASS_NAME}` : ''}`}
-              name="subtitle"
+              className={`${SUBTITLE_DROPZONE_ICON_CLASS_NAME}${dropzoneDragIconClassName}`}
+              name={isDropzoneDragUnsupported ? 'prohibited' : 'subtitle'}
             />
             <strong
-              className={`${SUBTITLE_DROPZONE_PRIMARY_COPY_CLASS_NAME}${isDropzoneDragActive ? ` ${SUBTITLE_DROPZONE_DRAG_ACTIVE_COPY_CLASS_NAME}` : ''}`}
+              className={`${SUBTITLE_DROPZONE_PRIMARY_COPY_CLASS_NAME}${dropzoneDragCopyClassName}`}
+              id={isDropzoneDragUnsupported ? SUBTITLE_DRAG_UNSUPPORTED_FEEDBACK_ID : undefined}
             >
-              {isDropzoneDragActive ? '여기에 놓아 영상을 선택하세요' : '영상 선택 또는 드래그'}
+              {isDropzoneDragUnsupported
+                ? '지원하지 않는 파일 형식입니다'
+                : isDropzoneDragActive
+                  ? '여기에 놓아 영상을 선택하세요'
+                  : '영상 선택 또는 드래그'}
             </strong>
             <span className={SUBTITLE_DROPZONE_HINT_CLASS_NAME}>mp4, mov, webm</span>
           </button>

@@ -197,6 +197,53 @@ describe('subtitles extract page', () => {
     expect(markup).toMatch(/class="[^\"]*\bsubtitle-dropzone\b[^\"]*"/);
   });
 
+  it('exposes an accessible unsupported-format drag state without replacing the existing feedback', () => {
+    subtitlesExtractLogic.mockReturnValue({
+      canChangeWhisperModel: true,
+      canSubmit: true,
+      clearSelectedFile: () => undefined,
+      fileFeedbackIsError: false,
+      fileFeedbackMessage: '영상 파일을 선택해 주세요.',
+      fileInputRef: { current: null },
+      filePickerButtonRef: { current: null },
+      handleDropzoneDragOver: () => undefined,
+      handleDropzoneDrop: () => undefined,
+      handleFileInputChange: () => undefined,
+      handleFilePickerOpen: () => undefined,
+      handleSubtitleSubmit: () => undefined,
+      handleWhisperModelChange: () => undefined,
+      isDropzoneDragActive: true,
+      isDropzoneDragUnsupported: true,
+      retryWorkerHealth: () => undefined,
+      selectedFile: null,
+      selectedFileMeta: '',
+      selectedWhisperModel: 'base_en',
+      submitDisabledReason: '',
+      validation: { kind: 'empty', message: '영상 파일을 선택해 주세요.' },
+      viewPhase: 'request',
+      workerHealthCheckedAt: 0,
+      workerHealthIsFetching: false,
+      workerHealthStatus: {
+        kind: 'ready',
+        label: '준비됨',
+        message: '서버와 worker가 요청을 받을 준비가 되었습니다.',
+        role: 'status',
+      },
+    });
+
+    /** 명확한 비지원 MIME drag 상태의 정적 HTML. */
+    const markup = renderToStaticMarkup(<SubtitlesExtractPage />);
+
+    expect(markup).toContain('지원하지 않는 파일 형식입니다');
+    expect(markup).toContain('id="subtitle-drag-unsupported-feedback"');
+    expect(markup).toContain(
+      'aria-describedby="subtitle-file-feedback subtitle-drag-unsupported-feedback"',
+    );
+    expect(markup).toMatch(/class="[^\"]*\bis-drag-unsupported\b[^\"]*"/);
+    expect(markup).toContain('text-mytube-status-failed');
+    expect(markup).toContain('영상 파일을 선택해 주세요.');
+  });
+
   it('explains subtitle processing choices without requiring Whisper knowledge', () => {
     subtitlesExtractLogic.mockReturnValue({
       canChangeWhisperModel: true,

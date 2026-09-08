@@ -2571,7 +2571,7 @@ async function verifySubtitleDragFeedback() {
 
         /** 파일 목록을 읽지 않아도 항목 종류만 전달하는 drag 입력. */
         const fileDrag = {
-          files: [{ mimeType: 'application/octet-stream', name: 'unknown-video.bin' }],
+          itemTypes: ['application/octet-stream'],
         };
         await dispatchSubtitleDragEvent(page, picker, 'dragenter', fileDrag);
         await dispatchSubtitleDragEvent(page, picker, 'dragover', fileDrag);
@@ -2589,7 +2589,46 @@ async function verifySubtitleDragFeedback() {
           '파일 진입 안내가 dropzone 크기와 주변 배치를 바꾸지 않아야 한다',
         );
 
+        // 첫 파일이 지원 형식이면 뒤의 비지원 파일 때문에 사전 거부하지 않는다.
+        await dispatchSubtitleDragEvent(page, picker, 'dragenter', {
+          itemTypes: ['video/mp4', 'image/png'],
+        });
+        assert.equal(await page.getByText('여기에 놓아 영상을 선택하세요', { exact: true }).count(), 1);
+        assert.equal(await page.getByText('지원하지 않는 파일 형식입니다', { exact: true }).count(), 0);
+
+        // 명확한 비지원 MIME은 오류색·금지 아이콘·오류 문구로 표시한다.
+        for (const mimeType of ['image/png', 'text/plain']) {
+          await dispatchSubtitleDragEvent(page, picker, 'dragenter', {
+            itemTypes: [mimeType],
+          });
+          await page.getByText('지원하지 않는 파일 형식입니다', { exact: true }).waitFor();
+          /** 명확한 비지원 MIME drag의 실제 표시. */
+          const unsupportedMetrics = await readSubtitleDropzoneMetrics(page);
+
+          assert.equal(unsupportedMetrics.backgroundColor, expectedTheme.surface);
+          assert.equal(unsupportedMetrics.borderColor, expectedTheme.danger);
+          assert.equal(unsupportedMetrics.iconColor, expectedTheme.danger);
+          assert.equal(unsupportedMetrics.primaryCopyColor, expectedTheme.danger);
+          assert.equal(unsupportedMetrics.primaryCopy, '지원하지 않는 파일 형식입니다');
+          assert.deepEqual(unsupportedMetrics.box, initialMetrics.box);
+          assert.equal(
+            (await picker.getAttribute('aria-describedby'))
+              ?.split(/\s+/)
+              .includes('subtitle-drag-unsupported-feedback'),
+            true,
+          );
+          assert.equal(await page.getByText('영상 파일을 선택해 주세요.', { exact: true }).count(), 1);
+
+          await dispatchSubtitleDragEvent(page, picker, 'dragleave', {
+            itemTypes: [mimeType],
+            relatedTarget: 'outside',
+          });
+          assert.equal(await page.getByText('지원하지 않는 파일 형식입니다', { exact: true }).count(), 0);
+          assert.equal(await page.getByText('영상 선택 또는 드래그', { exact: true }).count(), 1);
+        }
+
         // 아이콘에서 문구로 이동하는 내부 dragleave는 실제 영역 이탈이 아니다.
+        await dispatchSubtitleDragEvent(page, picker, 'dragenter', fileDrag);
         await dispatchSubtitleDragEvent(page, picker, 'dragleave', {
           ...fileDrag,
           relatedTarget: 'icon',
@@ -2635,8 +2674,20 @@ async function verifySubtitleDragFeedback() {
           await page.getByText('mp4, mov, webm 영상 파일만 사용할 수 있습니다.', { exact: true }).count(),
           1,
         );
+
+        await dispatchSubtitleDragEvent(page, picker, 'dragenter', {
+          itemTypes: ['image/png'],
+        });
+        const activeUnsupportedErrorMetrics = await readSubtitleDropzoneMetrics(page);
+        assert.equal(activeUnsupportedErrorMetrics.primaryCopy, '지원하지 않는 파일 형식입니다');
+        assert.equal(activeUnsupportedErrorMetrics.borderColor, expectedTheme.danger);
+        assert.equal(activeUnsupportedErrorMetrics.iconColor, expectedTheme.danger);
+        assert.equal(
+          await page.getByText('mp4, mov, webm 영상 파일만 사용할 수 있습니다.', { exact: true }).count(),
+          1,
+        );
         await dispatchSubtitleDragEvent(page, picker, 'dragleave', {
-          ...fileDrag,
+          itemTypes: ['image/png'],
           relatedTarget: 'outside',
         });
         const restoredErrorMetrics = await readSubtitleDropzoneMetrics(page);
@@ -2722,6 +2773,27 @@ async function verifyInvalidSubtitleDropPreservesSelection() {
     /** 기존 선택에서 유지해야 하는 처리 방식. */
     const accuracyOption = page.getByRole('radio', { name: /정확도 우선/ });
     await accuracyOption.check();
+
+    // 지원 MIME만으로는 위치 안내를 유지하고, 잘못된 확장자는 실제 drop에서 거부한다.
+    await dispatchSubtitleDragEvent(page, picker, 'dragenter', {
+      itemTypes: ['video/mp4'],
+    });
+    await page.getByText('여기에 놓아 영상을 선택하세요', { exact: true }).waitFor();
+    await dispatchSubtitleFileDrop(page, picker, {
+      mimeType: 'video/mp4',
+      name: 'rejected-extension.txt',
+    });
+    await page
+      .getByText('mp4, mov, webm 영상 파일만 사용할 수 있습니다.', { exact: true })
+      .waitFor();
+    assert.equal(await page.getByText('preserved-video.mp4', { exact: true }).count(), 1);
+
+    // 명확한 비지원 사전 표시 뒤에도 실제 drop은 기존 최종 검증과 선택 보존을 따른다.
+    await dispatchSubtitleDragEvent(page, picker, 'dragenter', {
+      itemTypes: ['text/plain'],
+    });
+    await page.getByText('지원하지 않는 파일 형식입니다', { exact: true }).waitFor();
+    assert.equal(await page.getByText('preserved-video.mp4', { exact: true }).count(), 1);
     await dispatchSubtitleFileDrop(page, picker, {
       mimeType: 'text/plain',
       name: 'rejected-video.txt',
@@ -2810,6 +2882,24 @@ async function verifyInvalidSubtitleDropWithoutSelection() {
     assert.equal(await page.locator('.selected-file-row').count(), 0);
     assert.equal(await submit.isDisabled(), true);
 
+    // 불명확한 사전 정보는 위치 안내로 두고, 빈 MIME은 실제 drop에서 기존 기준으로 거부한다.
+    await dispatchSubtitleDragEvent(page, picker, 'dragenter', {
+      itemTypes: ['application/octet-stream'],
+    });
+    await page.getByText('여기에 놓아 영상을 선택하세요', { exact: true }).waitFor();
+    await dispatchSubtitleFileDrop(page, picker, {
+      mimeType: '',
+      name: 'empty-mime.mp4',
+    });
+    await page
+      .getByText('mp4, mov, webm 영상 파일만 사용할 수 있습니다.', { exact: true })
+      .waitFor();
+
+    // 선택이 없는 상태의 비지원 사전 표시도 최종 drop 뒤 빈 상태를 유지한다.
+    await dispatchSubtitleDragEvent(page, picker, 'dragenter', {
+      itemTypes: ['image/png'],
+    });
+    await page.getByText('지원하지 않는 파일 형식입니다', { exact: true }).waitFor();
     await dispatchSubtitleFileDrop(page, picker, {
       mimeType: 'text/plain',
       name: 'rejected-without-selection.txt',
@@ -2865,6 +2955,8 @@ async function readSubtitleDropzoneMetrics(page) {
   return page.locator('.subtitle-dropzone').evaluate((element) => {
     /** dropzone computed style. */
     const style = getComputedStyle(element);
+    /** dropzone icon. */
+    const icon = element.querySelector('svg');
     /** dropzone primary copy. */
     const primaryCopy = element.querySelector('strong');
     /** dropzone layout rectangle. */
@@ -2879,7 +2971,9 @@ async function readSubtitleDropzoneMetrics(page) {
         top: rect.top,
         width: rect.width,
       },
+      iconColor: icon ? getComputedStyle(icon).color : undefined,
       primaryCopy: primaryCopy?.textContent,
+      primaryCopyColor: primaryCopy ? getComputedStyle(primaryCopy).color : undefined,
     };
   });
 }
@@ -2912,14 +3006,32 @@ async function dispatchSubtitleDragEvent(page, picker, type, input = {}) {
           ? document.body
           : null;
 
-      target?.dispatchEvent(
-        new DragEvent(dragInput.type, {
-          bubbles: true,
-          cancelable: true,
-          dataTransfer,
-          relatedTarget,
-        }),
-      );
+      /** 파일 목록을 보호한 상태를 재현할 drag data. */
+      const protectedDragData = {
+        files: [],
+        items: (dragInput.itemTypes ?? []).map((type) => ({
+          kind: 'file',
+          type,
+        })),
+      };
+      /** drag 이벤트. */
+      const event = dragInput.itemTypes
+        ? new Event(dragInput.type, { bubbles: true, cancelable: true })
+        : new DragEvent(dragInput.type, {
+            bubbles: true,
+            cancelable: true,
+            dataTransfer,
+            relatedTarget,
+          });
+
+      if (dragInput.itemTypes) {
+        Object.defineProperties(event, {
+          dataTransfer: { value: protectedDragData },
+          relatedTarget: { value: relatedTarget },
+        });
+      }
+
+      target?.dispatchEvent(event);
     },
     { ...input, type },
   );

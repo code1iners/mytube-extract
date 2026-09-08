@@ -8,6 +8,7 @@ import {
   useState,
 } from 'react';
 import {
+  classifySubtitleVideoMimeType,
   type SubtitleJobResponse,
   type SubtitleWhisperModel,
   validateSubtitleFile,
@@ -71,6 +72,8 @@ export type SubtitleStatusTone =
   | 'completed'
   | 'failed'
   | 'expired';
+/** 자막 파일 drag 중 dropzone에 표시할 사전 feedback 상태. */
+export type SubtitleDragFeedback = 'none' | 'location' | 'unsupported';
 
 /** 자막 추출 route의 file upload, polling, 표시 상태를 lifecycle interface로 정규화한다. */
 export function useSubtitlesExtractLogic() {
@@ -101,8 +104,9 @@ export function useSubtitlesExtractLogic() {
   const [fileUploadErrorMessage, setFileUploadErrorMessage] = useState('');
   /** 마지막으로 drop에서 거부한 파일의 안내. */
   const [fileDropErrorMessage, setFileDropErrorMessage] = useState('');
-  /** 파일 drag가 dropzone 안에 있는지 여부. */
-  const [isDropzoneDragActive, setIsDropzoneDragActive] = useState(false);
+  /** 파일 drag 중 dropzone에 표시할 사전 feedback 상태. */
+  const [dropzoneDragFeedback, setDropzoneDragFeedback] =
+    useState<SubtitleDragFeedback>('none');
 
   // Hooks.
 
@@ -218,7 +222,7 @@ export function useSubtitlesExtractLogic() {
     function resetDropzoneDragStateWhenDragEnds() {
       /** dropzone 밖에서 끝난 drag도 위치 안내를 해제한다. */
       function handleDocumentDragEnd() {
-        setIsDropzoneDragActive(false);
+        resetDropzoneDragState();
       }
 
       window.addEventListener('dragend', handleDocumentDragEnd);
@@ -322,18 +326,14 @@ export function useSubtitlesExtractLogic() {
   function handleDropzoneDragEnter(event: DragEvent<HTMLButtonElement>) {
     event.preventDefault();
 
-    if (hasFileDragItem(event)) {
-      setIsDropzoneDragActive(true);
-    }
+    setDropzoneDragFeedback(getSubtitleDragFeedback(Array.from(event.dataTransfer.items)));
   }
 
   /** dropzone dragover 기본 동작을 막는다. */
   function handleDropzoneDragOver(event: DragEvent<HTMLButtonElement>) {
     event.preventDefault();
 
-    if (hasFileDragItem(event)) {
-      setIsDropzoneDragActive(true);
-    }
+    setDropzoneDragFeedback(getSubtitleDragFeedback(Array.from(event.dataTransfer.items)));
   }
 
   /** dropzone 밖으로 나간 파일 drag의 위치 안내를 해제한다. */
@@ -380,7 +380,7 @@ export function useSubtitlesExtractLogic() {
 
   /** dropzone의 파일 drag 표시를 초기화한다. */
   function resetDropzoneDragState() {
-    setIsDropzoneDragActive(false);
+    setDropzoneDragFeedback('none');
   }
 
   /** 영어 SRT 생성 submit 이벤트를 처리한다. */
@@ -444,7 +444,8 @@ export function useSubtitlesExtractLogic() {
     handleFilePickerOpen,
     handleSubtitleSubmit,
     handleWhisperModelChange,
-    isDropzoneDragActive,
+    isDropzoneDragActive: dropzoneDragFeedback !== 'none',
+    isDropzoneDragUnsupported: dropzoneDragFeedback === 'unsupported',
     isSubtitlePending: isSubmitting,
     requestNotice,
     retryWorkerHealth: () => requestLifecycle.actions.retryReadiness?.(),
@@ -471,11 +472,20 @@ export function useSubtitlesExtractLogic() {
   };
 }
 
-/** drag data가 파일 항목을 포함하는지 확인한다. */
-function hasFileDragItem(event: DragEvent<HTMLElement>) {
-  return Array.from(event.dataTransfer.items).some(
-    (item) => item.kind === 'file',
-  );
+/** 첫 파일 drag item의 MIME만 사용해 dropzone 사전 feedback을 만든다. */
+export function getSubtitleDragFeedback(
+  items: ReadonlyArray<Pick<DataTransferItem, 'kind' | 'type'>>,
+): SubtitleDragFeedback {
+  /** 현재 drop 정책과 일치하는 첫 파일 drag item. */
+  const firstFileItem = items.find((item) => item.kind === 'file');
+
+  if (!firstFileItem) {
+    return 'none';
+  }
+
+  return classifySubtitleVideoMimeType(firstFileItem.type) === 'unsupported'
+    ? 'unsupported'
+    : 'location';
 }
 
 /** dragleave의 relatedTarget이 dropzone 내부인지 확인한다. */

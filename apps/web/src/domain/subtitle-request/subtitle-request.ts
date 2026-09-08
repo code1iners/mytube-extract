@@ -80,6 +80,31 @@ const SUPPORTED_SUBTITLE_VIDEO_TYPES = [
   'video/webm',
 ];
 
+/** 드래그 중 MIME만으로 분류할 수 있는 자막 영상 형식 상태. */
+export type SubtitleVideoMimeTypeClassification =
+  | 'supported'
+  | 'unknown'
+  | 'unsupported';
+
+/** 드래그 중 MIME 형식만 사용해 자막 영상 형식을 사전 분류한다. */
+export function classifySubtitleVideoMimeType(
+  mimeType: string,
+): SubtitleVideoMimeTypeClassification {
+  /** 브라우저가 제공하는 MIME 형식을 비교 가능한 소문자로 정규화한다. */
+  const normalizedMimeType = mimeType.trim().toLowerCase();
+
+  // 빈 값과 일반 바이너리 값은 파일 형식을 확정할 정보가 없으므로 보류한다.
+  if (!normalizedMimeType || normalizedMimeType === 'application/octet-stream') {
+    return 'unknown';
+  }
+
+  if (SUPPORTED_SUBTITLE_VIDEO_TYPES.includes(normalizedMimeType)) {
+    return 'supported';
+  }
+
+  return 'unsupported';
+}
+
 /** terminal 상태인지 확인한다. */
 export function isSubtitleTerminalStatus(status: SubtitleDisplayStatus) {
   return status === 'completed' || status === 'failed' || status === 'expired';
