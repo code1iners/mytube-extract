@@ -101,6 +101,8 @@ export function useSubtitlesExtractLogic() {
   const [fileUploadErrorMessage, setFileUploadErrorMessage] = useState('');
   /** 마지막으로 drop에서 거부한 파일의 안내. */
   const [fileDropErrorMessage, setFileDropErrorMessage] = useState('');
+  /** 파일 drag가 dropzone 안에 있는지 여부. */
+  const [isDropzoneDragActive, setIsDropzoneDragActive] = useState(false);
 
   // Hooks.
 
@@ -212,6 +214,24 @@ export function useSubtitlesExtractLogic() {
     [selectedWhisperModel],
   );
 
+  useEffect(
+    function resetDropzoneDragStateWhenDragEnds() {
+      /** dropzone 밖에서 끝난 drag도 위치 안내를 해제한다. */
+      function handleDocumentDragEnd() {
+        setIsDropzoneDragActive(false);
+      }
+
+      window.addEventListener('dragend', handleDocumentDragEnd);
+      window.addEventListener('drop', handleDocumentDragEnd);
+
+      return function cleanupDropzoneDragStateListeners() {
+        window.removeEventListener('dragend', handleDocumentDragEnd);
+        window.removeEventListener('drop', handleDocumentDragEnd);
+      };
+    },
+    [],
+  );
+
 
   // Functions.
 
@@ -225,6 +245,7 @@ export function useSubtitlesExtractLogic() {
 
   /** 선택 파일과 현재 lifecycle 결과를 초기화한다. */
   function clearSelectedFile() {
+    resetDropzoneDragState();
     setSelectedFile(null);
     setFileDropErrorMessage('');
     setFileUploadErrorMessage('');
@@ -241,6 +262,7 @@ export function useSubtitlesExtractLogic() {
 
   /** 파일 선택과 이전 요청 오류를 상태에 반영한다. */
   function selectFile(file: File | null) {
+    resetDropzoneDragState();
     setSelectedFile(file);
     setFileDropErrorMessage('');
     setFileUploadErrorMessage('');
@@ -250,6 +272,7 @@ export function useSubtitlesExtractLogic() {
 
   /** 요청 오류에서 선택 파일을 유지한 채 요청 화면으로 돌아간다. */
   function returnToRequest() {
+    resetDropzoneDragState();
     requestLifecycle.actions.reset?.();
     setFileUploadErrorMessage('');
     setUploadProgress(null);
@@ -274,6 +297,7 @@ export function useSubtitlesExtractLogic() {
 
   /** 서버 job 생성 전 현재 요청만 중단하고 선택 파일을 유지한다. */
   function cancelRequest() {
+    resetDropzoneDragState();
     if (!requestLifecycle.actions.cancel?.()) {
       return;
     }
@@ -294,14 +318,42 @@ export function useSubtitlesExtractLogic() {
     selectFile(event.target.files?.[0] ?? null);
   }
 
+  /** dropzone에 파일 drag가 진입했음을 표시한다. */
+  function handleDropzoneDragEnter(event: DragEvent<HTMLButtonElement>) {
+    event.preventDefault();
+
+    if (hasFileDragItem(event)) {
+      setIsDropzoneDragActive(true);
+    }
+  }
+
   /** dropzone dragover 기본 동작을 막는다. */
   function handleDropzoneDragOver(event: DragEvent<HTMLButtonElement>) {
     event.preventDefault();
+
+    if (hasFileDragItem(event)) {
+      setIsDropzoneDragActive(true);
+    }
+  }
+
+  /** dropzone 밖으로 나간 파일 drag의 위치 안내를 해제한다. */
+  function handleDropzoneDragLeave(event: DragEvent<HTMLButtonElement>) {
+    if (isDragInsideCurrentTarget(event)) {
+      return;
+    }
+
+    resetDropzoneDragState();
+  }
+
+  /** 파일 drag 취소 시 위치 안내를 해제한다. */
+  function handleDropzoneDragEnd() {
+    resetDropzoneDragState();
   }
 
   /** dropzone 파일 drop 이벤트를 처리한다. */
   function handleDropzoneDrop(event: DragEvent<HTMLButtonElement>) {
     event.preventDefault();
+    resetDropzoneDragState();
 
     /** 현재 drop 정책에 따라 판단할 첫 번째 파일. */
     const droppedFile = event.dataTransfer.files[0];
@@ -324,6 +376,11 @@ export function useSubtitlesExtractLogic() {
     }
 
     selectFile(droppedFile);
+  }
+
+  /** dropzone의 파일 drag 표시를 초기화한다. */
+  function resetDropzoneDragState() {
+    setIsDropzoneDragActive(false);
   }
 
   /** 영어 SRT 생성 submit 이벤트를 처리한다. */
@@ -366,6 +423,8 @@ export function useSubtitlesExtractLogic() {
     downloadHref,
     fileInputRef,
     filePickerButtonRef,
+    handleDropzoneDragEnd,
+    handleDropzoneDragEnter,
     fileFeedbackIsError:
       Boolean(fileDropErrorMessage) ||
       validation.kind === 'invalid' ||
@@ -379,11 +438,13 @@ export function useSubtitlesExtractLogic() {
           : ''),
     filledProgressCells,
     handleDropzoneDragOver,
+    handleDropzoneDragLeave,
     handleDropzoneDrop,
     handleFileInputChange,
     handleFilePickerOpen,
     handleSubtitleSubmit,
     handleWhisperModelChange,
+    isDropzoneDragActive,
     isSubtitlePending: isSubmitting,
     requestNotice,
     retryWorkerHealth: () => requestLifecycle.actions.retryReadiness?.(),
@@ -408,6 +469,23 @@ export function useSubtitlesExtractLogic() {
     workerHealthIsRefreshing,
     workerHealthStatus,
   };
+}
+
+/** drag data가 파일 항목을 포함하는지 확인한다. */
+function hasFileDragItem(event: DragEvent<HTMLElement>) {
+  return Array.from(event.dataTransfer.items).some(
+    (item) => item.kind === 'file',
+  );
+}
+
+/** dragleave의 relatedTarget이 dropzone 내부인지 확인한다. */
+function isDragInsideCurrentTarget(event: DragEvent<HTMLElement>) {
+  const relatedTarget = event.relatedTarget;
+
+  return (
+    relatedTarget instanceof Node &&
+    event.currentTarget.contains(relatedTarget)
+  );
 }
 
 /** 정규화된 lifecycle 상태를 자막 화면의 최종 표시 모델로 만든다. */

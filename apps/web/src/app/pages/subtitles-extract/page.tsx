@@ -68,15 +68,24 @@ const SUBTITLE_FILE_FIELD_LABEL_CLASS_NAME =
 /** 자막 파일 picker의 Tailwind layout·state className. */
 const SUBTITLE_DROPZONE_CLASS_NAME =
   'subtitle-dropzone grid min-h-[160px] w-full min-w-0 place-items-center gap-[10px] p-mytube-12 border border-dashed border-mytube-border rounded-mytube-lg bg-mytube-surface-alt text-mytube-text-secondary cursor-pointer font-semibold focus-visible:outline-2 focus-visible:outline-mytube-focus focus-visible:outline-offset-2 hover:border-mytube-text-secondary hover:bg-mytube-surface hover:text-mytube-text-primary max-[561px]:min-h-[140px]';
+/** 자막 파일 picker의 파일 drag 위치 강조 state className. */
+const SUBTITLE_DROPZONE_DRAG_ACTIVE_CLASS_NAME =
+  'is-drag-active !border-mytube-status-processing !bg-mytube-surface';
 /** 자막 파일 picker icon의 Tailwind size·color className. */
 const SUBTITLE_DROPZONE_ICON_CLASS_NAME =
-  '!size-[32px] text-mytube-action-primary';
+  'pointer-events-none !size-[32px] text-mytube-action-primary';
+/** 자막 파일 picker의 drag 위치 강조 icon className. */
+const SUBTITLE_DROPZONE_DRAG_ACTIVE_ICON_CLASS_NAME =
+  '!text-mytube-status-processing';
 /** 자막 파일 picker의 주요 문구 Tailwind typography className. */
 const SUBTITLE_DROPZONE_PRIMARY_COPY_CLASS_NAME =
-  'text-mytube-text-primary text-[16px]';
+  'pointer-events-none text-mytube-text-primary text-[16px]';
+/** 자막 파일 picker의 drag 위치 강조 주요 문구 className. */
+const SUBTITLE_DROPZONE_DRAG_ACTIVE_COPY_CLASS_NAME =
+  '!text-mytube-status-processing';
 /** 자막 파일 picker의 형식 안내 Tailwind typography className. */
 const SUBTITLE_DROPZONE_HINT_CLASS_NAME =
-  'text-mytube-text-secondary text-[14px]';
+  'pointer-events-none text-mytube-text-secondary text-[14px]';
 /** 자막 파일 검증 feedback의 Tailwind typography className. */
 const SUBTITLE_FILE_FEEDBACK_CLASS_NAME =
   'field-feedback m-[-2px_0_0] text-mytube-text-secondary text-[14px] leading-[1.4]';
@@ -256,9 +265,10 @@ export function SubtitlesExtractPage() {
   const {
     canSubmit, canChangeWhisperModel, cancelRequest, clearSelectedFile, currentStepKey, downloadHref, fileInputRef,
     fileFeedbackIsError, fileFeedbackMessage, filePickerButtonRef,
-    filledProgressCells, handleDropzoneDragOver, handleDropzoneDrop, handleFileInputChange,
+    filledProgressCells, handleDropzoneDragEnd, handleDropzoneDragEnter, handleDropzoneDragLeave,
+    handleDropzoneDragOver, handleDropzoneDrop, handleFileInputChange,
     handleFilePickerOpen, handleSubtitleSubmit, handleWhisperModelChange, isSubtitlePending,
-    requestNotice, retryWorkerHealth, returnToRequest, selectedFile, selectedFileMeta,
+    isDropzoneDragActive, requestNotice, retryWorkerHealth, returnToRequest, selectedFile, selectedFileMeta,
     selectedWhisperModel, statusErrorDetail, statusIconName, statusJob, statusMessage, statusTitle,
     statusTone, submitDisabledReason, viewPhase, workerHealthCheckedAt, workerHealthFailed,
     workerHealthDetail, workerHealthIsFetching, workerHealthIsRefreshing, workerHealthStatus,
@@ -319,15 +329,25 @@ export function SubtitlesExtractPage() {
           <button
             aria-describedby={fileFeedbackMessage ? SUBTITLE_FILE_FEEDBACK_ID : undefined}
             aria-label={SUBTITLE_FILE_PICKER_LABEL}
-            className={`${SUBTITLE_DROPZONE_CLASS_NAME}${fileFeedbackIsError ? ' !border-mytube-status-failed' : ''}`}
+            className={`${SUBTITLE_DROPZONE_CLASS_NAME}${fileFeedbackIsError && !isDropzoneDragActive ? ' !border-mytube-status-failed' : ''}${isDropzoneDragActive ? ` ${SUBTITLE_DROPZONE_DRAG_ACTIVE_CLASS_NAME}` : ''}`}
             ref={filePickerButtonRef}
             type="button"
             onClick={handleFilePickerOpen}
+            onDragEnd={handleDropzoneDragEnd}
+            onDragEnter={handleDropzoneDragEnter}
+            onDragLeave={handleDropzoneDragLeave}
             onDragOver={handleDropzoneDragOver}
             onDrop={handleDropzoneDrop}
           >
-            <AppIcon className={SUBTITLE_DROPZONE_ICON_CLASS_NAME} name="subtitle" />
-            <strong className={SUBTITLE_DROPZONE_PRIMARY_COPY_CLASS_NAME}>영상 선택 또는 드래그</strong>
+            <AppIcon
+              className={`${SUBTITLE_DROPZONE_ICON_CLASS_NAME}${isDropzoneDragActive ? ` ${SUBTITLE_DROPZONE_DRAG_ACTIVE_ICON_CLASS_NAME}` : ''}`}
+              name="subtitle"
+            />
+            <strong
+              className={`${SUBTITLE_DROPZONE_PRIMARY_COPY_CLASS_NAME}${isDropzoneDragActive ? ` ${SUBTITLE_DROPZONE_DRAG_ACTIVE_COPY_CLASS_NAME}` : ''}`}
+            >
+              {isDropzoneDragActive ? '여기에 놓아 영상을 선택하세요' : '영상 선택 또는 드래그'}
+            </strong>
             <span className={SUBTITLE_DROPZONE_HINT_CLASS_NAME}>mp4, mov, webm</span>
           </button>
           {fileFeedbackMessage ? (

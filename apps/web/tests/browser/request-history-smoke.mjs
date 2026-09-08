@@ -51,6 +51,7 @@ try {
   await run('U/F keys do not move request focus', verifyRequestShortcuts);
   await run('subtitle task-first mobile density and processing choices', verifySubtitleProcessingChoice);
   await run('accessible subtitle file picker keeps one control and all input paths', verifySubtitleFilePicker);
+  await run('subtitle drag feedback stays stable and restores the file picker', verifySubtitleDragFeedback);
   await run('invalid subtitle drops preserve the current request target', verifyInvalidSubtitleDropPreservesSelection);
   await run('invalid subtitle drops keep empty selection and recover on valid files', verifyInvalidSubtitleDropWithoutSelection);
   await run('active request status errors stay actionable', verifyActiveRequestStatusErrors);
@@ -2509,6 +2510,150 @@ async function verifySubtitleFilePicker() {
   }
 }
 
+/** 자막 파일 drag 위치 안내와 상태 복원을 실제 화면에서 검증한다. */
+async function verifySubtitleDragFeedback() {
+  /** 위치 안내와 테마 대비를 확인할 좁은 화면 폭. */
+  for (const width of [320, 390]) {
+    /** 위치 안내 색상을 비교할 theme preference. */
+    for (const theme of ['light', 'dark']) {
+      /** drag feedback를 확인할 독립 browser context. */
+      const context = await createContext({
+        viewport: { height: 844, width },
+      });
+      /** 자막 drag feedback 검증 page. */
+      const { page, assertNoRuntimeErrors } = await createPage(context);
+
+      try {
+        await page.addInitScript((preference) => {
+          localStorage.setItem('mytube-extract-theme-preference', preference);
+        }, theme);
+        await routeApi(page, async ({ route, url }) => {
+          if (url.pathname === '/health') return fulfillJson(route, healthResponse());
+          return fulfillJson(route, {}, 404);
+        });
+
+        await page.goto(`${staticServer.origin}/subtitles`);
+        await page.getByRole('heading', { name: '자막 추출' }).waitFor();
+        /** 파일 drag feedback를 표시할 button. */
+        const picker = page.getByRole('button', {
+          name: '영상 선택 또는 드래그 (로컬 영상 파일)',
+        });
+        /** 현재 theme에서 기대하는 위치 안내 semantic token. */
+        const expectedTheme = theme === 'dark'
+          ? {
+              danger: 'rgb(255, 138, 128)',
+              processing: 'rgb(169, 180, 242)',
+              surface: 'rgb(32, 33, 36)',
+              surfaceAlt: 'rgb(41, 42, 45)',
+            }
+          : {
+              danger: 'rgb(198, 40, 40)',
+              processing: 'rgb(75, 92, 206)',
+              surface: 'rgb(248, 248, 248)',
+              surfaceAlt: 'rgb(239, 239, 239)',
+            };
+        /** drag 이전 dropzone의 실제 표시와 배치. */
+        const initialMetrics = await readSubtitleDropzoneMetrics(page);
+
+        assert.equal(initialMetrics.backgroundColor, expectedTheme.surfaceAlt);
+        assert.equal(
+          initialMetrics.borderColor,
+          theme === 'dark' ? 'rgb(118, 118, 118)' : 'rgb(138, 138, 138)',
+        );
+        assert.equal(initialMetrics.primaryCopy, '영상 선택 또는 드래그');
+
+        // 파일이 아닌 텍스트 drag는 파일 위치 안내를 열지 않는다.
+        await dispatchSubtitleDragEvent(page, picker, 'dragenter', {
+          text: 'https://example.test/video',
+        });
+        assert.equal(await page.getByText('여기에 놓아 영상을 선택하세요', { exact: true }).count(), 0);
+        assert.equal(await page.getByText('영상 선택 또는 드래그', { exact: true }).count(), 1);
+
+        /** 파일 목록을 읽지 않아도 항목 종류만 전달하는 drag 입력. */
+        const fileDrag = {
+          files: [{ mimeType: 'application/octet-stream', name: 'unknown-video.bin' }],
+        };
+        await dispatchSubtitleDragEvent(page, picker, 'dragenter', fileDrag);
+        await dispatchSubtitleDragEvent(page, picker, 'dragover', fileDrag);
+        await page.getByText('여기에 놓아 영상을 선택하세요', { exact: true }).waitFor();
+        /** 파일 진입 중 dropzone의 실제 표시와 배치. */
+        const activeMetrics = await readSubtitleDropzoneMetrics(page);
+
+        assert.equal(activeMetrics.backgroundColor, expectedTheme.surface);
+        assert.equal(activeMetrics.borderColor, expectedTheme.processing);
+        assert.equal(activeMetrics.primaryCopy, '여기에 놓아 영상을 선택하세요');
+        assert.equal(await page.getByText('mp4, mov, webm', { exact: true }).count(), 1);
+        assert.deepEqual(
+          activeMetrics.box,
+          initialMetrics.box,
+          '파일 진입 안내가 dropzone 크기와 주변 배치를 바꾸지 않아야 한다',
+        );
+
+        // 아이콘에서 문구로 이동하는 내부 dragleave는 실제 영역 이탈이 아니다.
+        await dispatchSubtitleDragEvent(page, picker, 'dragleave', {
+          ...fileDrag,
+          relatedTarget: 'icon',
+          target: 'primary',
+        });
+        assert.equal(await page.getByText('여기에 놓아 영상을 선택하세요', { exact: true }).count(), 1);
+
+        // dropzone 바깥으로 나가면 일반 안내로 복원한다.
+        await dispatchSubtitleDragEvent(page, picker, 'dragleave', {
+          ...fileDrag,
+          relatedTarget: 'outside',
+        });
+        assert.equal(await page.getByText('여기에 놓아 영상을 선택하세요', { exact: true }).count(), 0);
+        assert.equal(await page.getByText('영상 선택 또는 드래그', { exact: true }).count(), 1);
+        assert.deepEqual(await readSubtitleDropzoneMetrics(page), initialMetrics);
+
+        // 취소된 dragend도 위치 안내를 남기지 않는다.
+        await dispatchSubtitleDragEvent(page, picker, 'dragenter', fileDrag);
+        await dispatchSubtitleDragEvent(page, picker, 'dragend', fileDrag);
+        assert.equal(await page.getByText('여기에 놓아 영상을 선택하세요', { exact: true }).count(), 0);
+
+        // 실제 놓기 직후에는 선택 경로를 유지하면서 위치 안내를 해제한다.
+        await dispatchSubtitleDragEvent(page, picker, 'dragenter', fileDrag);
+        await dispatchSubtitleFileDrop(page, picker, {
+          mimeType: 'video/mp4',
+          name: 'dropped-after-feedback.mp4',
+        });
+        await page.getByText('dropped-after-feedback.mp4', { exact: true }).waitFor();
+        assert.equal(await page.getByText('여기에 놓아 영상을 선택하세요', { exact: true }).count(), 0);
+        assert.equal(await page.getByText('영상 선택 또는 드래그', { exact: true }).count(), 1);
+
+        // 기존 오류는 drag 위치 안내 중에도 보존하고, 이탈 뒤 오류 표시로 복원한다.
+        await dispatchSubtitleFileDrop(page, picker, {
+          mimeType: 'text/plain',
+          name: 'rejected-after-feedback.txt',
+        });
+        await page.getByText('mp4, mov, webm 영상 파일만 사용할 수 있습니다.', { exact: true }).waitFor();
+        await dispatchSubtitleDragEvent(page, picker, 'dragenter', fileDrag);
+        const activeErrorMetrics = await readSubtitleDropzoneMetrics(page);
+        assert.equal(activeErrorMetrics.primaryCopy, '여기에 놓아 영상을 선택하세요');
+        assert.equal(activeErrorMetrics.borderColor, expectedTheme.processing);
+        assert.equal(
+          await page.getByText('mp4, mov, webm 영상 파일만 사용할 수 있습니다.', { exact: true }).count(),
+          1,
+        );
+        await dispatchSubtitleDragEvent(page, picker, 'dragleave', {
+          ...fileDrag,
+          relatedTarget: 'outside',
+        });
+        const restoredErrorMetrics = await readSubtitleDropzoneMetrics(page);
+        assert.equal(restoredErrorMetrics.primaryCopy, '영상 선택 또는 드래그');
+        assert.equal(restoredErrorMetrics.borderColor, expectedTheme.danger);
+        assert.equal(
+          await page.getByText('mp4, mov, webm 영상 파일만 사용할 수 있습니다.', { exact: true }).count(),
+          1,
+        );
+        assertNoRuntimeErrors();
+      } finally {
+        await context.close();
+      }
+    }
+  }
+}
+
 /** 정상 영상이 있는 상태에서 잘못된 drop이 선택·처리 방식·실제 요청 대상을 보존하는지 검증한다. */
 async function verifyInvalidSubtitleDropPreservesSelection() {
   /** 잘못된 drop 보존 흐름을 확인할 독립 browser context. */
@@ -2713,6 +2858,71 @@ async function chooseSubtitleFileThroughPicker(page, picker, trigger, file) {
 /** 브라우저 DataTransfer로 자막 파일 drop을 발생시킨다. */
 async function dispatchSubtitleFileDrop(page, picker, file) {
   await dispatchSubtitleDataTransferDrop(page, picker, { files: [file] });
+}
+
+/** 자막 dropzone의 표시와 실제 사각형을 직렬화한다. */
+async function readSubtitleDropzoneMetrics(page) {
+  return page.locator('.subtitle-dropzone').evaluate((element) => {
+    /** dropzone computed style. */
+    const style = getComputedStyle(element);
+    /** dropzone primary copy. */
+    const primaryCopy = element.querySelector('strong');
+    /** dropzone layout rectangle. */
+    const rect = element.getBoundingClientRect();
+
+    return {
+      backgroundColor: style.backgroundColor,
+      borderColor: style.borderTopColor,
+      box: {
+        height: rect.height,
+        left: rect.left,
+        top: rect.top,
+        width: rect.width,
+      },
+      primaryCopy: primaryCopy?.textContent,
+    };
+  });
+}
+
+/** 브라우저 DataTransfer로 자막 dragenter·dragover·dragleave·dragend를 발생시킨다. */
+async function dispatchSubtitleDragEvent(page, picker, type, input = {}) {
+  await picker.evaluate(
+    (element, dragInput) => {
+      /** 브라우저가 전달할 drag data. */
+      const dataTransfer = new DataTransfer();
+      for (const draggedFile of dragInput.files ?? []) {
+        dataTransfer.items.add(
+          new File(['subtitle-drag-feedback-test'], draggedFile.name, {
+            type: draggedFile.mimeType,
+          }),
+        );
+      }
+      if (dragInput.text) {
+        dataTransfer.setData('text/plain', dragInput.text);
+      }
+
+      /** drag event를 받을 자식 요소 또는 dropzone. */
+      const target = dragInput.target === 'primary'
+        ? element.querySelector('strong')
+        : element;
+      /** 내부 이동 여부를 표현할 related target. */
+      const relatedTarget = dragInput.relatedTarget === 'icon'
+        ? element.querySelector('svg')
+        : dragInput.relatedTarget === 'outside'
+          ? document.body
+          : null;
+
+      target?.dispatchEvent(
+        new DragEvent(dragInput.type, {
+          bubbles: true,
+          cancelable: true,
+          dataTransfer,
+          relatedTarget,
+        }),
+      );
+    },
+    { ...input, type },
+  );
 }
 
 /** 브라우저 DataTransfer로 파일·링크·텍스트 drop을 발생시킨다. */
