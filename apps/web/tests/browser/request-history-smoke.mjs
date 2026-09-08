@@ -853,6 +853,12 @@ async function verifyVideoTaskFirstLayout() {
         await page.getByLabel('YouTube URL').waitFor();
         /** 영상 요청 제출 button. */
         const submit = page.getByRole('button', { name: '추출 요청' });
+        // 클래스 존재가 아니라 배포 스타일의 실제 우선순위를 검증한다.
+        assert.deepEqual(await submit.evaluate((element) => {
+          /** 버튼에 최종 적용된 글꼴 스타일. */
+          const style = getComputedStyle(element);
+          return [style.fontSize, style.fontWeight, style.lineHeight];
+        }), ['18px', '600', '18px']);
         assert.equal(await page.locator('.request-flow[data-flow-stage="source"]').count(), 1);
         assert.deepEqual(
           await page.locator('.request-flow__step > span:last-child').allTextContents(),
@@ -3266,6 +3272,14 @@ async function verifyEmptyHistoryProductModel() {
         /** 빈 상태에서 제공하는 두 개의 요청 시작 링크. */
         const emptyLinks = page.locator('.history-empty__link');
         assert.equal(await emptyLinks.count(), 2);
+        // 공통 아이콘 기본 크기가 화면의 28px 크기를 덮지 않아야 한다.
+        assert.deepEqual(await emptyLinks.locator('svg').evaluateAll((icons) =>
+          icons.map((icon) => {
+            /** 화면에 실제 표시된 아이콘 크기. */
+            const bounds = icon.getBoundingClientRect();
+            return [bounds.width, bounds.height];
+          }),
+        ), [[28, 28], [28, 28]]);
         assert.deepEqual(
           await emptyLinks.evaluateAll((links) =>
             links.map((link) => link.getAttribute('href')),

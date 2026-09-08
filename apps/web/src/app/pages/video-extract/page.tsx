@@ -1,3 +1,7 @@
+import {
+  PRIMARY_BUTTON_UTILITY_CLASS_NAME,
+  SECONDARY_BUTTON_UTILITY_CLASS_NAME,
+} from '../../components/button-class-names';
 import { type DownloadDisplayStatus } from '../../../domain/download-request/download-request';
 import { ErrorDetailsDisclosure } from '../../components/error-details-disclosure';
 import { AppIcon, type AppIconName } from '../../components/app-icon';
@@ -169,13 +173,13 @@ const VIDEO_DOWNLOAD_BUTTON_CLASS_NAME =
   'video-download-button inline-flex w-full min-h-[48px] items-center justify-center gap-mytube-8 border border-mytube-action-primary rounded-mytube-md bg-mytube-action-primary text-mytube-on-primary cursor-pointer text-[18px] font-semibold leading-[1] no-underline shadow-mytube-soft focus-visible:outline-2 focus-visible:outline-mytube-focus focus-visible:outline-offset-2 hover:brightness-[0.92] active:brightness-[0.84]';
 /** 영상 보조 button의 공통 Tailwind className. */
 const VIDEO_SECONDARY_BUTTON_CLASS_NAME =
-  'inline-flex min-h-[44px] items-center justify-center border border-mytube-border rounded-mytube-md bg-mytube-surface text-mytube-text-primary cursor-pointer text-[16px] font-semibold focus-visible:outline-2 focus-visible:outline-mytube-focus focus-visible:outline-offset-2 hover:bg-mytube-surface-alt hover:text-mytube-text-primary disabled:text-mytube-text-disabled disabled:cursor-not-allowed';
+  SECONDARY_BUTTON_UTILITY_CLASS_NAME;
 /** 영상 완료 결과의 새 요청 button className. */
 const VIDEO_NEW_REQUEST_BUTTON_CLASS_NAME =
   `${VIDEO_SECONDARY_BUTTON_CLASS_NAME} min-h-[48px] gap-mytube-8 px-mytube-16`;
 /** 영상 오류 재시도·복귀 primary button의 Tailwind className. */
 const VIDEO_PRIMARY_BUTTON_CLASS_NAME =
-  'inline-flex min-h-[48px] items-center justify-center gap-mytube-8 border border-mytube-action-primary rounded-mytube-md bg-mytube-action-primary text-mytube-on-primary cursor-pointer text-[18px] font-semibold leading-[1] shadow-mytube-soft focus-visible:outline-2 focus-visible:outline-mytube-focus focus-visible:outline-offset-2 hover:brightness-[0.92] active:brightness-[0.84] disabled:border-mytube-border disabled:bg-mytube-surface-alt disabled:text-mytube-text-disabled disabled:cursor-not-allowed disabled:shadow-none';
+  `${PRIMARY_BUTTON_UTILITY_CLASS_NAME} leading-[1]`;
 /** 영상 접수 중 취소 button의 Tailwind width className. */
 const VIDEO_CANCEL_BUTTON_CLASS_NAME =
   `${VIDEO_SECONDARY_BUTTON_CLASS_NAME} w-full`;

@@ -1,3 +1,5 @@
+@layer theme, base, utilities;
+
 @import "tailwindcss/theme.css" layer(theme);
 @import "tailwindcss/utilities.css" layer(utilities);
 
@@ -156,9 +158,12 @@ body {
   background: var(--color-canvas);
 }
 
-button,
-input {
-  font: inherit;
+/* 기본 글꼴 상속은 화면별 유틸리티가 덮어쓸 수 있어야 한다. */
+@layer base {
+  button,
+  input {
+    font: inherit;
+  }
 }
 
 input {

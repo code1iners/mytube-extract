@@ -26,9 +26,9 @@ type AppIconProps = {
 
 /** Nintendo 스타일 flat stroke 아이콘. currentColor를 상속받는다. */
 export function AppIcon({ className = '', name }: AppIconProps) {
-  /** SVG className. */
+  /** 기본 크기의 명시도를 낮춰 호출부의 고정 크기를 우선한다. */
   const svgClassName = [
-    'app-icon block size-[1.1em] shrink-0',
+    'app-icon block [:where(&)]:size-[1.1em] shrink-0',
     className,
   ]
     .filter(Boolean)
