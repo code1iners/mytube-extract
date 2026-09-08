@@ -581,13 +581,13 @@ async function verifyDesktopRouteHeadingAlignment() {
     const headingMetrics = [];
     for (const routePath of RESPONSIVE_NAVIGATION_ROUTES) {
       await page.goto(staticServer.origin + routePath);
-      await page.locator('.phase-panel .panel-title-row h2').waitFor();
+      await page.locator('.phase-panel h2').waitFor();
       headingMetrics.push(
         await page.evaluate(() => {
           /** 공유 app header. */
           const header = document.querySelector('.app-header');
           /** 현재 route body heading. */
-          const heading = document.querySelector('.phase-panel .panel-title-row h2');
+          const heading = document.querySelector('.phase-panel h2');
           /** root layout token. */
           const rootStyle = getComputedStyle(document.documentElement);
           return {
@@ -3545,11 +3545,11 @@ async function verifyPopulatedHistoryResponsiveLayout() {
 }
 
 async function verifyResponsivePrimaryNavigation() {
-  // 640px은 1280px CSS viewport를 200% 확대한 환경의 유효 폭을 함께 확인한다.
+  // 설정·내비게이션의 모바일 계약은 320x844·390x844, 데스크톱은 1280x900으로 확인한다.
   for (const width of [320, 390, 560, 561, 640, 800, 820, 821, 1280]) {
     for (const theme of ['light', 'dark']) {
-      /** 모바일 하단 내비게이션의 짧은 viewport 계약도 함께 확인한다. */
-      const height = width <= 820 ? 640 : 900;
+      /** 화면 표시·하단 내비게이션의 요구 viewport 높이. */
+      const height = width <= 820 ? 844 : 900;
       const context = await createContext({ viewport: { height, width } });
       const { page, assertNoRuntimeErrors } = await createPage(context);
 
@@ -3597,14 +3597,61 @@ async function verifyThemePreference(page, theme) {
     theme,
   );
   const alternateTheme = theme === 'dark' ? 'light' : 'dark';
-  await page
-    .getByText(alternateTheme === 'dark' ? '다크' : '라이트', { exact: true })
-    .click();
+  const alternateThemeLabel = alternateTheme === 'dark' ? '다크' : '라이트';
+  await page.getByText(alternateThemeLabel, { exact: true }).click();
   assert.equal(
     await page.evaluate(() => document.documentElement.dataset.theme),
     alternateTheme,
   );
+  await page.goto(`${staticServer.origin}/video`);
+  await page.getByRole('heading', { name: '영상 추출' }).waitFor();
+  assert.deepEqual(
+    await page.evaluate(() => ({
+      backgroundColor: getComputedStyle(document.body).backgroundColor,
+      theme: document.documentElement.dataset.theme,
+    })),
+    {
+      backgroundColor: alternateTheme === 'dark' ? 'rgb(24, 25, 27)' : 'rgb(255, 255, 255)',
+      theme: alternateTheme,
+    },
+  );
+  await page.goto(`${staticServer.origin}/settings`);
+  await page.getByRole('heading', { name: '설정' }).waitFor();
   await page.reload();
+  assert.equal(
+    await page.evaluate(() => document.documentElement.dataset.theme),
+    alternateTheme,
+  );
+
+  /** native radio의 실제 focus와 ArrowRight 선택을 검증한다. */
+  const systemRadio = page.getByRole('radio', { name: '시스템' });
+  const lightRadio = page.getByRole('radio', { name: '라이트' });
+  await systemRadio.focus();
+  assert.equal(
+    await systemRadio.evaluate((element) => document.activeElement === element),
+    true,
+  );
+  await page.keyboard.press('ArrowRight');
+  assert.equal(await lightRadio.isChecked(), true);
+  assert.deepEqual(
+    await lightRadio.evaluate((element) => {
+      const surface = element.nextElementSibling;
+      const style = surface ? getComputedStyle(surface) : null;
+      return {
+        active: document.activeElement === element,
+        focusVisible: element.matches(':focus-visible'),
+        outlineStyle: style?.outlineStyle,
+        outlineWidth: style?.outlineWidth,
+      };
+    }),
+    {
+      active: true,
+      focusVisible: true,
+      outlineStyle: 'solid',
+      outlineWidth: '2px',
+    },
+  );
+  await page.getByText(alternateThemeLabel, { exact: true }).click();
   assert.equal(
     await page.evaluate(() => document.documentElement.dataset.theme),
     alternateTheme,

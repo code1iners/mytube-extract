@@ -3,6 +3,25 @@ import { AppIcon } from '../../components/app-icon';
 import { ThemePreferenceControl } from '../../components/theme-preference-control';
 import { type ThemePreference } from '../../utils/theme-preference.util';
 
+/** 설정 화면의 flat layout·surface className. */
+const SETTINGS_PANEL_CLASS_NAME =
+  'phase-panel settings-panel grid min-w-0 w-full max-w-none m-0 gap-mytube-24 border-0 rounded-none bg-transparent p-0 [box-shadow:none]';
+/** 설정 화면 제목 영역의 Tailwind layout className. */
+const SETTINGS_TITLE_ROW_CLASS_NAME =
+  'settings-title-row flex items-center mb-mytube-16';
+/** 설정 화면 제목의 Tailwind typography className. */
+const SETTINGS_TITLE_CLASS_NAME =
+  'm-0 inline-flex items-center gap-mytube-8 text-mytube-text-primary text-[21px] font-semibold leading-[1.4]';
+/** 설정 화면 설명의 Tailwind typography className. */
+const SETTINGS_DESCRIPTION_CLASS_NAME =
+  'settings-description m-0 text-mytube-text-secondary text-[16px] leading-[1.6]';
+/** 설정 화면의 제품 맥락 안내 className. */
+const SETTINGS_CONTEXT_CLASS_NAME =
+  'settings-context flex items-start gap-mytube-8 m-0 text-mytube-text-primary text-[14px] leading-[1.5]';
+/** 설정 화면의 제품 맥락 아이콘 className. */
+const SETTINGS_CONTEXT_ICON_CLASS_NAME =
+  '!size-5 shrink-0 text-mytube-action-primary';
+
 /** 설정 route가 layout으로부터 받는 context. */
 type SettingsOutletContext = {
   /** 테마 변경 콜백. */
@@ -20,19 +39,19 @@ export function SettingsPage() {
     useOutletContext<SettingsOutletContext>();
 
   return (
-    <section className="phase-panel settings-panel" aria-labelledby="settings-title">
-      <div className="panel-title-row">
-        <h2 id="settings-title">
+    <section className={SETTINGS_PANEL_CLASS_NAME} aria-labelledby="settings-title">
+      <div className={SETTINGS_TITLE_ROW_CLASS_NAME}>
+        <h2 className={SETTINGS_TITLE_CLASS_NAME} id="settings-title">
           <AppIcon name="settings" />
           설정
         </h2>
       </div>
-      <p className="settings-description">
+      <p className={SETTINGS_DESCRIPTION_CLASS_NAME}>
         이 설정의 화면 표시 선택만 이 브라우저에 저장하며, 요청 URL과 파일 정보는
         저장하지 않습니다.
       </p>
-      <p className="settings-context">
-        <AppIcon name="download" />
+      <p className={SETTINGS_CONTEXT_CLASS_NAME}>
+        <AppIcon className={SETTINGS_CONTEXT_ICON_CLASS_NAME} name="download" />
         <span>
           영상·오디오·영어 SRT 요청을 접수하고 결과를 확인하는 개인 추출 콘솔입니다.
         </span>
