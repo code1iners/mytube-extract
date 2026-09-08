@@ -1,5 +1,9 @@
 import { useId, useState } from 'react';
 import type { UserVisibleErrorDetail } from '../../api/mytube-extract.api';
+import {
+  SECONDARY_BUTTON_UTILITY_CLASS_NAME,
+  SECONDARY_COMPACT_BUTTON_UTILITY_CLASS_NAME,
+} from './button-class-names';
 
 /** 상세 원인 Disclosure props. */
 type ErrorDetailsDisclosureProps = {
@@ -66,7 +70,7 @@ export function ErrorDetailsDisclosure({
       <button
         aria-controls={detailId}
         aria-expanded={isOpen}
-        className="secondary-button"
+        className={`secondary-button ${SECONDARY_BUTTON_UTILITY_CLASS_NAME}`}
         type="button"
         onClick={handleToggleDetail}
       >
@@ -82,7 +86,7 @@ export function ErrorDetailsDisclosure({
         >
           <pre className={ERROR_DETAILS_LOG_CLASS_NAME}>{detailText}</pre>
           <button
-            className="secondary-button secondary-button--compact"
+            className={`secondary-button secondary-button--compact ${SECONDARY_BUTTON_UTILITY_CLASS_NAME} ${SECONDARY_COMPACT_BUTTON_UTILITY_CLASS_NAME}`}
             type="button"
             onClick={handleCopyDetail}
           >

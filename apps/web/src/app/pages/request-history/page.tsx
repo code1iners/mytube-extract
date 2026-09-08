@@ -8,6 +8,7 @@ import {
 import type { DownloadResponse } from '../../../domain/download-request/download-request';
 import type { SubtitleJobResponse } from '../../../domain/subtitle-request/subtitle-request';
 import { AppIcon, type AppIconName } from '../../components/app-icon';
+import { PanelTitle } from '../../components/panel-title';
 import { RequestFlow } from '../../components/request-flow';
 import { ROUTE_PATHS } from '../../constants/route-paths.constant';
 import {
@@ -32,7 +33,7 @@ type JobStatus = DownloadResponse | SubtitleJobResponse;
 
 /** 요청 내역 페이지의 flat layout·surface className. */
 const HISTORY_PANEL_CLASS_NAME =
-  'phase-panel history-panel grid min-w-0 w-full max-w-none m-0 gap-mytube-24 border-0 rounded-none bg-transparent p-0 [box-shadow:none]';
+  'phase-panel history-panel grid min-w-0 w-full max-w-none m-0 gap-mytube-24 border-0 rounded-none bg-transparent p-0 [box-shadow:none] min-[821px]:self-start';
 /** 요청 내역 제목에 programmatic focus를 표시하는 className. */
 const HISTORY_FOCUSABLE_TITLE_CLASS_NAME =
   'focus:outline-2 focus:outline-mytube-focus focus:[outline-offset:2px]';
@@ -428,15 +429,14 @@ export function RequestHistoryPage() {
 
   return (
     <section className={HISTORY_PANEL_CLASS_NAME} aria-labelledby="history-title">
-      <div className="panel-title-row">
-        <h2
-          className={HISTORY_FOCUSABLE_TITLE_CLASS_NAME}
-          id="history-title"
-          tabIndex={-1}
-        >
-          <AppIcon name="queued" />요청 내역
-        </h2>
-      </div>
+      <PanelTitle
+        icon="queued"
+        id="history-title"
+        tabIndex={-1}
+        titleClassName={HISTORY_FOCUSABLE_TITLE_CLASS_NAME}
+      >
+        요청 내역
+      </PanelTitle>
       <p className={HISTORY_DESCRIPTION_CLASS_NAME}>
         이 브라우저가 접수한 최근 요청 20건을 API 응답의 최신 상태로 확인합니다.
       </p>

@@ -4,6 +4,7 @@ import {
   APP_SHELL_CLASS_NAME,
   WORKSPACE_CLASS_NAME,
 } from './app-layout';
+import { PRIMARY_BUTTON_UTILITY_CLASS_NAME } from './button-class-names';
 import { ErrorDetailsDisclosure } from './error-details-disclosure';
 
 /** ErrorBoundary props. */
@@ -21,7 +22,8 @@ type ErrorBoundaryState = {
 };
 
 /** 화면 오류 fallback panel의 Tailwind layout className. */
-const ERROR_FALLBACK_CLASS_NAME = 'error-fallback grid gap-[18px]';
+const ERROR_FALLBACK_CLASS_NAME =
+  'error-fallback grid min-w-0 gap-[18px] p-[20px] border border-mytube-border rounded-mytube-lg bg-mytube-surface shadow-mytube-soft max-[821px]:p-mytube-16';
 
 /** 화면 오류 fallback heading의 Tailwind typography className. */
 const ERROR_FALLBACK_HEADING_CLASS_NAME =
@@ -70,7 +72,7 @@ export class ErrorBoundary extends Component<
       return (
         <main className={APP_SHELL_CLASS_NAME}>
           <section className={WORKSPACE_CLASS_NAME} aria-labelledby="error-title">
-            <section className={`console-panel ${ERROR_FALLBACK_CLASS_NAME}`}>
+            <section className={ERROR_FALLBACK_CLASS_NAME}>
               <div className="flex items-center mb-mytube-16">
                 <h1
                   className={ERROR_FALLBACK_HEADING_CLASS_NAME}
@@ -84,7 +86,7 @@ export class ErrorBoundary extends Component<
               </p>
               <div className={ERROR_FALLBACK_ACTIONS_CLASS_NAME}>
                 <button
-                  className="primary-button"
+                  className={`primary-button ${PRIMARY_BUTTON_UTILITY_CLASS_NAME}`}
                   type="button"
                   onClick={this.handleReload}
                 >

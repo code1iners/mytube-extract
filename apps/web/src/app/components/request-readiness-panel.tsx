@@ -1,4 +1,5 @@
-import { AppIcon, type AppIconName } from './app-icon';
+import { type AppIconName } from './app-icon';
+import { PanelTitle } from './panel-title';
 import { RequestFlow } from './request-flow';
 import { WorkerHealthStatusNotice } from './worker-health-status';
 import type { UserVisibleErrorDetail } from '../../api/mytube-extract.api';
@@ -28,7 +29,7 @@ type RequestReadinessPanelProps = {
 
 /** readiness gate panel의 Tailwind layout className. */
 const READINESS_PANEL_CLASS_NAME =
-  'readiness-panel grid gap-mytube-24 p-0';
+  'phase-panel readiness-panel grid min-w-0 w-full max-w-none gap-mytube-24 m-0 p-0 min-[821px]:self-start';
 
 /** readiness gate 보조 안내의 Tailwind typography className. */
 const READINESS_NOTE_CLASS_NAME =
@@ -49,14 +50,11 @@ export function RequestReadinessPanel({
   return (
     <section
       aria-labelledby={id}
-      className={`phase-panel ${READINESS_PANEL_CLASS_NAME}`}
+      className={READINESS_PANEL_CLASS_NAME}
     >
-      <div className="panel-title-row">
-        <h2 id={id}>
-          <AppIcon name={icon} />
-          {title}
-        </h2>
-      </div>
+      <PanelTitle icon={icon} id={id}>
+        {title}
+      </PanelTitle>
       <RequestFlow current="source" />
       <WorkerHealthStatusNotice
         id={healthId ?? `${id}-health-title`}

@@ -82,8 +82,13 @@ export function AppLayout() {
 /** 지연 로딩 중에도 현재 app shell과 보조 기술 안내를 유지한다. */
 function RouteLoadingFallback() {
   return (
-    <section className="phase-panel route-loading" aria-label="화면 불러오기">
-      <p role="status">화면을 불러오는 중입니다.</p>
+    <section
+      className="phase-panel route-loading grid min-h-[96px] w-full max-w-none place-items-center m-0 min-[821px]:self-start"
+      aria-label="화면 불러오기"
+    >
+      <p className="m-0 text-mytube-text-secondary text-[14px] leading-[1.5]" role="status">
+        화면을 불러오는 중입니다.
+      </p>
     </section>
   );
 }

@@ -1,17 +1,12 @@
 import { useOutletContext } from 'react-router';
 import { AppIcon } from '../../components/app-icon';
+import { PanelTitle } from '../../components/panel-title';
 import { ThemePreferenceControl } from '../../components/theme-preference-control';
 import { type ThemePreference } from '../../utils/theme-preference.util';
 
 /** 설정 화면의 flat layout·surface className. */
 const SETTINGS_PANEL_CLASS_NAME =
-  'phase-panel settings-panel grid min-w-0 w-full max-w-none m-0 gap-mytube-24 border-0 rounded-none bg-transparent p-0 [box-shadow:none]';
-/** 설정 화면 제목 영역의 Tailwind layout className. */
-const SETTINGS_TITLE_ROW_CLASS_NAME =
-  'settings-title-row flex items-center mb-mytube-16';
-/** 설정 화면 제목의 Tailwind typography className. */
-const SETTINGS_TITLE_CLASS_NAME =
-  'm-0 inline-flex items-center gap-mytube-8 text-mytube-text-primary text-[21px] font-semibold leading-[1.4]';
+  'phase-panel settings-panel grid min-w-0 w-full max-w-none m-0 gap-mytube-24 border-0 rounded-none bg-transparent p-0 [box-shadow:none] min-[821px]:self-start';
 /** 설정 화면 설명의 Tailwind typography className. */
 const SETTINGS_DESCRIPTION_CLASS_NAME =
   'settings-description m-0 text-mytube-text-secondary text-[16px] leading-[1.6]';
@@ -40,12 +35,9 @@ export function SettingsPage() {
 
   return (
     <section className={SETTINGS_PANEL_CLASS_NAME} aria-labelledby="settings-title">
-      <div className={SETTINGS_TITLE_ROW_CLASS_NAME}>
-        <h2 className={SETTINGS_TITLE_CLASS_NAME} id="settings-title">
-          <AppIcon name="settings" />
-          설정
-        </h2>
-      </div>
+      <PanelTitle icon="settings" id="settings-title">
+        설정
+      </PanelTitle>
       <p className={SETTINGS_DESCRIPTION_CLASS_NAME}>
         이 설정의 화면 표시 선택만 이 브라우저에 저장하며, 요청 URL과 파일 정보는
         저장하지 않습니다.

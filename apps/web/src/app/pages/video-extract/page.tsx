@@ -1,6 +1,7 @@
 import { type DownloadDisplayStatus } from '../../../domain/download-request/download-request';
 import { ErrorDetailsDisclosure } from '../../components/error-details-disclosure';
 import { AppIcon, type AppIconName } from '../../components/app-icon';
+import { PanelTitle } from '../../components/panel-title';
 import { RequestFlow } from '../../components/request-flow';
 import { RequestReadinessPanel } from '../../components/request-readiness-panel';
 import { WorkerHealthStatusNotice } from '../../components/worker-health-status';
@@ -27,7 +28,7 @@ const VIDEO_ERROR_DETAIL_SUMMARY =
 const VIDEO_WORKER_HEALTH_TITLE_ID = 'video-worker-health-title';
 /** 영상 요청 panel의 Tailwind layout className. */
 const VIDEO_REQUEST_PANEL_CLASS_NAME =
-  'phase-panel video-request-panel grid min-w-0 gap-mytube-24 p-0 max-[560px]:gap-mytube-16';
+  'phase-panel video-request-panel grid min-w-0 w-full max-w-none gap-mytube-24 m-0 p-0 min-[821px]:self-start max-[560px]:gap-mytube-16';
 /** 영상 요청 form의 Tailwind layout className. */
 const VIDEO_REQUEST_FORM_CLASS_NAME = 'download-form grid gap-mytube-24';
 /** 영상 URL field의 Tailwind layout className. */
@@ -428,11 +429,6 @@ export function VideoExtractPage() {
       <button className={VIDEO_PRIMARY_BUTTON_CLASS_NAME} type="button" onClick={returnToRequest}>요청 설정으로 돌아가기</button>
     </section>
   );
-}
-
-/** 화면별 panel heading을 일정한 구조로 렌더링한다. */
-function PanelTitle(props: { /** 아이콘 이름. */ icon: AppIconName; /** heading id. */ id: string; /** 기존 ready form을 유지한 채 health를 갱신하는지 여부. */ isRefreshing?: boolean; /** 제목. */ children: string }) {
-  return <div className="panel-title-row"><h2 id={props.id}><AppIcon name={props.icon} />{props.children}{props.isRefreshing ? <span aria-hidden="true" className="panel-title__refresh" title="서비스 상태 새로 확인 중"><AppIcon name="processing" /></span> : null}</h2></div>;
 }
 
 /** 상태 제목과 안내 문구를 렌더링한다. */

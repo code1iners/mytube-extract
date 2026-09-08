@@ -1,4 +1,8 @@
 import { AppIcon, type AppIconName } from './app-icon';
+import {
+  PRIMARY_BUTTON_UTILITY_CLASS_NAME,
+  SECONDARY_BUTTON_UTILITY_CLASS_NAME,
+} from './button-class-names';
 import { ErrorDetailsDisclosure } from './error-details-disclosure';
 import type { UserVisibleErrorDetail } from '../../api/mytube-extract.api';
 import {
@@ -155,6 +159,9 @@ export function WorkerHealthStatusNotice({
   const retryClassName = [
     isExpandedStatus ? 'primary-button' : 'secondary-button',
     WORKER_HEALTH_STATUS_RETRY_CLASS_NAME,
+    isExpandedStatus
+      ? PRIMARY_BUTTON_UTILITY_CLASS_NAME
+      : SECONDARY_BUTTON_UTILITY_CLASS_NAME,
     isExpandedStatus ? 'w-full justify-center' : '',
     isQuietRetry ? WORKER_HEALTH_STATUS_QUIET_RETRY_CLASS_NAME : '',
   ]

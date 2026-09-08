@@ -175,12 +175,14 @@ a {
   -webkit-tap-highlight-color: transparent;
 }
 
-/* 상태 panel은 hairline + whisper-soft shadow로 작업 흐름과 분리한다. */
-.console-panel {
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-lg);
-  background: var(--color-surface);
-  box-shadow: var(--shadow-soft);
+/* 보조 기술 전용 안내를 위한 공통 접근성 기본 규칙이다. */
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
 }
 
 /* Native details 표식은 유틸리티로 대체할 수 없는 브라우저 특수 효과다. */
@@ -204,12 +206,6 @@ a {
   transform: rotate(225deg);
 }
 
-.phase-panel {
-  width: 100%;
-  max-width: none;
-  margin: 0;
-}
-
 .keyboard-shortcut-hint kbd {
   display: inline-flex;
   min-width: 24px;
@@ -224,57 +220,6 @@ a {
   color: var(--color-text-primary);
   font-size: 14px;
   font-weight: 600;
-}
-
-.route-loading {
-  min-height: 96px;
-  display: grid;
-  place-items: center;
-}
-
-.route-loading p {
-  margin: 0;
-  color: var(--color-text-secondary);
-  font-size: 14px;
-  line-height: 1.5;
-}
-
-.console-panel {
-  min-width: 0;
-  padding: 20px;
-}
-
-.panel-title-row {
-  display: flex;
-  align-items: center;
-  margin-bottom: 16px;
-}
-
-.panel-title-row h2 {
-  margin: 0;
-  color: var(--color-text-primary);
-}
-
-.panel-title-row h2 {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 21px;
-  font-weight: 600;
-  line-height: 1.4;
-}
-
-.panel-title__refresh {
-  display: inline-grid;
-  width: 20px;
-  height: 20px;
-  place-items: center;
-  color: var(--color-status-processing);
-}
-
-.panel-title__refresh .app-icon {
-  width: 16px;
-  height: 16px;
 }
 
 .subtitle-processing-method__details summary::-webkit-details-marker {
@@ -299,101 +244,12 @@ a {
   transform: rotate(225deg);
 }
 
-.primary-button {
-  display: inline-flex;
-  min-height: 48px;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  border: 1px solid var(--color-action-primary);
-  border-radius: var(--radius-md);
-  background: var(--color-action-primary);
-  color: var(--color-on-primary);
-  cursor: pointer;
-  font-size: 18px;
-  font-weight: 600;
-  text-decoration: none;
-  box-shadow: var(--shadow-soft);
-}
-
-.primary-button:disabled {
-  border-color: var(--color-border);
-  background: var(--color-surface-alt);
-  color: var(--color-text-disabled);
-  cursor: not-allowed;
-  box-shadow: none;
-}
-
-.secondary-button {
-  display: inline-flex;
-  min-height: 44px;
-  align-items: center;
-  justify-content: center;
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
-  background: var(--color-surface);
-  color: var(--color-text-primary);
-  cursor: pointer;
-  font-size: 16px;
-  font-weight: 600;
-}
-
-.secondary-button:disabled {
-  color: var(--color-text-disabled);
-  cursor: not-allowed;
-}
-
-.secondary-button--compact {
-  min-height: 44px;
-  justify-self: start;
-  padding: 0 12px;
-  font-size: 14px;
-}
-
-.primary-button:focus-visible,
-.secondary-button:focus-visible,
-input:focus-visible {
-  outline: 2px solid var(--color-focus);
-  outline-offset: 2px;
-}
-
 @media (hover: hover) {
   .primary-navigation__link:not(.is-active, .is-disabled):hover,
-  .secondary-button:not(:disabled):hover,
   .usage-guide summary:hover {
     background: var(--color-surface-alt);
     color: var(--color-text-primary);
   }
-
-  .primary-button:not(:disabled):hover {
-    filter: brightness(0.92);
-  }
-}
-
-.primary-button:not(:disabled):active {
-  filter: brightness(0.84);
-}
-
-.empty-route-panel {
-  display: grid;
-  gap: 18px;
-}
-
-.visually-hidden {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  overflow: hidden;
-  clip: rect(0 0 0 0);
-  white-space: nowrap;
-}
-
-.empty-route-panel p {
-  margin: 0;
-  color: var(--color-text-secondary);
-  font-size: 16px;
-  line-height: 1.45;
-  word-break: keep-all;
 }
 
 /* Native safe-area inset은 Tailwind의 일반 spacing 토큰으로 표현하지 않는다. */
@@ -411,17 +267,6 @@ input:focus-visible {
       var(--layout-bottom-nav-height) + var(--layout-bottom-nav-clearance) +
         env(safe-area-inset-bottom)
     );
-  }
-
-  .console-panel {
-    padding: 16px;
-  }
-
-}
-
-@media (min-width: 821px) {
-  .workspace > .phase-panel {
-    align-self: start;
   }
 }
 
