@@ -540,6 +540,13 @@ async function verifyUsageGuideDisclosure() {
           assert.ok(headerMetrics.utilitiesCenter !== undefined);
           assert.ok(Math.abs(headerMetrics.brandCenter - headerMetrics.utilitiesCenter) <= 1);
           assert.ok(headerMetrics.utilitiesRight !== undefined && headerMetrics.utilitiesRight <= width);
+          /** 숨겨진 desktop navigation의 grid row와 gap까지 포함한 기존 mobile header 높이. */
+          assert.equal(
+            await page.locator('.app-header').evaluate((element) =>
+              Math.round(element.getBoundingClientRect().height),
+            ),
+            63,
+          );
         }
 
         if (routePath === RESPONSIVE_NAVIGATION_ROUTES[0]) {

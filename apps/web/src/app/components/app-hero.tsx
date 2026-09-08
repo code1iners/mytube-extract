@@ -73,7 +73,7 @@ export function AppHero() {
 
   return (
     <header
-      className="app-header grid grid-cols-[minmax(0,1fr)_auto] items-center gap-mytube-16 border-b border-mytube-border pb-mytube-16 max-[821px]:pb-[14px] max-[561px]:gap-mytube-8 max-[561px]:pb-[10px]"
+      className="app-header grid grid-rows-[auto_auto] grid-cols-[minmax(0,1fr)_auto] items-center gap-mytube-16 border-b border-mytube-border pb-mytube-16 max-[821px]:pb-[14px] max-[561px]:gap-mytube-8 max-[561px]:pb-[10px]"
     >
       <div
         className="brand-lockup relative flex min-w-0 items-center gap-mytube-12"
