@@ -368,7 +368,9 @@ export function useSubtitlesExtractLogic() {
 
     // 거부한 파일은 현재 선택으로 반영하지 않고 drop 오류만 갱신한다.
     if (droppedFileValidation.kind === 'invalid') {
-      setFileDropErrorMessage(droppedFileValidation.message);
+      setFileDropErrorMessage(
+        `방금 놓은 파일을 선택하지 않았습니다. ${droppedFileValidation.message}${selectedFile ? ' 기존 파일 선택은 유지됩니다.' : ''}`,
+      );
       setFileUploadErrorMessage('');
       setUploadProgress(null);
       requestLifecycle.actions.clearRequestError();

@@ -294,24 +294,30 @@ export function SubtitlesExtractPage() {
   ]
     .filter(Boolean)
     .join(' ') || undefined;
-  /** 파일 picker의 현재 drag 상태 className. */
-  const dropzoneDragStateClassName = isDropzoneDragUnsupported
-    ? ` ${SUBTITLE_DROPZONE_DRAG_UNSUPPORTED_CLASS_NAME}`
+  /** 드래그 상태를 한 번 선택해 테두리·아이콘·문구에 같은 표시를 적용한다. */
+  const dropzonePresentation = isDropzoneDragUnsupported
+    ? {
+        className: ` ${SUBTITLE_DROPZONE_DRAG_UNSUPPORTED_CLASS_NAME}`,
+        iconClassName: ` ${SUBTITLE_DROPZONE_DRAG_UNSUPPORTED_ICON_CLASS_NAME}`,
+        copyClassName: ` ${SUBTITLE_DROPZONE_DRAG_UNSUPPORTED_COPY_CLASS_NAME}`,
+        icon: 'prohibited' as const,
+        copy: '지원하지 않는 파일 형식입니다',
+      }
     : isDropzoneDragActive
-      ? ` ${SUBTITLE_DROPZONE_DRAG_ACTIVE_CLASS_NAME}`
-      : '';
-  /** 파일 picker icon의 현재 drag 상태 className. */
-  const dropzoneDragIconClassName = isDropzoneDragUnsupported
-    ? ` ${SUBTITLE_DROPZONE_DRAG_UNSUPPORTED_ICON_CLASS_NAME}`
-    : isDropzoneDragActive
-      ? ` ${SUBTITLE_DROPZONE_DRAG_ACTIVE_ICON_CLASS_NAME}`
-      : '';
-  /** 파일 picker 주요 문구의 현재 drag 상태 className. */
-  const dropzoneDragCopyClassName = isDropzoneDragUnsupported
-    ? ` ${SUBTITLE_DROPZONE_DRAG_UNSUPPORTED_COPY_CLASS_NAME}`
-    : isDropzoneDragActive
-      ? ` ${SUBTITLE_DROPZONE_DRAG_ACTIVE_COPY_CLASS_NAME}`
-      : '';
+      ? {
+          className: ` ${SUBTITLE_DROPZONE_DRAG_ACTIVE_CLASS_NAME}`,
+          iconClassName: ` ${SUBTITLE_DROPZONE_DRAG_ACTIVE_ICON_CLASS_NAME}`,
+          copyClassName: ` ${SUBTITLE_DROPZONE_DRAG_ACTIVE_COPY_CLASS_NAME}`,
+          icon: 'subtitle' as const,
+          copy: '여기에 놓아 영상을 선택하세요',
+        }
+      : {
+          className: '',
+          iconClassName: '',
+          copyClassName: '',
+          icon: 'subtitle' as const,
+          copy: '영상 선택 또는 드래그',
+        };
 
   if (
     viewPhase === 'request' &&
@@ -368,7 +374,7 @@ export function SubtitlesExtractPage() {
           <button
             aria-describedby={filePickerDescribedBy}
             aria-label={SUBTITLE_FILE_PICKER_LABEL}
-            className={`${SUBTITLE_DROPZONE_CLASS_NAME}${fileFeedbackIsError && !isDropzoneDragActive ? ' !border-mytube-status-failed' : ''}${dropzoneDragStateClassName}`}
+            className={`${SUBTITLE_DROPZONE_CLASS_NAME}${fileFeedbackIsError && !isDropzoneDragActive ? ' !border-mytube-status-failed' : ''}${dropzonePresentation.className}`}
             ref={filePickerButtonRef}
             type="button"
             onClick={handleFilePickerOpen}
@@ -379,18 +385,14 @@ export function SubtitlesExtractPage() {
             onDrop={handleDropzoneDrop}
           >
             <AppIcon
-              className={`${SUBTITLE_DROPZONE_ICON_CLASS_NAME}${dropzoneDragIconClassName}`}
-              name={isDropzoneDragUnsupported ? 'prohibited' : 'subtitle'}
+              className={`${SUBTITLE_DROPZONE_ICON_CLASS_NAME}${dropzonePresentation.iconClassName}`}
+              name={dropzonePresentation.icon}
             />
             <strong
-              className={`${SUBTITLE_DROPZONE_PRIMARY_COPY_CLASS_NAME}${dropzoneDragCopyClassName}`}
+              className={`${SUBTITLE_DROPZONE_PRIMARY_COPY_CLASS_NAME}${dropzonePresentation.copyClassName}`}
               id={isDropzoneDragUnsupported ? SUBTITLE_DRAG_UNSUPPORTED_FEEDBACK_ID : undefined}
             >
-              {isDropzoneDragUnsupported
-                ? '지원하지 않는 파일 형식입니다'
-                : isDropzoneDragActive
-                  ? '여기에 놓아 영상을 선택하세요'
-                  : '영상 선택 또는 드래그'}
+              {dropzonePresentation.copy}
             </strong>
             <span className={SUBTITLE_DROPZONE_HINT_CLASS_NAME}>mp4, mov, webm</span>
           </button>

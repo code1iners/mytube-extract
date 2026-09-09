@@ -14,6 +14,12 @@ const VIDEO_OTHER_ID = '11111111-1111-4111-8111-111111111111';
 const SUBTITLE_ID = '067b084b-c84a-4574-952f-950cb8fa2157';
 const SUBTITLE_OTHER_ID = '22222222-2222-4222-8222-222222222222';
 const RECEIPT_PREFIX = 'mytube-extract:job-receipt:v2:';
+/** 새 드롭만 거부하고 빈 선택을 유지할 때의 안내. */
+const REJECTED_SUBTITLE_DROP_MESSAGE =
+  '방금 놓은 파일을 선택하지 않았습니다. mp4, mov, webm 영상 파일만 사용할 수 있습니다.';
+/** 새 드롭 거부와 기존 파일 선택 보존을 함께 설명하는 안내. */
+const PRESERVED_SUBTITLE_DROP_MESSAGE =
+  `${REJECTED_SUBTITLE_DROP_MESSAGE} 기존 파일 선택은 유지됩니다.`;
 /** 공통 내비게이션을 실제 route surface마다 확인할 경로. */
 const RESPONSIVE_NAVIGATION_ROUTES = [
   '/video',
@@ -2069,7 +2075,7 @@ async function verifySubtitleProcessingChoice() {
         name: 'invalid-video.txt',
       });
       await page
-        .getByText('mp4, mov, webm 영상 파일만 사용할 수 있습니다.', { exact: true })
+        .getByText(REJECTED_SUBTITLE_DROP_MESSAGE, { exact: true })
         .waitFor();
       /** 잘못된 파일 입력에 적용된 danger 색상. */
       const invalidInputStyles = await page.evaluate(() => ({
@@ -2322,8 +2328,6 @@ async function verifySubtitleFilePicker() {
   });
   /** 브라우저에서 선택할 파일의 accessible name. */
   const pickerLabel = '영상 선택 또는 드래그 (로컬 영상 파일)';
-  /** 지원하지 않는 파일을 선택했을 때의 안내 문구. */
-  const invalidFileMessage = 'mp4, mov, webm 영상 파일만 사용할 수 있습니다.';
 
   try {
     await routeApi(page, async ({ route, url }) => {
@@ -2454,7 +2458,7 @@ async function verifySubtitleFilePicker() {
     });
     await page
       .locator('#subtitle-file-feedback')
-      .getByText(invalidFileMessage, { exact: true })
+      .getByText(PRESERVED_SUBTITLE_DROP_MESSAGE, { exact: true })
       .waitFor();
     assert.equal(await page.locator('.field.has-error').count(), 1);
     assert.equal(
@@ -2665,13 +2669,13 @@ async function verifySubtitleDragFeedback() {
           mimeType: 'text/plain',
           name: 'rejected-after-feedback.txt',
         });
-        await page.getByText('mp4, mov, webm 영상 파일만 사용할 수 있습니다.', { exact: true }).waitFor();
+        await page.getByText(PRESERVED_SUBTITLE_DROP_MESSAGE, { exact: true }).waitFor();
         await dispatchSubtitleDragEvent(page, picker, 'dragenter', fileDrag);
         const activeErrorMetrics = await readSubtitleDropzoneMetrics(page);
         assert.equal(activeErrorMetrics.primaryCopy, '여기에 놓아 영상을 선택하세요');
         assert.equal(activeErrorMetrics.borderColor, expectedTheme.processing);
         assert.equal(
-          await page.getByText('mp4, mov, webm 영상 파일만 사용할 수 있습니다.', { exact: true }).count(),
+          await page.getByText(PRESERVED_SUBTITLE_DROP_MESSAGE, { exact: true }).count(),
           1,
         );
 
@@ -2683,7 +2687,7 @@ async function verifySubtitleDragFeedback() {
         assert.equal(activeUnsupportedErrorMetrics.borderColor, expectedTheme.danger);
         assert.equal(activeUnsupportedErrorMetrics.iconColor, expectedTheme.danger);
         assert.equal(
-          await page.getByText('mp4, mov, webm 영상 파일만 사용할 수 있습니다.', { exact: true }).count(),
+          await page.getByText(PRESERVED_SUBTITLE_DROP_MESSAGE, { exact: true }).count(),
           1,
         );
         await dispatchSubtitleDragEvent(page, picker, 'dragleave', {
@@ -2694,7 +2698,7 @@ async function verifySubtitleDragFeedback() {
         assert.equal(restoredErrorMetrics.primaryCopy, '영상 선택 또는 드래그');
         assert.equal(restoredErrorMetrics.borderColor, expectedTheme.danger);
         assert.equal(
-          await page.getByText('mp4, mov, webm 영상 파일만 사용할 수 있습니다.', { exact: true }).count(),
+          await page.getByText(PRESERVED_SUBTITLE_DROP_MESSAGE, { exact: true }).count(),
           1,
         );
         assertNoRuntimeErrors();
@@ -2784,7 +2788,7 @@ async function verifyInvalidSubtitleDropPreservesSelection() {
       name: 'rejected-extension.txt',
     });
     await page
-      .getByText('mp4, mov, webm 영상 파일만 사용할 수 있습니다.', { exact: true })
+      .getByText(PRESERVED_SUBTITLE_DROP_MESSAGE, { exact: true })
       .waitFor();
     assert.equal(await page.getByText('preserved-video.mp4', { exact: true }).count(), 1);
 
@@ -2799,7 +2803,7 @@ async function verifyInvalidSubtitleDropPreservesSelection() {
       name: 'rejected-video.txt',
     });
     await page
-      .getByText('mp4, mov, webm 영상 파일만 사용할 수 있습니다.', { exact: true })
+      .getByText(PRESERVED_SUBTITLE_DROP_MESSAGE, { exact: true })
       .waitFor();
 
     assert.equal(await page.getByText('preserved-video.mp4', { exact: true }).count(), 1);
@@ -2863,7 +2867,7 @@ async function verifyInvalidSubtitleDropWithoutSelection() {
       ],
     });
     await page
-      .getByText('mp4, mov, webm 영상 파일만 사용할 수 있습니다.', { exact: true })
+      .getByText(PRESERVED_SUBTITLE_DROP_MESSAGE, { exact: true })
       .waitFor();
     assert.equal(await page.getByText('kept-video.mp4', { exact: true }).count(), 1);
     assert.equal(await page.getByText('second-valid.mp4', { exact: true }).count(), 0);
@@ -2874,7 +2878,7 @@ async function verifyInvalidSubtitleDropWithoutSelection() {
       name: 'empty-mime.mp4',
     });
     await page
-      .getByText('mp4, mov, webm 영상 파일만 사용할 수 있습니다.', { exact: true })
+      .getByText(PRESERVED_SUBTITLE_DROP_MESSAGE, { exact: true })
       .waitFor();
     assert.equal(await page.getByText('kept-video.mp4', { exact: true }).count(), 1);
 
@@ -2892,7 +2896,7 @@ async function verifyInvalidSubtitleDropWithoutSelection() {
       name: 'empty-mime.mp4',
     });
     await page
-      .getByText('mp4, mov, webm 영상 파일만 사용할 수 있습니다.', { exact: true })
+      .getByText(REJECTED_SUBTITLE_DROP_MESSAGE, { exact: true })
       .waitFor();
 
     // 선택이 없는 상태의 비지원 사전 표시도 최종 drop 뒤 빈 상태를 유지한다.
@@ -2905,7 +2909,7 @@ async function verifyInvalidSubtitleDropWithoutSelection() {
       name: 'rejected-without-selection.txt',
     });
     await page
-      .getByText('mp4, mov, webm 영상 파일만 사용할 수 있습니다.', { exact: true })
+      .getByText(REJECTED_SUBTITLE_DROP_MESSAGE, { exact: true })
       .waitFor();
     assert.equal(await page.locator('.selected-file-row').count(), 0);
     assert.equal(await page.getByText('rejected-without-selection.txt', { exact: true }).count(), 0);
@@ -2917,7 +2921,7 @@ async function verifyInvalidSubtitleDropWithoutSelection() {
     });
     await page.getByText('replacement-video.webm', { exact: true }).waitFor();
     assert.equal(
-      await page.getByText('mp4, mov, webm 영상 파일만 사용할 수 있습니다.', { exact: true }).count(),
+      await page.getByText(REJECTED_SUBTITLE_DROP_MESSAGE, { exact: true }).count(),
       0,
     );
     assert.equal(await submit.isDisabled(), false);
