@@ -6,7 +6,6 @@ import {
 import { Upload } from '@aws-sdk/lib-storage';
 import {
   ExtractionJobStatus,
-  ExtractionType,
   Prisma,
   PrismaClient,
   SubtitleJobStatus,
@@ -27,24 +26,19 @@ import { pipeline } from 'node:stream/promises';
 import { exec as youtubeExec, youtubeDl } from 'youtube-dl-exec';
 import {
   appendProcessOutputTail,
-  createAssetObjectKey,
   createContentDisposition,
-  createContentType,
   createDownloadYoutubeOptions,
-  createExpiresAt,
   createSubtitleContentType,
   createSubtitleResultObjectKey,
   createWhisperCliArgs,
   createWhisperModelEnvName,
   createWhisperSrtOutputPath,
   createWorkerHeartbeatUpsertArgs,
-  createYtDlpFormat,
   DEFAULT_SUBTITLE_AUDIO_MAX_BYTES,
   DEFAULT_WHISPER_LANGUAGE,
   detectMissingWhisperPaths,
   createSafeWorkerErrorDetail,
   getSubtitleWorkerFailureCode,
-  getWorkerFailureCode,
   isMissingObjectError,
   normalizeWhisperSrt,
   normalizeExtractedAssetTitle,
@@ -52,10 +46,13 @@ import {
   readRequiredEnv,
   readWhisperFileEnv,
   selectNextQueuedWorkerJob,
-  SubtitleWorkerFailureCode,
   SubtitleWorkerJobFailure,
-  WorkerFailureCode,
 } from './worker.logic';
+import {
+  processDownloadJob,
+  type ClaimedDownloadJob,
+  type DownloadJobProcessorDependencies,
+} from './download-job-processor';
 import { downloadExtractionJob } from './download-job';
 import { runVideoPreflight } from './video-preflight';
 
@@ -99,20 +96,6 @@ const R2_UPLOAD_QUEUE_SIZE = 2;
 /** Prisma client. */
 const prisma = new PrismaClient();
 
-/** claim된 다운로드 job 처리에 필요한 표면. */
-type ClaimedDownloadJob = {
-  /** job ID. */
-  id: string;
-  /** 요청 URL. */
-  url: string;
-  /** YouTube video ID. */
-  videoId: string;
-  /** 추출 type. */
-  type: ExtractionType;
-  /** 선택 품질. */
-  quality: string;
-};
-
 /** claim된 자막 job 처리에 필요한 표면. */
 type ClaimedSubtitleJob = {
   /** job ID. */
@@ -154,6 +137,103 @@ const r2Client = new S3Client({
   region: 'auto',
 });
 
+/** 요청 한 건 처리에 주입할 실제 worker 의존성 경계. */
+const downloadJobProcessorDependencies: DownloadJobProcessorDependencies = {
+  assetStore: {
+    deleteAsset: async (assetId) => {
+      await prisma.extractedAsset.delete({
+        where: { id: assetId },
+      });
+    },
+    findReusableAsset: async ({ now, quality, type, videoId }) =>
+      prisma.extractedAsset.findFirst({
+        where: {
+          expiresAt: { gt: now },
+          quality,
+          type,
+          videoId,
+        },
+      }),
+    markCompleted: async (jobId, assetId) => {
+      await markCompleted(jobId, assetId);
+    },
+    markFailed: async (jobId, errorCode, error) => {
+      await markFailed(jobId, errorCode, error);
+    },
+    upsertAsset: async ({
+      expiresAt,
+      objectKey,
+      quality,
+      title,
+      type,
+      videoId,
+    }) =>
+      prisma.extractedAsset.upsert({
+        create: {
+          expiresAt,
+          objectKey,
+          quality,
+          title,
+          type,
+          videoId,
+        },
+        update: {
+          expiresAt,
+          objectKey,
+          title,
+        },
+        where: {
+          videoId_type_quality: {
+            quality,
+            type,
+            videoId,
+          },
+        },
+      }),
+  },
+  cleanupOutputDirectory: async (outputPath) => {
+    await rm(resolve(outputPath, '..'), { force: true, recursive: true });
+  },
+  download: async ({ format, job }) =>
+    downloadExtractionJob({
+      createYoutubeOptions: (path) => {
+        /** ffmpeg 경로 환경 변수. */
+        const ffmpegLocation = process.env.FFMPEG_LOCATION;
+
+        return createDownloadYoutubeOptions({
+          ffmpegLocation:
+            ffmpegLocation && existsSync(ffmpegLocation)
+              ? ffmpegLocation
+              : undefined,
+          format,
+          outputPath: path,
+          type: job.type,
+        });
+      },
+      execute: youtubeExec as unknown as YoutubeDlExecute,
+      onFallback: (event) => logYoutubeFallback(job, 'download', event),
+      onRetry: ({ attempt, client, error }) => {
+        /** source URL을 제외한 재시도 진단 문자열. */
+        const diagnostic = createSafeDiagnosticLog(error);
+
+        console.warn(
+          `Extraction retry: job=${job.id} type=${job.type} quality=${job.quality} client=${client} attempt=${attempt}${
+            diagnostic ? ` ${diagnostic}` : ` ${createSafeErrorLog(error)}`
+          }`,
+        );
+      },
+      sourceUrl: job.url,
+      type: job.type,
+    }),
+  hasObject: objectExists,
+  readTitle: readExtractedAssetTitle,
+  retentionDays: ASSET_RETENTION_DAYS,
+  runVideoPreflight,
+  upload: async ({ contentType, objectKey, outputPath }) => {
+    await uploadObject(objectKey, outputPath, contentType);
+  },
+};
+
 /** worker main loop. */
 async function main() {
   process.on('SIGINT', shutdown);
@@ -186,7 +266,10 @@ async function main() {
     const claimedJob = await claimNextQueuedJob();
 
     if (claimedJob?.kind === 'download') {
-      await processJob(claimedJob.job);
+      await processDownloadJob(
+        claimedJob.job,
+        downloadJobProcessorDependencies,
+      );
       continue;
     }
 
@@ -351,115 +434,6 @@ async function claimNextQueuedJob(): Promise<ClaimedWorkerJob | null> {
   }
 
   return null;
-}
-
-/** claim된 job을 추출하고 R2에 업로드한다. */
-async function processJob(job: ClaimedDownloadJob) {
-  try {
-    /** worker 처리 직전 재사용 가능한 asset 후보. */
-    const reusableAsset = await prisma.extractedAsset.findFirst({
-      where: {
-        expiresAt: { gt: new Date() },
-        quality: job.quality,
-        type: job.type,
-        videoId: job.videoId,
-      },
-    });
-
-    if (reusableAsset) {
-      if (await objectExists(reusableAsset.objectKey)) {
-        await markCompleted(job.id, reusableAsset.id);
-        return;
-      }
-
-      await prisma.extractedAsset.delete({
-        where: { id: reusableAsset.id },
-      });
-    }
-
-    /** yt-dlp format selector. */
-    const format = createYtDlpFormat(job.type, job.quality);
-
-    if (job.type === ExtractionType.video) {
-      await runVideoPreflight({
-        format,
-        sourceUrl: job.url,
-      });
-    }
-
-    /** R2 object key. */
-    const objectKey = createAssetObjectKey(job.videoId, job.type, job.quality);
-    /** 원본 영상 제목. */
-    const title = await readExtractedAssetTitle(job.url);
-    /** 추출 결과 임시 파일 경로. */
-    const outputPath = await downloadExtractionJob({
-      createYoutubeOptions: (path) => {
-        /** ffmpeg 경로 환경 변수. */
-        const ffmpegLocation = process.env.FFMPEG_LOCATION;
-
-        return createDownloadYoutubeOptions({
-          ffmpegLocation:
-            ffmpegLocation && existsSync(ffmpegLocation)
-              ? ffmpegLocation
-              : undefined,
-          format,
-          outputPath: path,
-          type: job.type,
-        });
-      },
-      execute: youtubeExec as unknown as YoutubeDlExecute,
-      onFallback: (event) => logYoutubeFallback(job, 'download', event),
-      onRetry: ({ attempt, client, error }) => {
-        /** source URL을 제외한 재시도 진단 문자열. */
-        const diagnostic = createSafeDiagnosticLog(error);
-
-        console.warn(
-          `Extraction retry: job=${job.id} type=${job.type} quality=${job.quality} client=${client} attempt=${attempt}${
-            diagnostic ? ` ${diagnostic}` : ` ${createSafeErrorLog(error)}`
-          }`,
-        );
-      },
-      sourceUrl: job.url,
-      type: job.type,
-    });
-
-    try {
-      await uploadObject(objectKey, outputPath, createContentType(job.type));
-    } catch (error) {
-      await markFailed(job.id, 'UPLOAD_FAILED', error);
-      return;
-    } finally {
-      await rm(resolve(outputPath, '..'), { force: true, recursive: true });
-    }
-
-    /** 업로드 완료 후 저장할 asset row. */
-    const asset = await prisma.extractedAsset.upsert({
-      create: {
-        expiresAt: createExpiresAt(ASSET_RETENTION_DAYS),
-        objectKey,
-        quality: job.quality,
-        title,
-        type: job.type,
-        videoId: job.videoId,
-      },
-      update: {
-        expiresAt: createExpiresAt(ASSET_RETENTION_DAYS),
-        objectKey,
-        title,
-      },
-      where: {
-        videoId_type_quality: {
-          quality: job.quality,
-          type: job.type,
-          videoId: job.videoId,
-        },
-      },
-    });
-
-    await markCompleted(job.id, asset.id);
-  } catch (error) {
-    await markFailed(job.id, getWorkerFailureCode(error), error);
-  }
 }
 
 /** URL 없이 queued job의 client fallback 시작과 성공을 worker log에 남긴다. */
