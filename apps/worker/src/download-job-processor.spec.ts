@@ -41,7 +41,9 @@ type ProcessorTestState = {
 
 /** 재사용 asset 대역이 반환할 수 있는 값. */
 type ReusableAsset = Awaited<
-  ReturnType<DownloadJobProcessorDependencies['assetStore']['findReusableAsset']>
+  ReturnType<
+    DownloadJobProcessorDependencies['assetStore']['findReusableAsset']
+  >
 >;
 
 /** 실제 처리 경계를 제어하는 테스트 의존성을 만든다. */
@@ -155,7 +157,11 @@ test('processes one request through the real boundary while download is paused',
   assert.deepEqual(state.events, [
     'find-reusable',
     'read-title',
+    'set-request-title',
     'download:start',
+  ]);
+  assert.deepEqual(state.requestTitles, [
+    { jobId: 'job-1', title: 'A representative title' },
   ]);
   assert.deepEqual(state.upserted, []);
   assert.deepEqual(state.completed, []);
@@ -167,6 +173,7 @@ test('processes one request through the real boundary while download is paused',
   assert.deepEqual(state.events, [
     'find-reusable',
     'read-title',
+    'set-request-title',
     'download:start',
     'download:done',
     'upload',
@@ -201,6 +208,7 @@ test('marks an extraction failure without uploading or creating an asset', async
   assert.deepEqual(state.events, [
     'find-reusable',
     'read-title',
+    'set-request-title',
     'download',
     'mark-failed',
   ]);
@@ -231,6 +239,7 @@ test('runs video preflight before title lookup and extraction', async () => {
     'find-reusable',
     'preflight',
     'read-title',
+    'set-request-title',
     'download',
     'upload',
     'cleanup-output',
@@ -259,6 +268,7 @@ test('marks an upload failure after cleaning the downloaded artifact', async () 
   assert.deepEqual(state.events, [
     'find-reusable',
     'read-title',
+    'set-request-title',
     'download',
     'upload',
     'mark-failed',
@@ -295,6 +305,7 @@ test('deletes a reusable row with a missing object before starting a fresh extra
     'has-object',
     'delete:asset-missing-object',
     'read-title',
+    'set-request-title',
     'download',
     'upload',
     'cleanup-output',
@@ -327,6 +338,111 @@ test('reuses an existing object without reading the title or starting extraction
   ]);
   assert.deepEqual(state.failed, []);
   assert.deepEqual(state.upserted, []);
+});
+
+test('continues extraction when title lookup does not return a title', async () => {
+  /** 제목 조회 실패를 나타내는 테스트 의존성·상태. */
+  const { dependencies, state } = createDependencies({
+    readTitle: async () => {
+      state.events.push('read-title');
+      return null;
+    },
+  });
+
+  await processDownloadJob(REPRESENTATIVE_JOB, dependencies);
+
+  assert.deepEqual(state.events, [
+    'find-reusable',
+    'read-title',
+    'download',
+    'upload',
+    'cleanup-output',
+    'upsert-asset',
+    'mark-completed',
+  ]);
+  assert.deepEqual(state.requestTitles, []);
+  assert.deepEqual(state.upserted, [
+    {
+      objectKey: 'extracts/dQw4w9WgXcQ/audio-320.mp3',
+      title: null,
+    },
+  ]);
+});
+
+test('treats a whitespace-only title as unavailable and continues extraction', async () => {
+  /** 공백 제목을 반환하는 테스트 의존성·상태. */
+  const { dependencies, state } = createDependencies({
+    readTitle: async () => {
+      state.events.push('read-title');
+      return '   ';
+    },
+  });
+
+  await processDownloadJob(REPRESENTATIVE_JOB, dependencies);
+
+  assert.deepEqual(state.requestTitles, []);
+  assert.deepEqual(state.upserted, [
+    {
+      objectKey: 'extracts/dQw4w9WgXcQ/audio-320.mp3',
+      title: null,
+    },
+  ]);
+});
+
+test('treats request-title persistence failure as a processing failure', async () => {
+  /** 요청 제목 저장 경계에서 발생시킬 오류. */
+  const titlePersistenceError = new Error('controlled request title failure');
+  /** 제목 저장 실패 경로에 사용할 처리 의존성·상태. */
+  const { dependencies, state } = createDependencies();
+  dependencies.assetStore.setRequestTitleIfMissing = async () => {
+    state.events.push('set-request-title');
+    throw titlePersistenceError;
+  };
+
+  await processDownloadJob(REPRESENTATIVE_JOB, dependencies);
+
+  assert.deepEqual(state.events, [
+    'find-reusable',
+    'read-title',
+    'set-request-title',
+    'mark-failed',
+  ]);
+  assert.deepEqual(state.failed, [
+    {
+      error: titlePersistenceError,
+      errorCode: 'EXTRACTION_FAILED',
+      jobId: 'job-1',
+    },
+  ]);
+  assert.deepEqual(state.upserted, []);
+});
+
+test('does not request-save a later title when the job already has one', async () => {
+  /** 이미 제목이 보존된 요청. */
+  const titledJob: ClaimedDownloadJob = {
+    ...REPRESENTATIVE_JOB,
+    title: 'First request title',
+  };
+  /** 재실행에서 다른 제목을 반환하는 처리 의존성·상태. */
+  const { dependencies, state } = createDependencies({
+    readTitle: async () => {
+      state.events.push('read-title');
+      return 'Later title';
+    },
+  });
+
+  await processDownloadJob(titledJob, dependencies);
+
+  assert.deepEqual(state.events, [
+    'find-reusable',
+    'read-title',
+    'download',
+    'upload',
+    'cleanup-output',
+    'upsert-asset',
+    'mark-completed',
+  ]);
+  assert.deepEqual(state.requestTitles, []);
 });
 
 test('does not replace an existing request title when reusing a changed asset', async () => {

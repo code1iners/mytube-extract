@@ -54,6 +54,7 @@ import {
   type DownloadJobProcessorDependencies,
 } from './download-job-processor';
 import { downloadExtractionJob } from './download-job';
+import { saveRequestTitleIfMissing } from './request-title-store';
 import { runVideoPreflight } from './video-preflight';
 
 /** worker idle polling 간격. */
@@ -166,23 +167,7 @@ const downloadJobProcessorDependencies: DownloadJobProcessorDependencies = {
       await markFailed(jobId, errorCode, error);
     },
     setRequestTitleIfMissing: async (jobId, title) => {
-      /** 조건부 제목 저장 전에 읽을 현재 요청 제목. */
-      const job = await prisma.extractionJob.findUnique({
-        select: { title: true },
-        where: { id: jobId },
-      });
-
-      if (!job || normalizeExtractedAssetTitle(job.title)) {
-        return;
-      }
-
-      await prisma.extractionJob.updateMany({
-        data: { title },
-        where: {
-          id: jobId,
-          title: job.title,
-        },
-      });
+      await saveRequestTitleIfMissing(prisma, jobId, title);
     },
     upsertAsset: async ({
       expiresAt,

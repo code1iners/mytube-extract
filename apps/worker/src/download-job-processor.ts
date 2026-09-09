@@ -126,9 +126,7 @@ export type DownloadJobProcessorDependencies = {
   /** asset 보관 기간. */
   retentionDays: number;
   /** video 추출 전에 metadata를 검증한다. */
-  runVideoPreflight: (
-    input: DownloadJobPreflightInput,
-  ) => Promise<void>;
+  runVideoPreflight: (input: DownloadJobPreflightInput) => Promise<void>;
   /** 로컬 artifact를 R2에 업로드한다. */
   upload: (input: UploadDownloadArtifactInput) => Promise<void>;
 };
@@ -150,18 +148,8 @@ export async function processDownloadJob(
     if (reusableAsset) {
       if (await dependencies.hasObject(reusableAsset.objectKey)) {
         /** 재사용 asset에서 복사할 수 있는 유효한 제목. */
-        const reusableTitle = normalizeExtractedAssetTitle(
-          reusableAsset.title,
-        );
-        /** 현재 요청에 이미 확보된 제목이 있는지 여부. */
-        const requestTitle = normalizeExtractedAssetTitle(job.title);
-
-        if (reusableTitle && !requestTitle) {
-          await dependencies.assetStore.setRequestTitleIfMissing(
-            job.id,
-            reusableTitle,
-          );
-        }
+        const reusableTitle = normalizeExtractedAssetTitle(reusableAsset.title);
+        await preserveRequestTitleIfMissing(job, reusableTitle, dependencies);
 
         await dependencies.assetStore.markCompleted(job.id, reusableAsset.id);
         return;
@@ -182,8 +170,13 @@ export async function processDownloadJob(
 
     /** R2 object key. */
     const objectKey = createAssetObjectKey(job.videoId, job.type, job.quality);
-    /** 원본 영상 제목. */
-    const title = await dependencies.readTitle(job.url);
+    /** 제목 조회 결과에서 보존 가능한 원본 영상 제목. */
+    const title = normalizeExtractedAssetTitle(
+      await dependencies.readTitle(job.url),
+    );
+
+    await preserveRequestTitleIfMissing(job, title, dependencies);
+
     /** 추출 결과 임시 파일 경로. */
     const outputPath = await dependencies.download({
       format,
@@ -220,5 +213,16 @@ export async function processDownloadJob(
       getWorkerFailureCode(error),
       error,
     );
+  }
+}
+
+/** 유효한 제목을 확보했을 때 요청의 첫 제목으로 보존한다. */
+async function preserveRequestTitleIfMissing(
+  job: ClaimedDownloadJob,
+  title: string | null,
+  dependencies: DownloadJobProcessorDependencies,
+) {
+  if (title && !normalizeExtractedAssetTitle(job.title)) {
+    await dependencies.assetStore.setRequestTitleIfMissing(job.id, title);
   }
 }

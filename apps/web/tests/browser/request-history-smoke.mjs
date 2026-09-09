@@ -72,6 +72,7 @@ try {
   await run('failed and expired jobs expose matching retry routes', verifyRetryRoutes);
   await run('empty history explains both request paths and retention', verifyEmptyHistoryProductModel);
   await run('history keeps video titles and identifies untitled requests', verifyHistoryTitles);
+  await run('history replaces the source link with an acquired title before failure', verifyHistoryTitleArrivalDuringProcessing);
   await run('populated history stays unclipped with long job details', verifyPopulatedHistoryResponsiveLayout);
   await run('responsive primary navigation stays aligned and unclipped', verifyResponsivePrimaryNavigation);
 
@@ -4046,6 +4047,65 @@ async function verifyHistoryTitles() {
       })),
       { clientWidth: 390, scrollWidth: 390 },
     );
+    assertNoRuntimeErrors();
+  } finally {
+    await context.close();
+  }
+}
+
+/** 처리 중 원본 링크가 제목으로 바뀌고 실패 뒤에도 제목이 남는지 검증한다. */
+async function verifyHistoryTitleArrivalDuringProcessing() {
+  /** 처리 중 제목 도착을 확인할 독립 browser context. */
+  const context = await createContext({
+    viewport: { height: 844, width: 390 },
+  });
+  /** 제목 도착·실패 전환을 확인할 page와 runtime 오류 수집기. */
+  const { page, assertNoRuntimeErrors } = await createPage(context);
+  /** 처리 중 먼저 표시할 원본 영상 링크. */
+  const sourceUrl = `https://www.youtube.com/watch?v=${VIDEO_ID}`;
+  /** 다운로드 실패 뒤에도 유지할 확보 제목. */
+  const acquiredTitle = 'Title acquired while the file was processing';
+  /** 영상 상태 API 호출 횟수. */
+  let statusCalls = 0;
+
+  try {
+    await seedReceipts(page, [
+      ['video', VIDEO_ID, '2026-08-11T00:04:00.000Z'],
+    ]);
+    await routeApi(page, async ({ route, url }) => {
+      if (url.pathname === `/downloads/${VIDEO_ID}`) {
+        statusCalls += 1;
+        return fulfillJson(
+          route,
+          statusCalls === 1
+            ? videoJob(VIDEO_ID, 'processing', {
+                sourceUrl,
+                title: null,
+              })
+            : videoJob(VIDEO_ID, 'failed', {
+                sourceUrl,
+                title: acquiredTitle,
+              }),
+        );
+      }
+
+      return fulfillJson(route, {}, 404);
+    });
+
+    await page.goto(`${staticServer.origin}/history`);
+    await page.getByRole('heading', { name: sourceUrl, exact: true }).waitFor();
+    assert.equal(
+      await page.locator('.history-status').getByText('처리 중', { exact: true }).count(),
+      1,
+    );
+
+    await page.getByRole('heading', { name: acquiredTitle, exact: true }).waitFor();
+    assert.equal(
+      await page.locator('.history-status').getByText('실패', { exact: true }).count(),
+      1,
+    );
+    assert.equal(await page.getByRole('link', { name: '다시 요청' }).count(), 1);
+    assert.ok(statusCalls >= 2);
     assertNoRuntimeErrors();
   } finally {
     await context.close();
