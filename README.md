@@ -42,7 +42,7 @@ cp apps/chrome-extension/.env.example apps/chrome-extension/.env
 - `R2_PUBLIC_BASE_URL`: S3 API read fallback에 사용할 public object base URL
 - `ASSET_RETENTION_DAYS`: 추출 asset 보관 기간. 기본값은 `7`
 - `SUBTITLE_UPLOAD_MAX_BYTES`: 자막 원본 영상 업로드 최대 byte. 기본값은 `524288000`
-- `SUBTITLE_AUDIO_MAX_BYTES`: local Whisper 처리 보호용 추출 audio 최대 byte. 기본값은 `536870912`
+- `SUBTITLE_AUDIO_MAX_BYTES`: local Whisper 처리 보호용 추출 audio 최대 byte. 기본값은 `671088640`
 - `WHISPER_CLI_PATH`: worker가 실행할 `whisper.cpp` CLI binary 경로
 - `WHISPER_MODEL_BASE_EN_PATH`: 빠른 영어 SRT 생성용 `base.en` model 파일 경로
 - `WHISPER_MODEL_SMALL_EN_PATH`: 더 느리지만 정확도를 우선하는 `small.en` model 파일 경로
