@@ -56,6 +56,18 @@ export function createCanonicalYoutubeUrl(videoId: string) {
   return `https://www.youtube.com/watch?v=${videoId}`;
 }
 
+/** 요청 내역에 보존할 원본 영상 제목을 정규화한다. */
+export function normalizeRequestVideoTitle(value: unknown) {
+  if (typeof value !== 'string') {
+    return null;
+  }
+
+  /** 앞뒤 공백을 제거한 요청 영상 제목. */
+  const normalizedTitle = value.trim();
+
+  return normalizedTitle || null;
+}
+
 /** 요청 type을 DB enum 값으로 정규화한다. */
 export function parseDownloadType(type: string | undefined) {
   if (type === ExtractionType.audio || type === ExtractionType.video) {

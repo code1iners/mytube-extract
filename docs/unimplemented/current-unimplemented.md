@@ -57,7 +57,7 @@
 
 - 상태: 미구현
 - 대상 표면: `route /video`, `POST /downloads`, `GET /downloads/:jobId/file`
-- 현재 상태: Web 앱은 `/downloads` job 생성 시 `type`, `url`, `quality`만 보내고, 새 추출 asset의 완료 파일명은 API가 `ExtractedAsset.title` 기반으로 만든다. 제목이 없는 기존 asset은 R2 object key 마지막 segment를 fallback으로 사용한다. 호환용 `/audio`, `/video` 직접 다운로드 API와 Chrome 확장 프로그램은 `filename` 옵션을 지원한다.
+- 현재 상태: Web 앱은 `/downloads` job 생성 시 `type`, `url`, `quality`와 선택적인 요청 영상 제목을 보내며, 요청 제목은 내역 식별용으로만 보존한다. 새 추출 asset의 완료 파일명은 API가 `ExtractedAsset.title` 기반으로 만들고, 제목이 없는 기존 asset은 R2 object key 마지막 segment를 fallback으로 사용한다. 호환용 `/audio`, `/video` 직접 다운로드 API와 Chrome 확장 프로그램은 `filename` 옵션을 지원한다.
 - 필요성: 사용자가 완료 파일명을 직접 지정해야 하는 요구가 생길 수 있다.
 - 구현 조건: `/downloads` job 생성 DTO에 있는 `filename` 필드를 실제 저장/파일명 생성 정책까지 연결할지 먼저 결정한다. 파일명 검증 규칙은 기존 직접 다운로드 API의 경로 구분자/제어 문자 거부 정책과 맞춘다.
 - 관련 근거:

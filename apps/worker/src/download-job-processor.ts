@@ -5,6 +5,7 @@ import {
   createExpiresAt,
   createYtDlpFormat,
   getWorkerFailureCode,
+  normalizeExtractedAssetTitle,
   type WorkerFailureCode,
 } from './worker.logic';
 
@@ -16,6 +17,8 @@ export type ClaimedDownloadJob = {
   url: string;
   /** YouTube video ID. */
   videoId: string;
+  /** 요청에 이미 보존된 원본 영상 제목. */
+  title: string | null;
   /** 추출 type. */
   type: ExtractionType;
   /** 선택 품질. */
@@ -28,6 +31,8 @@ export type ReusableDownloadAsset = {
   id: string;
   /** R2 object key. */
   objectKey: string;
+  /** 재사용 asset에 저장된 원본 영상 제목. */
+  title: string | null;
 };
 
 /** 재사용 asset을 조회할 때 필요한 식별값. */
@@ -70,6 +75,8 @@ export type DownloadJobStore = {
   upsertAsset: (input: UpsertDownloadAssetInput) => Promise<{ id: string }>;
   /** 요청을 완료 상태로 전환한다. */
   markCompleted: (jobId: string, assetId: string) => Promise<void>;
+  /** 요청 제목이 비어 있을 때만 처음 확보한 제목을 저장한다. */
+  setRequestTitleIfMissing: (jobId: string, title: string) => Promise<void>;
   /** 요청을 실패 상태로 전환한다. */
   markFailed: (
     jobId: string,
@@ -142,6 +149,20 @@ export async function processDownloadJob(
 
     if (reusableAsset) {
       if (await dependencies.hasObject(reusableAsset.objectKey)) {
+        /** 재사용 asset에서 복사할 수 있는 유효한 제목. */
+        const reusableTitle = normalizeExtractedAssetTitle(
+          reusableAsset.title,
+        );
+        /** 현재 요청에 이미 확보된 제목이 있는지 여부. */
+        const requestTitle = normalizeExtractedAssetTitle(job.title);
+
+        if (reusableTitle && !requestTitle) {
+          await dependencies.assetStore.setRequestTitleIfMissing(
+            job.id,
+            reusableTitle,
+          );
+        }
+
         await dependencies.assetStore.markCompleted(job.id, reusableAsset.id);
         return;
       }

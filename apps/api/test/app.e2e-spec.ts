@@ -176,6 +176,7 @@ describe('MyTubeExtract API (e2e)', () => {
       .post('/downloads')
       .send({
         quality: '192',
+        title: '  E2E request title  ',
         type: 'audio',
         url: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ',
       })
@@ -184,7 +185,9 @@ describe('MyTubeExtract API (e2e)', () => {
     expect(response.body).toMatchObject({
       jobId: expect.any(String),
       progress: 0,
+      sourceUrl: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ',
       status: 'queued',
+      title: 'E2E request title',
       type: 'audio',
     });
     expect(response.body.filePath).toBeUndefined();
@@ -219,6 +222,10 @@ describe('MyTubeExtract API (e2e)', () => {
         expect(response.body.status).toBe('queued');
         expect(response.body.displayStatus).toBe('queued');
         expect(response.body.progress).toBe(0);
+        expect(response.body.sourceUrl).toBe(
+          'https://www.youtube.com/watch?v=dQw4w9WgXcQ',
+        );
+        expect(response.body.title).toBeNull();
       });
   });
 });

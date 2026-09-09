@@ -11,6 +11,7 @@ import {
 const REPRESENTATIVE_JOB: ClaimedDownloadJob = {
   id: 'job-1',
   quality: '320',
+  title: null,
   type: ExtractionType.audio,
   url: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ',
   videoId: 'dQw4w9WgXcQ',
@@ -30,6 +31,8 @@ type ProcessorTestState = {
   events: string[];
   /** 완료 전환 기록. */
   completed: Array<{ assetId: string; jobId: string }>;
+  /** 요청 제목 조건부 저장 기록. */
+  requestTitles: Array<{ jobId: string; title: string }>;
   /** 실패 전환 기록. */
   failed: Array<{ error: unknown; errorCode: string; jobId: string }>;
   /** asset upsert 입력 기록. */
@@ -50,6 +53,7 @@ function createDependencies(
     completed: [],
     events: [],
     failed: [],
+    requestTitles: [],
     upserted: [],
   };
   /** 재사용 결과물 후보. */
@@ -71,6 +75,10 @@ function createDependencies(
     markFailed: async (jobId, errorCode, error) => {
       state.events.push('mark-failed');
       state.failed.push({ error, errorCode, jobId });
+    },
+    setRequestTitleIfMissing: async (jobId, title) => {
+      state.events.push('set-request-title');
+      state.requestTitles.push({ jobId, title });
     },
     upsertAsset: async ({ objectKey, title }) => {
       state.events.push('upsert-asset');
@@ -277,6 +285,7 @@ test('deletes a reusable row with a missing object before starting a fresh extra
   setReusableAsset({
     id: 'asset-missing-object',
     objectKey: 'extracts/dQw4w9WgXcQ/audio-320.mp3',
+    title: null,
   });
 
   await processDownloadJob(REPRESENTATIVE_JOB, dependencies);
@@ -299,6 +308,7 @@ test('reuses an existing object without reading the title or starting extraction
   setReusableAsset({
     id: 'asset-reused',
     objectKey: 'extracts/dQw4w9WgXcQ/audio-320.mp3',
+    title: 'Reusable title',
   });
 
   await processDownloadJob(REPRESENTATIVE_JOB, dependencies);
@@ -306,11 +316,67 @@ test('reuses an existing object without reading the title or starting extraction
   assert.deepEqual(state.events, [
     'find-reusable',
     'has-object',
+    'set-request-title',
     'mark-completed',
   ]);
   assert.deepEqual(state.completed, [
     { assetId: 'asset-reused', jobId: 'job-1' },
   ]);
+  assert.deepEqual(state.requestTitles, [
+    { jobId: 'job-1', title: 'Reusable title' },
+  ]);
   assert.deepEqual(state.failed, []);
   assert.deepEqual(state.upserted, []);
+});
+
+test('does not replace an existing request title when reusing a changed asset', async () => {
+  /** 재사용 경로에 주입할 처리 의존성·상태. */
+  const { dependencies, setReusableAsset, state } = createDependencies();
+  /** 이미 보존된 요청 제목을 가진 job. */
+  const titledJob: ClaimedDownloadJob = {
+    ...REPRESENTATIVE_JOB,
+    title: 'First request title',
+  };
+  /** 이후 변경된 결과물 제목을 가진 재사용 asset. */
+  setReusableAsset({
+    id: 'asset-reused',
+    objectKey: 'extracts/dQw4w9WgXcQ/audio-320.mp3',
+    title: 'Later asset title',
+  });
+
+  await processDownloadJob(titledJob, dependencies);
+
+  assert.deepEqual(state.events, [
+    'find-reusable',
+    'has-object',
+    'mark-completed',
+  ]);
+  assert.deepEqual(state.requestTitles, []);
+});
+
+test('fills a whitespace request title when reusing a titled asset', async () => {
+  /** 공백만 있는 요청 제목을 가진 job. */
+  const whitespaceJob: ClaimedDownloadJob = {
+    ...REPRESENTATIVE_JOB,
+    title: '   ',
+  };
+  /** 재사용 경로에 주입할 처리 의존성·상태. */
+  const { dependencies, setReusableAsset, state } = createDependencies();
+  setReusableAsset({
+    id: 'asset-reused',
+    objectKey: 'extracts/dQw4w9WgXcQ/audio-320.mp3',
+    title: 'Reusable title',
+  });
+
+  await processDownloadJob(whitespaceJob, dependencies);
+
+  assert.deepEqual(state.events, [
+    'find-reusable',
+    'has-object',
+    'set-request-title',
+    'mark-completed',
+  ]);
+  assert.deepEqual(state.requestTitles, [
+    { jobId: 'job-1', title: 'Reusable title' },
+  ]);
 });

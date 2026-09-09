@@ -17,6 +17,20 @@ Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
 
 /** 테스트에서 사용할 영상 job. */
 type TestVideoJob = RequestLifecycleJob & {
+  /** API가 완료 파일을 내려줄 URL. */
+  downloadUrl: string | null;
+  /** API가 계산한 진행률. */
+  progress: number | null;
+  /** API가 보장하는 결과물 보관 기간. */
+  retentionDays: number;
+  /** 응답에 보존할 원본 영상 링크. */
+  sourceUrl: string;
+  /** 응답에 보존할 요청 영상 제목. */
+  title: string | null;
+  /** 실제 다운로드 job 상태. */
+  status: 'queued' | 'processing' | 'completed' | 'failed';
+  /** 응답에 담긴 다운로드 형식. */
+  type: 'audio' | 'video';
   /** 응답에 보존할 영상 품질. */
   quality: string;
 };
@@ -50,9 +64,17 @@ function createJob(overrides: Partial<TestVideoJob> = {}): TestVideoJob {
   return {
     createdAt: '2026-09-04T00:00:00.000Z',
     displayStatus: 'queued',
+    downloadUrl: null,
+    errorCode: null,
     jobId: '4f8f82b3-cf37-4e31-9d56-d27eb526a922',
     message: '요청이 접수되어 대기 중입니다.',
+    progress: 0,
     quality: '720',
+    retentionDays: 7,
+    sourceUrl: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ',
+    status: 'queued',
+    title: null,
+    type: 'video',
     ...overrides,
   };
 }

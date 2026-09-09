@@ -63,6 +63,10 @@ export type DownloadResponse = {
   quality: DownloadQuality;
   /** 요청 시작 시각. */
   createdAt: string;
+  /** 서버가 저장한 YouTube 원본 영상 링크. */
+  sourceUrl: string;
+  /** 요청에 처음 보존한 원본 영상 제목. */
+  title: string | null;
   /** 보관 기간 일수. */
   retentionDays: number;
   /** 완료된 파일 다운로드 URL. */
@@ -72,6 +76,49 @@ export type DownloadResponse = {
   /** 사용자 표시 메시지. */
   message: string;
 };
+
+/** 다운로드 상태 응답의 필수 계약을 검증한다. */
+export const downloadResponseSchema = z.object({
+  /** 생성 시각. */
+  createdAt: z.string(),
+  /** asset 만료까지 반영한 표시 상태. */
+  displayStatus: z.enum(['queued', 'processing', 'completed', 'failed', 'expired']),
+  /** 완료된 파일 다운로드 URL. */
+  downloadUrl: z.string().nullable(),
+  /** 실패 코드. */
+  errorCode: z
+    .enum([
+      'INVALID_URL',
+      'EXTRACTION_FAILED',
+      'VIDEO_TOO_LARGE',
+      'YOUTUBE_AUTH_REQUIRED',
+      'YOUTUBE_FORMAT_UNAVAILABLE',
+      'UPLOAD_FAILED',
+      'UNKNOWN',
+    ])
+    .nullable(),
+  /** 다운로드 job ID. */
+  jobId: z.string(),
+  /** 사용자 표시 메시지. */
+  message: z.string(),
+  /** 상태 기반 진행률. */
+  progress: z.number().nullable(),
+  /** 선택 품질. */
+  quality: z.enum(['128', '192', '320', '360', '720', '1080']),
+  /** 보관 기간 일수. */
+  retentionDays: z.number(),
+  /** 서버가 저장한 YouTube 원본 영상 링크. */
+  sourceUrl: z.string().url(),
+  /** DB에 저장된 실제 job 상태. */
+  status: z.enum(['queued', 'processing', 'completed', 'failed']),
+  /** 요청에 처음 보존한 원본 영상 제목. */
+  title: z.string().nullable(),
+  /** 추출 형식. */
+  type: z.enum(['audio', 'video']),
+});
+
+/** 검증된 다운로드 상태 응답 타입. */
+export type ParsedDownloadResponse = z.infer<typeof downloadResponseSchema>;
 
 /** YouTube video ID 형식. */
 const YOUTUBE_VIDEO_ID_PATTERN = /^[a-zA-Z0-9_-]{11}$/;
@@ -88,6 +135,8 @@ export const downloadDraftSchema = z.object({
   mode: z.enum(['audio', 'video']),
   /** 선택 품질 값. */
   quality: z.enum(['128', '192', '320', '360', '720', '1080']),
+  /** 요청에 선택적으로 보존할 원본 영상 제목. */
+  title: z.string().nullable().optional(),
 });
 
 /** 다운로드 요청 입력값. */
@@ -117,6 +166,18 @@ export const VIDEO_QUALITY_OPTIONS = [
 /** 다운로드 형식별 기본 품질을 반환한다. */
 export function getDefaultDownloadQuality(mode: DownloadMode): DownloadQuality {
   return mode === 'audio' ? '320' : '1080';
+}
+
+/** 요청에 보존할 원본 영상 제목을 정규화한다. */
+export function normalizeDownloadRequestTitle(value: unknown) {
+  if (typeof value !== 'string') {
+    return null;
+  }
+
+  /** 앞뒤 공백을 제거한 요청 영상 제목. */
+  const normalizedTitle = value.trim();
+
+  return normalizedTitle || null;
 }
 
 /** 다운로드 입력값을 검증한다. */

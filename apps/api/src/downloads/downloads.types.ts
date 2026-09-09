@@ -32,6 +32,10 @@ export type DownloadResponse = {
   quality: DownloadQuality;
   /** 요청 생성 시각. */
   createdAt: string;
+  /** 저장된 YouTube video ID로 만든 원본 영상 링크. */
+  sourceUrl: string;
+  /** 요청에 처음 보존한 원본 영상 제목. */
+  title: string | null;
   /** 화면에 표시할 보관 기간. */
   retentionDays: number;
   /** 완료된 파일 다운로드 path. */
@@ -60,6 +64,8 @@ export type JobWithAsset = {
   url: string;
   /** YouTube video ID. */
   videoId: string;
+  /** 요청에 처음 보존한 원본 영상 제목. */
+  title: string | null;
   /** 추출 형식. */
   type: ExtractionType;
   /** 선택 품질. */

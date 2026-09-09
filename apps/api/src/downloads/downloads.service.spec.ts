@@ -171,6 +171,7 @@ describe('DownloadsService', () => {
       expiresAt: new Date('2099-07-08T05:32:00.000Z'),
       id: 'asset-1',
       objectKey: 'extracts/dQw4w9WgXcQ/audio-192.mp3',
+      title: 'Never Gonna Give You Up',
     });
     r2StorageServiceMock.objectExists.mockResolvedValueOnce(true);
     prismaMock.extractionJob.create.mockResolvedValueOnce({
@@ -185,6 +186,7 @@ describe('DownloadsService', () => {
       id: 'job-1',
       quality: '192',
       status: ExtractionJobStatus.completed,
+      title: 'Never Gonna Give You Up',
       type: ExtractionType.audio,
       url: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ',
       videoId: 'dQw4w9WgXcQ',
@@ -201,7 +203,105 @@ describe('DownloadsService', () => {
       downloadUrl: '/downloads/job-1/file',
       progress: 100,
       status: 'completed',
+      title: 'Never Gonna Give You Up',
+      sourceUrl: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ',
     });
+    expect(prismaMock.extractionJob.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          title: 'Never Gonna Give You Up',
+        }),
+      }),
+    );
+  });
+
+  it('keeps a request-provided title instead of replacing it with a reusable asset title', async () => {
+    prismaMock.extractedAsset.findFirst.mockResolvedValueOnce({
+      expiresAt: new Date('2099-07-08T05:32:00.000Z'),
+      id: 'asset-1',
+      objectKey: 'extracts/dQw4w9WgXcQ/video-720.mp4',
+      title: 'Later asset title',
+    });
+    r2StorageServiceMock.objectExists.mockResolvedValueOnce(true);
+    prismaMock.extractionJob.create.mockResolvedValueOnce({
+      asset: {
+        expiresAt: new Date('2099-07-08T05:32:00.000Z'),
+        id: 'asset-1',
+        objectKey: 'extracts/dQw4w9WgXcQ/video-720.mp4',
+        title: 'Later asset title',
+      },
+      createdAt: new Date('2026-06-24T05:32:00.000Z'),
+      errorCode: null,
+      id: 'job-1',
+      quality: '720',
+      status: ExtractionJobStatus.completed,
+      title: 'First request title',
+      type: ExtractionType.video,
+      url: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ',
+      videoId: 'dQw4w9WgXcQ',
+    });
+
+    await expect(
+      service.create({
+        title: '  First request title  ',
+        quality: '720',
+        type: 'video',
+        url: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ',
+      }),
+    ).resolves.toMatchObject({
+      sourceUrl: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ',
+      title: 'First request title',
+    });
+    expect(prismaMock.extractionJob.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          title: 'First request title',
+        }),
+      }),
+    );
+  });
+
+  it('treats a blank reusable asset title as unavailable', async () => {
+    prismaMock.extractedAsset.findFirst.mockResolvedValueOnce({
+      expiresAt: new Date('2099-07-08T05:32:00.000Z'),
+      id: 'asset-1',
+      objectKey: 'extracts/dQw4w9WgXcQ/audio-192.mp3',
+      title: '   ',
+    });
+    r2StorageServiceMock.objectExists.mockResolvedValueOnce(true);
+    prismaMock.extractionJob.create.mockResolvedValueOnce({
+      asset: {
+        expiresAt: new Date('2099-07-08T05:32:00.000Z'),
+        id: 'asset-1',
+        objectKey: 'extracts/dQw4w9WgXcQ/audio-192.mp3',
+        title: '   ',
+      },
+      createdAt: new Date('2026-06-24T05:32:00.000Z'),
+      errorCode: null,
+      id: 'job-1',
+      quality: '192',
+      status: ExtractionJobStatus.completed,
+      title: null,
+      type: ExtractionType.audio,
+      url: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ',
+      videoId: 'dQw4w9WgXcQ',
+    });
+
+    await expect(
+      service.create({
+        quality: '192',
+        type: 'audio',
+        url: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ',
+      }),
+    ).resolves.toMatchObject({
+      sourceUrl: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ',
+      title: null,
+    });
+    expect(prismaMock.extractionJob.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ title: null }),
+      }),
+    );
   });
 
   it('does not reuse stale asset rows when the object is missing', async () => {
@@ -267,6 +367,7 @@ describe('DownloadsService', () => {
       id: 'job-1',
       quality: '192',
       status: ExtractionJobStatus.completed,
+      title: 'Preserved request title',
       type: ExtractionType.audio,
       url: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ',
       videoId: 'dQw4w9WgXcQ',
@@ -300,6 +401,7 @@ describe('DownloadsService', () => {
       id: 'job-1',
       quality: '192',
       status: ExtractionJobStatus.completed,
+      title: 'Preserved request title',
       type: ExtractionType.audio,
       url: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ',
       videoId: 'dQw4w9WgXcQ',
@@ -352,6 +454,7 @@ describe('DownloadsService', () => {
       id: 'job-1',
       quality: '192',
       status: ExtractionJobStatus.completed,
+      title: 'Preserved request title',
       type: ExtractionType.audio,
       url: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ',
       videoId: 'dQw4w9WgXcQ',
@@ -362,6 +465,8 @@ describe('DownloadsService', () => {
       downloadUrl: null,
       progress: null,
       status: 'completed',
+      sourceUrl: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ',
+      title: 'Preserved request title',
     });
   });
 

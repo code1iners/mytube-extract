@@ -90,11 +90,33 @@ describe('request history query contract', () => {
   });
 
   it('uses the existing endpoint for each receipt kind', async () => {
-    const fetcher = vi.fn(async (_input: RequestInfo | URL) =>
-      new Response(JSON.stringify({ displayStatus: 'completed' }), {
-        headers: { 'Content-Type': 'application/json' },
-        status: 200,
-      }),
+    /** 영상 상태 응답과 자막 상태 응답을 구분하는 fetch 대역. */
+    const fetcher = vi.fn(async (input: RequestInfo | URL) =>
+      new Response(
+        JSON.stringify(
+          String(input).includes('/downloads/')
+            ? {
+                createdAt: '2026-08-11T00:00:00.000Z',
+                displayStatus: 'completed',
+                downloadUrl: '/downloads/job-1/file',
+                errorCode: null,
+                jobId: VIDEO_ID,
+                message: '파일이 준비되었습니다.',
+                progress: 100,
+                quality: '320',
+                retentionDays: 7,
+                sourceUrl: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ',
+                status: 'completed',
+                title: 'A preserved title',
+                type: 'audio',
+              }
+            : { displayStatus: 'completed' },
+        ),
+        {
+          headers: { 'Content-Type': 'application/json' },
+          status: 200,
+        },
+      ),
     );
     vi.stubGlobal('fetch', fetcher);
     const signal = new AbortController().signal;

@@ -94,7 +94,10 @@ const HISTORY_ITEM_HEADER_CLASS_NAME =
   'history-item__header grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-start gap-mytube-12 max-[561px]:grid-cols-1';
 /** 요청 내역 항목 제목의 typography·focus className. */
 const HISTORY_ITEM_TITLE_CLASS_NAME =
-  'm-0 text-[18px] font-semibold leading-[1.4] focus:outline-2 focus:outline-mytube-focus focus:[outline-offset:2px]';
+  'm-0 text-[18px] font-semibold leading-[1.4] [overflow-wrap:anywhere] focus:outline-2 focus:outline-mytube-focus focus:[outline-offset:2px]';
+/** 제목이 없는 영상 요청의 원본 링크 className. */
+const HISTORY_SOURCE_LINK_CLASS_NAME =
+  'text-mytube-action-primary underline decoration-1 underline-offset-2 focus-visible:outline-2 focus-visible:outline-mytube-focus focus-visible:[outline-offset:2px] [overflow-wrap:anywhere]';
 /** 요청 내역 항목의 API 메타 className. */
 const HISTORY_ITEM_DETAIL_CLASS_NAME =
   'history-item__header-detail m-0 mt-[4px] text-mytube-text-secondary text-[14px] leading-[1.5] [overflow-wrap:anywhere]';
@@ -574,7 +577,7 @@ function HistoryItem(props: {
               id={titleId}
               tabIndex={-1}
             >
-              {formatKind(receipt.kind)} 요청
+              {renderHistoryTitle(receipt.kind, job)}
             </h3>
             <p className={HISTORY_ITEM_DETAIL_CLASS_NAME}>
               {job
@@ -714,6 +717,33 @@ function formatJobDetail(kind: JobReceiptKind, job: JobStatus) {
   return kind === 'video' && 'type' in job
     ? `${job.type === 'audio' ? '오디오' : '비디오'} · ${job.type === 'audio' ? `${job.quality} kbps` : `${job.quality}p`} · ${formatDate(job.createdAt)}`
     : `${'fileName' in job ? job.fileName : '자막'} · ${formatDate(job.createdAt)}`;
+}
+
+/** 제목이 있으면 일반 텍스트로, 없으면 식별 가능한 원본 링크로 표시한다. */
+function renderHistoryTitle(kind: JobReceiptKind, job: JobStatus | undefined) {
+  if (kind !== 'video' || !job || !('type' in job)) {
+    return `${formatKind(kind)} 요청`;
+  }
+
+  /** 응답에서 확보한 요청 영상 제목. */
+  const title = job.title?.trim();
+
+  if (title) {
+    return title;
+  }
+
+  /** 제목이 없을 때 요청을 식별할 원본 영상 링크. */
+  const sourceUrl = job.sourceUrl?.trim();
+
+  if (!sourceUrl) {
+    return `${formatKind(kind)} 요청`;
+  }
+
+  return (
+    <a className={HISTORY_SOURCE_LINK_CLASS_NAME} href={sourceUrl}>
+      {sourceUrl}
+    </a>
+  );
 }
 
 function formatDate(value: string) {

@@ -443,7 +443,9 @@ export function createIdleJob(draft: DownloadDraft): DownloadResponse {
     progress: 0,
     quality: draft.quality,
     retentionDays: 7,
+    sourceUrl: '',
     status: 'queued',
+    title: null,
     type: draft.mode,
   };
 }

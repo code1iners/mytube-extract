@@ -5,6 +5,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { CreateDownloadJobDto } from './dto/create-download-job.dto';
 import {
   createCanonicalYoutubeUrl,
+  normalizeRequestVideoTitle,
   parseDownloadQuality,
   parseDownloadType,
   parseYoutubeVideoId,
@@ -34,6 +35,8 @@ export class DownloadsService {
     const videoId = parseYoutubeVideoId(input.url);
     /** DB와 worker에 저장할 query-free canonical source URL. */
     const sourceUrl = createCanonicalYoutubeUrl(videoId);
+    /** 요청에 처음 보존할 유효한 영상 제목. */
+    const requestTitle = normalizeRequestVideoTitle(input.title);
     /** 현재 재사용 가능한 asset 후보. */
     const reusableAsset = await this.prisma.extractedAsset.findFirst({
       where: {
@@ -64,6 +67,9 @@ export class DownloadsService {
         status: verifiedReusableAsset
           ? ExtractionJobStatus.completed
           : ExtractionJobStatus.queued,
+        title:
+          requestTitle ??
+          normalizeRequestVideoTitle(verifiedReusableAsset?.title),
         type,
         url: sourceUrl,
         videoId,
@@ -177,7 +183,9 @@ export class DownloadsService {
       progress: createProgress(displayStatus),
       quality: job.quality as DownloadResponse['quality'],
       retentionDays: this.getRetentionDays(),
+      sourceUrl: createCanonicalYoutubeUrl(job.videoId),
       status: job.status,
+      title: normalizeRequestVideoTitle(job.title),
       type: job.type,
     };
   }

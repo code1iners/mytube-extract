@@ -24,7 +24,9 @@ function createJob(overrides: Partial<DownloadResponse> = {}): DownloadResponse 
     progress: 0,
     quality: '320',
     retentionDays: 7,
+    sourceUrl: '',
     status: 'queued',
+    title: null,
     type: 'audio',
     ...overrides,
   };

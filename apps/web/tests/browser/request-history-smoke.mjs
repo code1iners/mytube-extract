@@ -71,6 +71,7 @@ try {
   await run('blocked localStorage keeps the deep-link item', verifyBlockedStorageFallback);
   await run('failed and expired jobs expose matching retry routes', verifyRetryRoutes);
   await run('empty history explains both request paths and retention', verifyEmptyHistoryProductModel);
+  await run('history keeps video titles and identifies untitled requests', verifyHistoryTitles);
   await run('populated history stays unclipped with long job details', verifyPopulatedHistoryResponsiveLayout);
   await run('responsive primary navigation stays aligned and unclipped', verifyResponsivePrimaryNavigation);
 
@@ -3922,6 +3923,135 @@ async function verifyEmptyHistoryProductModel() {
   }
 }
 
+/** 영상 제목이 있거나 없을 때의 내역 제목·메타데이터·접수증 보존을 검증한다. */
+async function verifyHistoryTitles() {
+  /** 제목과 원본 링크의 좁은 viewport 동작을 확인할 context. */
+  const context = await createContext({
+    viewport: { height: 844, width: 390 },
+  });
+  /** 제목 검증에 사용할 browser page와 runtime 오류 수집기. */
+  const { page, assertNoRuntimeErrors } = await createPage(context);
+  /** 제목이 있는 영상 요청에 사용할 원본 제목. */
+  const titledTitle = 'A preserved video title that wraps on a narrow viewport';
+  /** 제목이 없을 때 표시할 원본 영상 링크. */
+  const untitledSourceUrl = `https://www.youtube.com/watch?v=${VIDEO_OTHER_ID}`;
+  /** 제목이 있는 접수증의 저장 시각. */
+  const acceptedAt = '2026-08-11T00:03:00.000Z';
+
+  try {
+    await seedReceipts(page, [
+      ['video', VIDEO_ID, acceptedAt],
+      ['video', VIDEO_OTHER_ID, '2026-08-11T00:02:00.000Z'],
+    ]);
+    await routeApi(page, async ({ route, url }) => {
+      if (url.pathname === `/downloads/${VIDEO_ID}`) {
+        return fulfillJson(
+          route,
+          videoJob(VIDEO_ID, 'completed', {
+            quality: '192',
+            title: titledTitle,
+            type: 'audio',
+          }),
+        );
+      }
+      if (url.pathname === `/downloads/${VIDEO_OTHER_ID}`) {
+        return fulfillJson(
+          route,
+          videoJob(VIDEO_OTHER_ID, 'failed', {
+            quality: '720',
+            sourceUrl: untitledSourceUrl,
+            title: null,
+            type: 'video',
+          }),
+        );
+      }
+
+      return fulfillJson(route, {}, 404);
+    });
+
+    await page.goto(`${staticServer.origin}/history`);
+    await page.getByRole('heading', { name: titledTitle, exact: true }).waitFor();
+    await page
+      .getByRole('heading', { name: untitledSourceUrl, exact: true })
+      .waitFor();
+
+    assert.deepEqual(
+      await page.locator('.history-item h3').allTextContents(),
+      [titledTitle, untitledSourceUrl],
+    );
+    assert.equal(
+      await page
+        .getByRole('heading', { name: titledTitle, exact: true })
+        .locator('a')
+        .count(),
+      0,
+    );
+    /** 제목 없는 항목이 제공하는 원본 영상 링크. */
+    const sourceLink = page.getByRole('link', {
+      name: untitledSourceUrl,
+      exact: true,
+    });
+    assert.equal(await sourceLink.count(), 1);
+    assert.equal(await sourceLink.getAttribute('href'), untitledSourceUrl);
+    assert.ok(
+      (await page.locator('.history-item__header-detail').allTextContents()).some(
+        (text) => text.includes('오디오 · 192 kbps'),
+      ),
+    );
+    assert.ok(
+      (await page.locator('.history-item__header-detail').allTextContents()).some(
+        (text) => text.includes('비디오 · 720p'),
+      ),
+    );
+    await page.reload();
+    await page.getByRole('heading', { name: titledTitle, exact: true }).waitFor();
+    await page
+      .getByRole('heading', { name: untitledSourceUrl, exact: true })
+      .waitFor();
+    assert.deepEqual(
+      await page.locator('.history-item h3').allTextContents(),
+      [titledTitle, untitledSourceUrl],
+    );
+    assert.deepEqual(
+      await page.evaluate(({ jobId, prefix }) => {
+        /** 브라우저 접수증에 저장된 원문. */
+        const value = localStorage.getItem(`${prefix}video:${jobId}`);
+        return value ? JSON.parse(value) : null;
+      }, { jobId: VIDEO_ID, prefix: RECEIPT_PREFIX }),
+      { acceptedAt },
+    );
+    /** 각 항목 article과 연결된 제목 ID. */
+    const articleTitleIds = await page
+      .locator('.history-item article')
+      .evaluateAll((articles) =>
+        articles.map((article) => {
+          /** article이 참조하는 제목 element ID. */
+          const titleId = article.getAttribute('aria-labelledby');
+          return {
+            hasTitle: Boolean(titleId && document.getElementById(titleId)),
+            titleId,
+          };
+        }),
+      );
+    assert.equal(articleTitleIds.length, 2);
+    assert.ok(
+      articleTitleIds.every(
+        ({ hasTitle, titleId }) => hasTitle && typeof titleId === 'string',
+      ),
+    );
+    assert.deepEqual(
+      await page.evaluate(() => ({
+        clientWidth: document.documentElement.clientWidth,
+        scrollWidth: document.documentElement.scrollWidth,
+      })),
+      { clientWidth: 390, scrollWidth: 390 },
+    );
+    assertNoRuntimeErrors();
+  } finally {
+    await context.close();
+  }
+}
+
 /** 실제 receipt 목록도 긴 파일명·상태 안내에서 좁은 viewport를 밀어내지 않는지 확인한다. */
 async function verifyPopulatedHistoryResponsiveLayout() {
   /** 기존 목록의 실제 데이터 경계를 확인할 viewport 폭. */
@@ -4587,7 +4717,7 @@ function healthResponse(workerAvailable = true) {
   return { ok: true, worker: { available: workerAvailable } };
 }
 
-function videoJob(jobId, displayStatus) {
+function videoJob(jobId, displayStatus, overrides = {}) {
   const status = displayStatus === 'expired' ? 'completed' : displayStatus;
   return {
     createdAt: '2026-08-11T00:00:00.000Z',
@@ -4598,10 +4728,14 @@ function videoJob(jobId, displayStatus) {
     jobId,
     message: `video ${displayStatus}`,
     progress: displayStatus === 'completed' ? 100 : displayStatus === 'processing' ? 50 : 0,
-    quality: '320',
+    quality: overrides.quality ?? '320',
     retentionDays: 3,
+    sourceUrl:
+      overrides.sourceUrl ?? `https://www.youtube.com/watch?v=${jobId}`,
     status,
-    type: 'audio',
+    title: 'title' in overrides ? overrides.title : '영상 요청',
+    type: overrides.type ?? 'audio',
+    ...overrides,
   };
 }
 
