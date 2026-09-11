@@ -135,8 +135,6 @@ export const downloadDraftSchema = z.object({
   mode: z.enum(['audio', 'video']),
   /** 선택 품질 값. */
   quality: z.enum(['128', '192', '320', '360', '720', '1080']),
-  /** 요청에 선택적으로 보존할 원본 영상 제목. */
-  title: z.string().nullable().optional(),
 });
 
 /** 다운로드 요청 입력값. */
@@ -166,18 +164,6 @@ export const VIDEO_QUALITY_OPTIONS = [
 /** 다운로드 형식별 기본 품질을 반환한다. */
 export function getDefaultDownloadQuality(mode: DownloadMode): DownloadQuality {
   return mode === 'audio' ? '320' : '1080';
-}
-
-/** 요청에 보존할 원본 영상 제목을 정규화한다. */
-export function normalizeDownloadRequestTitle(value: unknown) {
-  if (typeof value !== 'string') {
-    return null;
-  }
-
-  /** 앞뒤 공백을 제거한 요청 영상 제목. */
-  const normalizedTitle = value.trim();
-
-  return normalizedTitle || null;
 }
 
 /** 다운로드 입력값을 검증한다. */

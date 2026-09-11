@@ -215,7 +215,7 @@ describe('DownloadsService', () => {
     );
   });
 
-  it('keeps a request-provided title instead of replacing it with a reusable asset title', async () => {
+  it('uses the reusable asset title even when the client supplies another title', async () => {
     prismaMock.extractedAsset.findFirst.mockResolvedValueOnce({
       expiresAt: new Date('2099-07-08T05:32:00.000Z'),
       id: 'asset-1',
@@ -235,27 +235,31 @@ describe('DownloadsService', () => {
       id: 'job-1',
       quality: '720',
       status: ExtractionJobStatus.completed,
-      title: 'First request title',
+      title: 'Later asset title',
       type: ExtractionType.video,
       url: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ',
       videoId: 'dQw4w9WgXcQ',
     });
 
     await expect(
-      service.create({
-        title: '  First request title  ',
-        quality: '720',
-        type: 'video',
-        url: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ',
-      }),
+      service.create(
+        Object.assign(
+          {
+            quality: '720',
+            type: ExtractionType.video,
+            url: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ',
+          },
+          { title: '  First request title  ' },
+        ),
+      ),
     ).resolves.toMatchObject({
       sourceUrl: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ',
-      title: 'First request title',
+      title: 'Later asset title',
     });
     expect(prismaMock.extractionJob.create).toHaveBeenCalledWith(
       expect.objectContaining({
         data: expect.objectContaining({
-          title: 'First request title',
+          title: 'Later asset title',
         }),
       }),
     );

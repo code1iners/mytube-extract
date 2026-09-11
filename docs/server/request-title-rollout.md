@@ -49,7 +49,7 @@ worker가 결과물에만 남긴 제목을 잃지 않도록 정리 작업을 통
 
 ```sh
 pnpm --filter api run backfill:request-titles
-pnpm --filter api run backfill:request-titles -- --apply
+pnpm --filter api run backfill:request-titles --apply
 pnpm --filter api run backfill:request-titles
 ```
 
@@ -64,8 +64,11 @@ pnpm --filter api run backfill:request-titles
 - 구 버전 worker가 아직 실행 중이거나 `queued`·`processing` 잔여 작업의 소유 버전을
   확인할 수 없다.
 - dry-run 후보 수가 예상과 다르거나, `--apply` 후 후보가 0이 되지 않는다.
-- 연결된 결과물 제목이 null·공백뿐이거나 요청 제목을 조건부 저장할 수 없다.
+- 유효한 결과물 제목을 가진 미확보 요청을 조건부 저장할 수 없다.
 - DB 연결 단절, schema drift, 결과 기록 불일치가 발생한다.
+
+결과물이 없거나 제목이 null·공백뿐인 요청은 정상적인 미확보 상태로 유지한다.
+이 요청은 이관 후보와 전환 중단 사유에 포함하지 않는다.
 
 이관 중 오류가 나면 이미 저장된 제목을 되돌리거나 필드를 삭제하지 않는다. cleanup을
 계속 중지한 상태에서 원인을 해결하고 같은 명령을 다시 실행한다. 이관은 조건부 갱신과

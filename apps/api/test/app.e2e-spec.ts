@@ -187,7 +187,7 @@ describe('MyTubeExtract API (e2e)', () => {
       progress: 0,
       sourceUrl: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ',
       status: 'queued',
-      title: 'E2E request title',
+      title: null,
       type: 'audio',
     });
     expect(response.body.filePath).toBeUndefined();

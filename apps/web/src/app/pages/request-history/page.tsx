@@ -97,7 +97,7 @@ const HISTORY_ITEM_TITLE_CLASS_NAME =
   'm-0 text-[18px] font-semibold leading-[1.4] [overflow-wrap:anywhere] focus:outline-2 focus:outline-mytube-focus focus:[outline-offset:2px]';
 /** 제목이 없는 영상 요청의 원본 링크 className. */
 const HISTORY_SOURCE_LINK_CLASS_NAME =
-  'text-mytube-action-primary underline decoration-1 underline-offset-2 focus-visible:outline-2 focus-visible:outline-mytube-focus focus-visible:[outline-offset:2px] [overflow-wrap:anywhere]';
+  'text-mytube-text-primary underline decoration-1 underline-offset-2 focus-visible:outline-2 focus-visible:outline-mytube-focus focus-visible:[outline-offset:2px] [overflow-wrap:anywhere]';
 /** 요청 내역 항목의 API 메타 className. */
 const HISTORY_ITEM_DETAIL_CLASS_NAME =
   'history-item__header-detail m-0 mt-[4px] text-mytube-text-secondary text-[14px] leading-[1.5] [overflow-wrap:anywhere]';

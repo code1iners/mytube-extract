@@ -45,20 +45,13 @@ describe('mytube extract api client', () => {
     });
   });
 
-  it('normalizes an optional request title and omits an unacquired title', () => {
-    /** 제목이 포함된 다운로드 job 요청. */
-    const titledRequest = buildCreateDownloadJobRequest({
-      ...baseDraft,
-      title: '  A preserved title  ',
-    });
-    /** 공백뿐인 제목을 제외한 다운로드 job 요청. */
-    const untitledRequest = buildCreateDownloadJobRequest({
-      ...baseDraft,
-      title: '   ',
-    });
+  it('omits client titles from the download request', () => {
+    /** 외부 입력에 제목이 있어도 접수 계약의 필드만 전송한다. */
+    const request = buildCreateDownloadJobRequest(
+      Object.assign({}, baseDraft, { title: 'Client title' }),
+    );
 
-    expect(titledRequest.body.title).toBe('A preserved title');
-    expect(untitledRequest.body).not.toHaveProperty('title');
+    expect(request.body).not.toHaveProperty('title');
   });
 
   it('uses the configured API base URL without dropping its path', () => {

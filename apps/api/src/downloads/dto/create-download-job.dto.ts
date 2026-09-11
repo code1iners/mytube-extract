@@ -6,8 +6,6 @@ export type CreateDownloadJobDto = {
   type?: MediaKind;
   /** 다운로드할 원본 URL. */
   url?: string;
-  /** 요청에 보존할 원본 영상 제목. */
-  title?: string | null;
   /** 선택 파일명. */
   filename?: string;
   /** 오디오 bitrate 또는 비디오 resolution. */

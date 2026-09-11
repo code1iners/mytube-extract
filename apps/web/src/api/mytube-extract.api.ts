@@ -3,7 +3,6 @@ import {
   type DownloadResponse,
   downloadDraftSchema,
   downloadResponseSchema,
-  normalizeDownloadRequestTitle,
 } from '../domain/download-request/download-request';
 import {
   type SubtitleWhisperModel,
@@ -91,8 +90,6 @@ export type CreateDownloadJobRequest = {
     url: string;
     /** 선택 품질 값. */
     quality: DownloadDraft['quality'];
-    /** 요청에 선택적으로 보존할 원본 영상 제목. */
-    title?: string;
   };
 };
 
@@ -318,15 +315,12 @@ export function buildCreateDownloadJobRequest(
 ): CreateDownloadJobRequest {
   /** schema를 통과한 다운로드 입력값. */
   const parsedDraft = downloadDraftSchema.parse(draft);
-  /** 공백뿐인 제목은 접수 payload에서 제외한다. */
-  const title = normalizeDownloadRequestTitle(parsedDraft.title);
 
   return {
     body: {
       quality: parsedDraft.quality,
       type: parsedDraft.mode,
       url: parsedDraft.sourceUrl.trim(),
-      ...(title ? { title } : {}),
     },
     url: buildApiUrl('/downloads', apiBaseUrl),
   };
