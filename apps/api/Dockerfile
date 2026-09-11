@@ -34,7 +34,7 @@ COPY . .
 RUN YOUTUBE_DL_HOST=${YOUTUBE_DL_HOST} pnpm rebuild --pending
 RUN pnpm --filter @mytube-extract/db run build
 RUN pnpm --filter @mytube-extract/media-downloader run build
-RUN pnpm --filter api run build
+RUN pnpm --filter api run build && test -f apps/api/dist/main.js
 RUN pnpm --filter api deploy --prod --legacy /prod/api
 
 FROM ${NODE_IMAGE} AS production
