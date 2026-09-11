@@ -13,6 +13,7 @@
 - 공통 디자인 시스템 Foundation: `docs/DESIGN.md`
 - Chrome 확장 프로그램 브랜딩 적용: `docs/chrome-extension/branding-direction.md`
 - API 로컬 배포: `docs/deployment/api-local-deployment.md`
+- 요청 영상 제목 전환·복구: `docs/server/request-title-rollout.md`
 - Cloudflare Tunnel 배포: `docs/deployment/cloudflared-tunnel-setup.md`
 - 배포 알려진 이슈: `docs/deployment/known-issues.md`
 - 호환용 자막 업로드 제거 조건: `docs/deprecated/subtitle-legacy-multipart-upload.md`

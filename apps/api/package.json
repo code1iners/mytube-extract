@@ -21,6 +21,7 @@
     "start:debug": "nest start --debug --watch",
     "start:dev": "NODE_ENV=development nest start --watch",
     "start:prod": "NODE_ENV=production node dist/main",
+    "backfill:request-titles": "node --env-file-if-exists=.env -r ts-node/register scripts/backfill-request-titles.ts",
     "test": "jest",
     "test:cov": "jest --coverage",
     "test:debug": "node --inspect-brk -r tsconfig-paths/register -r ts-node/register ../../node_modules/.bin/jest --runInBand",

@@ -12,5 +12,5 @@
 - error response: 알 수 없는 `jobId`는 `404`.
 - 접근 조건: 인증 없음. API CORS allowlist 적용.
 - side effect: 없음. `ExtractionJob`과 연결된 asset 상태를 읽는다.
-- 구현 경계: 완료 asset이 없거나 만료되면 `displayStatus: "expired"`를 반환하지만 요청에 저장된 `title`과 `sourceUrl`은 유지한다.
+- 구현 경계: 완료 asset이 없거나 만료되면 `displayStatus: "expired"`를 반환하지만 요청에 저장된 `title`과 `sourceUrl`은 유지한다. asset row 정리는 `ExtractionJob` row와 요청 제목을 삭제하지 않는다.
 - 검증: `pnpm --filter api run test`, `pnpm --filter api run test:e2e`

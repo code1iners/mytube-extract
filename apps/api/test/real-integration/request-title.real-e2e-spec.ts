@@ -6,6 +6,7 @@ import {
 } from '@mytube-extract/db';
 import { randomUUID } from 'node:crypto';
 import { DownloadsService } from '../../src/downloads/downloads.service';
+import { backfillRequestTitles } from '../../src/downloads/request-title-backfill';
 import {
   processDownloadJob,
   type DownloadJobProcessorDependencies,
@@ -133,6 +134,156 @@ describe('실제 DB 요청 제목 보존 통합 (PostgreSQL 필요)', () => {
       await prisma!.extractedAsset.deleteMany({
         where: { videoId: { in: [titledVideoId, titlelessVideoId] } },
       });
+    }
+  });
+
+  it('rehearses legacy completion, backfills the title, and keeps it after asset cleanup', async () => {
+    /** 구 버전 worker가 결과물에만 남긴 제목을 확인할 요청 video ID. */
+    const videoId = `${runVideoId.slice(0, 9)}H8`;
+    /** 구 버전 완료 요청의 canonical YouTube URL. */
+    const sourceUrl = `https://www.youtube.com/watch?v=${videoId}`;
+    /** 이관 전후 서버 응답을 읽을 service. */
+    const service = createDownloadsService(prisma!);
+    /** 구 버전 완료를 재현할 처리 요청. */
+    const job = await prisma!.extractionJob.create({
+      data: {
+        quality: '192',
+        status: ExtractionJobStatus.processing,
+        title: null,
+        type: ExtractionType.audio,
+        url: sourceUrl,
+        videoId,
+      },
+    });
+    /** 구 버전 완료가 만든 결과물 row ID. */
+    let assetId: string | undefined;
+    /** 이 시나리오가 소유한 요청 row ID 목록. */
+    const jobIds = [job.id];
+
+    try {
+      /** 제목 저장만 생략한 구 버전 worker 경계를 실제 처리 진입점에 연결한다. */
+      const legacyDependencies = createDatabaseProcessorDependencies(prisma!);
+      legacyDependencies.readTitle = async () =>
+        'Title left on the legacy asset';
+      legacyDependencies.assetStore.setRequestTitleIfMissing = async () => {};
+
+      await processDownloadJob(job, legacyDependencies);
+
+      /** 구 버전은 요청에는 제목을 쓰지 않고 결과물에만 제목을 남긴다. */
+      const legacySnapshot = await prisma!.extractionJob.findUnique({
+        select: { assetId: true, status: true, title: true },
+        where: { id: job.id },
+      });
+      assetId = legacySnapshot?.assetId ?? undefined;
+      expect(legacySnapshot).toMatchObject({
+        status: ExtractionJobStatus.completed,
+        title: null,
+      });
+      expect(assetId).toBeTruthy();
+      await expect(
+        prisma!.extractedAsset.findUnique({
+          select: { title: true },
+          where: { id: assetId },
+        }),
+      ).resolves.toEqual({ title: 'Title left on the legacy asset' });
+
+      /** 같은 결과물을 참조하지만 제목이 없는 두 번째 요청. */
+      const sharedJob = await prisma!.extractionJob.create({
+        data: {
+          assetId,
+          quality: '192',
+          status: ExtractionJobStatus.completed,
+          title: null,
+          type: ExtractionType.audio,
+          url: sourceUrl,
+          videoId,
+        },
+      });
+      /** 이미 요청 제목을 가진 공유 결과물 요청. */
+      const preservedJob = await prisma!.extractionJob.create({
+        data: {
+          assetId,
+          quality: '192',
+          status: ExtractionJobStatus.completed,
+          title: 'First stored request title',
+          type: ExtractionType.audio,
+          url: sourceUrl,
+          videoId,
+        },
+      });
+      /** 결과물이 없는 과거 요청. */
+      const missingAssetJob = await prisma!.extractionJob.create({
+        data: {
+          quality: '720',
+          status: ExtractionJobStatus.completed,
+          title: null,
+          type: ExtractionType.video,
+          url: sourceUrl,
+          videoId,
+        },
+      });
+      jobIds.push(sharedJob.id, preservedJob.id, missingAssetJob.id);
+
+      /** 운영 이관 전에 대상 수를 확인하는 dry-run. */
+      await expect(
+        backfillRequestTitles(prisma!, { videoIds: [videoId] }),
+      ).resolves.toEqual({ candidates: 2, scanned: 4, updated: 0 });
+      /** 누락된 요청 제목을 실제 DB에 조건부로 이관한다. */
+      await expect(
+        backfillRequestTitles(prisma!, {
+          apply: true,
+          videoIds: [videoId],
+        }),
+      ).resolves.toEqual({ candidates: 2, scanned: 4, updated: 2 });
+      await expect(service.get(job.id)).resolves.toMatchObject({
+        displayStatus: 'completed',
+        title: 'Title left on the legacy asset',
+      });
+      await expect(service.get(sharedJob.id)).resolves.toMatchObject({
+        displayStatus: 'completed',
+        title: 'Title left on the legacy asset',
+      });
+      await expect(service.get(preservedJob.id)).resolves.toMatchObject({
+        displayStatus: 'completed',
+        title: 'First stored request title',
+      });
+      await expect(service.get(missingAssetJob.id)).resolves.toMatchObject({
+        displayStatus: 'expired',
+        title: null,
+      });
+
+      /** 이관이 끝난 뒤 테스트 소유 결과물 row만 실제로 정리한다. */
+      await prisma!.extractedAsset.delete({
+        where: { id: assetId },
+      });
+      await expect(
+        prisma!.extractedAsset.findUnique({ where: { id: assetId } }),
+      ).resolves.toBeNull();
+      await expect(service.get(job.id)).resolves.toMatchObject({
+        displayStatus: 'expired',
+        title: 'Title left on the legacy asset',
+      });
+      await expect(service.get(sharedJob.id)).resolves.toMatchObject({
+        displayStatus: 'expired',
+        title: 'Title left on the legacy asset',
+      });
+      await expect(service.get(preservedJob.id)).resolves.toMatchObject({
+        displayStatus: 'expired',
+        title: 'First stored request title',
+      });
+
+      /** 결과물 정리 후 재실행해도 이미 보존한 제목을 바꾸지 않는다. */
+      await expect(
+        backfillRequestTitles(prisma!, {
+          apply: true,
+          videoIds: [videoId],
+        }),
+      ).resolves.toEqual({ candidates: 0, scanned: 4, updated: 0 });
+    } finally {
+      await prisma!.extractionJob.deleteMany({ where: { id: { in: jobIds } } });
+      if (assetId) {
+        await prisma!.extractedAsset.deleteMany({ where: { id: assetId } });
+      }
     }
   });
 
