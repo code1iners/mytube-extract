@@ -1,8 +1,30 @@
 set -e
 
+# 현재 checkout 대신 Git이 전달한 원격 대상 ref로 main 갱신 여부를 판단한다.
+pushes_main=false
+while read -r local_ref local_oid remote_ref remote_oid; do
+  # 브랜치 삭제는 새 코드를 게시하지 않으므로 데이터베이스 검사를 요구하지 않는다.
+  case "$local_oid" in
+    ''|*[!0]*) ;;
+    *) continue ;;
+  esac
+  if [ "$remote_ref" = refs/heads/main ]; then
+    pushes_main=true
+  fi
+done
+
+# main은 긴 테스트를 시작하기 전에 실제 DB 검증의 필수 설정을 확인한다.
+if [ "$pushes_main" = true ] && [ -z "${DATABASE_URL:-}" ]; then
+  echo 'main 푸시에는 테스트 전용 DATABASE_URL이 필요합니다. 푸시를 실행하는 환경에 설정하세요.' >&2
+  exit 1
+fi
+
 pnpm test
 pnpm test:e2e
-# 실제 yt-dlp/YouTube를 쓰는 통합 테스트. 네트워크 단절·YouTube 봇 차단은 테스트 내부에서
-# 스킵 처리되고, yt-dlp/코드가 원인인 실패만 여기서 push를 막는다.
-pnpm --filter api run test:e2e:real
+# main은 실제 DB와 YouTube를 모두 검증하고, 다른 대상은 YouTube 검사만 유지한다.
+if [ "$pushes_main" = true ]; then
+  pnpm --filter api run test:e2e:real
+else
+  pnpm --filter api run test:e2e:media
+fi
 WXT_MYTUBE_EXTRACT_API_BASE_URL=https://mytube-extract-api.codeliners.cc pnpm --filter chrome-extension run test:browser
