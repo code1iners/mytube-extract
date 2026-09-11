@@ -153,9 +153,9 @@ describe('hasUserVisibleErrorDetail / createWorkerHealthErrorDetail', () => {
 
 describe('formatTime', () => {
   it('formats a valid ISO timestamp as a localized hour:minute string', () => {
-    // ko-KR Intl.DateTimeFormat은 12시간제(오전/오후 hh:mm)로 표시한다.
+    // ICU 버전에 따라 ko-KR의 오전·오후 표기가 달라진다.
     expect(formatTime('2026-08-19T05:32:00.000Z')).toMatch(
-      /^(오전|오후) \d{2}:\d{2}$/,
+      /^(오전|오후|AM|PM) \d{2}:\d{2}$/,
     );
   });
 

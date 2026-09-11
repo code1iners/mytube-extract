@@ -176,7 +176,7 @@ describe('worker health submit reason', () => {
 describe('formatWorkerHealthCheckedAt', () => {
   it('formats a health response timestamp for the last-check label', () => {
     expect(formatWorkerHealthCheckedAt(Date.parse('2026-08-19T05:32:14.000Z'))).toMatch(
-      /^(오전|오후) \d{2}:\d{2}:\d{2}$/,
+      /^(오전|오후|AM|PM) \d{2}:\d{2}:\d{2}$/,
     );
   });
 
