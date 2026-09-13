@@ -12,8 +12,8 @@ export const WORKER_HEARTBEAT_ID = 'default';
 /** worker에서 처리하는 품질 key. */
 export type WorkerQuality = '128' | '192' | '320' | '360' | '720' | '1080';
 
-/** worker가 처리할 수 있는 video 예상 최대 크기. */
-export const MAX_VIDEO_ESTIMATED_BYTES = 1024 * 1024 * 1024;
+/** 선택된 영상과 음성의 합산 예상 최대 크기: 1.5 GiB. */
+export const MAX_VIDEO_ESTIMATED_BYTES = 1536 * 1024 * 1024;
 
 /** worker가 client에 전달할 수 있는 실패 코드. */
 export type WorkerFailureCode =

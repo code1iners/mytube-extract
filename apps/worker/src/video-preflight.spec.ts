@@ -22,9 +22,8 @@ test('does not fallback from the default client during video metadata preflight'
     }),
     (error: unknown) => {
       /** preflight가 남긴 구조화 실패 진단. */
-      const diagnostic = (
-        error as { diagnostic?: { reason?: string } }
-      ).diagnostic;
+      const diagnostic = (error as { diagnostic?: { reason?: string } })
+        .diagnostic;
 
       assert.equal(diagnostic?.reason, 'client-switch-required');
       return true;
@@ -32,4 +31,37 @@ test('does not fallback from the default client during video metadata preflight'
   );
 
   assert.deepEqual(clients, ['default']);
+});
+
+test('accepts the reported 1080p video within the 1.5 GiB limit', async () => {
+  await runVideoPreflight({
+    sourceUrl: 'https://www.youtube.com/watch?v=nGKd4yTP3M8',
+    format: 'bestvideo[height<=1080]+bestaudio/best[height<=1080]',
+    run: async () => ({
+      requested_formats: [
+        { format_id: '399', filesize: 895_583_878 },
+        { format_id: '251', filesize: 290_705_273 },
+      ],
+    }),
+  });
+});
+
+test('accepts exactly 1.5 GiB and rejects one byte above the limit', async () => {
+  /** 제한 경계를 실제 preflight 진입점으로 검증한다. */
+  const input = {
+    sourceUrl: 'https://www.youtube.com/watch?v=nGKd4yTP3M8',
+    format: 'bestvideo[height<=1080]+bestaudio/best[height<=1080]',
+  };
+
+  await runVideoPreflight({
+    ...input,
+    run: async () => ({ filesize: 1_610_612_736, format_id: 'boundary' }),
+  });
+  await assert.rejects(
+    runVideoPreflight({
+      ...input,
+      run: async () => ({ filesize: 1_610_612_737, format_id: 'boundary' }),
+    }),
+    { errorCode: 'VIDEO_TOO_LARGE' },
+  );
 });

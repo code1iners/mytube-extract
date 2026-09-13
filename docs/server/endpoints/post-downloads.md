@@ -37,5 +37,6 @@
 - 구 버전 결과물에만 남은 제목은 `pnpm --filter api run backfill:request-titles` dry-run과 명시적 `--apply`로 조건부 이관한다. 이 명령은 외부 제목 조회를 하지 않으며, cleanup은 이관 완료 확인 뒤 재개한다. 전체 순서는 `docs/server/request-title-rollout.md`를 따른다.
 - 관련 worker: `apps/worker/src/main.ts`가 queued job을 FIFO로 처리한다. 기존 제목 조회에서 유효한 제목을 얻으면 다운로드·업로드 전에 `ExtractionJob.title`에 조건부 저장하며, 제목 조회 실패는 추출을 중단하지 않는다. 공통 media-downloader 정책은 기본 client의 일반 transient extraction 실패를 같은 work directory와 partial file을 유지한 채 한 번 재시도하고, client 전환 대상 오류에서는 같은 client 재시도 없이 `web_embedded`를 한 번 fallback한다. fallback client는 추가 재시도하지 않으며, 인증 요구, abort/killed, process spawn, preflight, upload, DB 실패는 client fallback 대상이 아니다.
 - 운영 진단: subprocess exit code·signal·bounded stdout/stderr tail은 server-only redacted diagnostic으로만 기록하며 API response에는 노출하지 않는다.
+- 영상 크기 제한: worker는 선택된 영상과 음성의 합산 크기를 사전 검사하며, 1.5GiB(1,610,612,736바이트)를 초과하면 다운로드 전에 `VIDEO_TOO_LARGE`로 실패한다. 현재 코드에 고정된 값으로 변경 적용에는 worker 재빌드·재배포가 필요하다.
 - 미구현 과제: `docs/unimplemented/current-unimplemented.md`
 - 검증: `pnpm --filter api run test`, `pnpm --filter api run test:e2e`
