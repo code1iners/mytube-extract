@@ -244,3 +244,56 @@ a {
     transition: none;
   }
 }
+
+/* 영상 입력의 읽기 순서를 유지하며 가용 폭과 글자 크기에 따라 그룹을 감싼다. */
+.video-request-options {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 16rem), 1fr));
+  gap: 16px;
+  min-width: 0;
+}
+
+.video-technical-details {
+  min-width: 0;
+  font-size: 14px;
+  color: var(--color-text-secondary);
+}
+
+.video-technical-details summary {
+  min-height: 44px;
+  align-content: center;
+  cursor: pointer;
+}
+
+.video-technical-details p {
+  margin: 8px 0 0;
+  overflow-wrap: anywhere;
+}
+
+.request-readiness-notice {
+  display: grid;
+  min-width: 0;
+  gap: 8px;
+}
+
+.request-readiness-notice p {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.request-progress {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+
+.request-progress progress {
+  width: 100%;
+  height: 8px;
+  accent-color: var(--color-status-processing);
+}
+
+.request-progress p {
+  margin: 0;
+  color: var(--color-text-primary);
+}

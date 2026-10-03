@@ -577,6 +577,8 @@ export function useExtractionRequestLifecycle<
   /** 실제 readiness 재확인과 job 접수를 수행한다. */
   const acceptRequest = useCallback(
     async function acceptRequest(request: TRequest, attempt: RequestAttempt) {
+      /** 준비 확인 실패와 실제 접수 실패를 구분한다. */
+      let isCreatingRequest = false;
       try {
         /** submit 직전 최신 readiness. */
         const readiness = await runReadinessCheck({
@@ -593,6 +595,7 @@ export function useExtractionRequestLifecycle<
         }
 
         assertWorkerAvailable(readiness);
+        isCreatingRequest = true;
 
         /** adapter가 생성한 서버 job. */
         const job = await adapter.createRequest(
@@ -675,7 +678,7 @@ export function useExtractionRequestLifecycle<
         updateState((previous) => ({
           ...previous,
           isSubmitting: false,
-          requestError: error,
+          requestError: isCreatingRequest ? error : null,
           requestNotice: '',
         }));
       } finally {

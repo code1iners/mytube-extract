@@ -556,7 +556,9 @@ describe('request lifecycle adapter seam', () => {
       await Promise.resolve();
     });
 
-    expect(latest?.phase).toBe('error');
+    expect(latest?.phase).toBe('request');
+    expect(latest?.error?.source).toBe('readiness');
+    expect(latest?.actions.submit).toBeUndefined();
     expect(latest?.readiness.status.kind).toBe('failed');
     expect(latest?.actions.retryReadiness).toBeDefined();
 

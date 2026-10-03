@@ -228,7 +228,8 @@ export function useVideoExtractLogic() {
       shouldDirty: true,
       shouldValidate: true,
     });
-    setFocus('sourceUrl');
+    // 지우기 버튼이 사라지는 렌더 뒤 현재 입력으로 포커스를 돌린다.
+    window.requestAnimationFrame(() => setFocus('sourceUrl'));
   }
 
   /** 다운로드 실행 submit 이벤트를 처리한다. */

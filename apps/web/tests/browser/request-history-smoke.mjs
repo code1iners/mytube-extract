@@ -42,6 +42,9 @@ const browser = await chromium.launch();
 
 try {
   await run('request routes do not restore stored jobs', verifyRequestRoutesDoNotRestore);
+  await run('video missing download recovers through its receipt', verifyVideoMissingDownload);
+  await run('video actual progress stops readiness after acceptance', verifyVideoActualProgress);
+  await run('video minimal readiness keeps editable input', verifyVideoMinimalReadiness);
   await run('request routes expose worker readiness and guarded refresh', verifyRequestReadinessStatus);
   await run('global usage guide disclosure stays accessible', verifyUsageGuideDisclosure);
   await run('desktop route headings share one top rhythm', verifyDesktopRouteHeadingAlignment);
@@ -167,9 +170,178 @@ async function verifySubtitleRequestErrorRecovery() {
 }
 
 /** 영상·자막 요청 route의 worker health 네 상태와 재확인을 검증한다. */
+/** 완료 주소가 없는 응답은 빈 다운로드 대신 기존 내역 조회로 복구한다. */
+async function verifyVideoMissingDownload() {
+  /** 완료 주소 복구용 독립 브라우저. */
+  const context = await createContext();
+  /** 실제 영상 화면. */
+  const { page, assertNoRuntimeErrors } = await createPage(context);
+  /** 내역 재조회에서 반환할 정상 파일 주소 여부. */
+  let hasDownload = false;
+  /** 중복 작업을 생성하지 않는지 확인할 요청 수. */
+  let createCalls = 0;
+  try {
+    await routeApi(page, async ({ request, route, url }) => {
+      if (url.pathname === '/health') return fulfillJson(route, healthResponse());
+      if (url.pathname === '/downloads' && request.method() === 'POST') {
+        createCalls += 1;
+        return fulfillJson(route, videoJob(VIDEO_ID, 'completed', { downloadUrl: null }));
+      }
+      if (url.pathname === `/downloads/${VIDEO_ID}`) {
+        return fulfillJson(route, videoJob(VIDEO_ID, 'completed', hasDownload ? {} : { downloadUrl: null }));
+      }
+      return fulfillJson(route, {}, 404);
+    });
+    await page.goto(`${staticServer.origin}/video`);
+    await page.getByRole('textbox', { name: 'YouTube URL', exact: true }).fill('https://youtu.be/abc123_DEF0');
+    /** 실제 제출 버튼. */
+    const submit = page.getByRole('button', { name: '추출 요청', exact: true });
+    await waitForEnabled(submit);
+    await submit.click();
+    await page.getByRole('heading', { name: '다운로드 주소를 확인할 수 없습니다', exact: true }).waitFor();
+    assert.equal(await page.getByRole('link', { name: '다운로드', exact: true }).count(), 0);
+    hasDownload = true;
+    await page.getByRole('link', { name: '요청 내역에서 다시 확인', exact: true }).click();
+    await page.getByRole('link', { name: '다운로드', exact: true }).waitFor();
+    assert.equal(new URL(page.url()).searchParams.get('jobId'), VIDEO_ID);
+    assert.equal(createCalls, 1);
+    assertNoRuntimeErrors();
+  } finally {
+    await context.close();
+  }
+}
+
+/** 접수된 작업의 실제 진행과 완료를 준비 오류보다 우선한다. */
+async function verifyVideoActualProgress() {
+  /** 진행 상태를 제어할 독립 context. */
+  const context = await createContext({ viewport: { width: 390, height: 844 } });
+  /** 준비 오류는 의도한 응답이다. */
+  const { page, assertNoRuntimeErrors } = await createPage(context, { ignoreHttpErrors: true });
+  /** 서버가 반환할 작업 상태. */
+  let status = 'queued';
+  /** 서버가 확인한 진행률. */
+  let progress = null;
+  /** 정상 초기 확인·제출 확인 이후 실패하는 준비 응답 횟수. */
+  let healthCalls = 0;
+  /** 준비 확인 주기를 넘겨 실제 작업 조회가 계속되는지 확인한다. */
+  let statusCalls = 0;
+  try {
+    await routeApi(page, async ({ request, route, url }) => {
+      if (url.pathname === '/health') {
+        healthCalls += 1;
+        return healthCalls > 2 ? fulfillJson(route, {}, 503) : fulfillJson(route, healthResponse());
+      }
+      if (url.pathname === '/downloads' && request.method() === 'POST') {
+        assert.deepEqual(request.postDataJSON(), { url: 'https://youtu.be/abc123_DEF0', type: 'audio', quality: '192' });
+        return fulfillJson(route, videoJob(VIDEO_ID, 'queued', { progress: null }));
+      }
+      if (url.pathname === `/downloads/${VIDEO_ID}`) {
+        statusCalls += 1;
+        return fulfillJson(route, videoJob(VIDEO_ID, status, { progress }));
+      }
+      return fulfillJson(route, {}, 404);
+    });
+    await page.goto(`${staticServer.origin}/video`);
+    await page.getByRole('textbox', { name: 'YouTube URL', exact: true }).fill('https://youtu.be/abc123_DEF0');
+    await page.getByRole('radio', { name: '192 kbps', exact: true }).check();
+    /** 제출 버튼. */
+    const submit = page.getByRole('button', { name: '추출 요청', exact: true });
+    await waitForEnabled(submit);
+    await submit.click();
+    await page.getByRole('heading', { name: '작업 대기 중입니다', exact: true }).waitFor();
+    assert.equal(await page.getByRole('progressbar').count(), 0);
+    status = 'processing';
+    progress = 50;
+    await page.getByRole('heading', { name: '파일을 추출 중입니다', exact: true }).waitFor();
+    assert.equal(await page.getByRole('progressbar', { name: '진행률' }).getAttribute('value'), '50');
+    await waitForCondition(async () => statusCalls >= 8, 25_000);
+    assert.equal(healthCalls, 2);
+    assert.equal(await page.getByRole('heading', { name: '파일을 추출 중입니다', exact: true }).count(), 1);
+    assert.equal(await page.getByRole('button', { name: '서비스 상태 다시 확인' }).count(), 0);
+    status = 'completed';
+    progress = 100;
+    await page.getByRole('link', { name: '다운로드', exact: true }).waitFor();
+    assert.equal(await page.getByRole('progressbar').count(), 0);
+    assert.equal(await page.getByText('100%', { exact: true }).count(), 0);
+    assertNoRuntimeErrors();
+  } finally {
+    await context.close();
+  }
+}
+
+/** 준비 상태와 무관한 입력 편집, 제출 직전 확인과 복구를 검증한다. */
+async function verifyVideoMinimalReadiness() {
+  /** 모바일에서 실제 폼을 사용하는 독립 context. */
+  const context = await createContext({ viewport: { width: 390, height: 844 } });
+  /** 장애 응답은 의도된 fixture다. */
+  const { page, assertNoRuntimeErrors } = await createPage(context, { ignoreHttpErrors: true });
+  /** 최초 확인을 지연시킬 해제 함수. */
+  let releaseHealth;
+  /** 최초 확인 응답 대기. */
+  const gate = new Promise((resolve) => { releaseHealth = resolve; });
+  /** 준비 확인 횟수. */
+  let healthCalls = 0;
+  /** 접수한 조건. */
+  const requests = [];
+  try {
+    await routeApi(page, async ({ request, route, url }) => {
+      if (url.pathname === '/health') {
+        healthCalls += 1;
+        if (healthCalls === 1) await gate;
+        if (healthCalls === 2) return fulfillJson(route, {}, 503);
+        if (healthCalls === 3) return fulfillJson(route, healthResponse(false));
+        return fulfillJson(route, healthResponse());
+      }
+      if (url.pathname === '/downloads' && request.method() === 'POST') {
+        requests.push(request.postDataJSON());
+        return fulfillJson(route, videoJob(VIDEO_ID, 'completed'));
+      }
+      if (url.pathname === `/downloads/${VIDEO_ID}`) return fulfillJson(route, videoJob(VIDEO_ID, 'completed'));
+      return fulfillJson(route, {}, 404);
+    });
+    await page.goto(`${staticServer.origin}/video`);
+    /** 고정된 접근성 이름으로만 입력을 찾는다. */
+    const input = page.getByRole('textbox', { name: 'YouTube URL', exact: true });
+    /** 준비 확인 중에도 보이는 제출 버튼. */
+    const submit = page.getByRole('button', { name: '추출 요청', exact: true });
+    await input.fill('https://youtu.be/abc123_DEF0');
+    await page.getByRole('radio', { name: /비디오/ }).check();
+    await page.getByRole('radio', { name: '720p', exact: true }).check();
+    assert.equal(await submit.isDisabled(), true);
+    assert.equal(requests.length, 0);
+    releaseHealth();
+    await waitForEnabled(submit);
+    assert.equal(await page.getByText('준비됨', { exact: true }).count(), 0);
+    assert.equal(await page.getByRole('button', { name: '서비스 상태 다시 확인' }).count(), 0);
+    // 제출 직전 확인이 실패하면 입력을 유지하고 접수를 막는다.
+    await submit.click();
+    await page.getByText('확인 실패', { exact: true }).waitFor();
+    assert.equal(await input.inputValue(), 'https://youtu.be/abc123_DEF0');
+    await input.fill('https://youtu.be/dQw4w9WgXcQ');
+    assert.equal(await submit.isDisabled(), true);
+    assert.equal(requests.length, 0);
+    await page.getByRole('button', { name: '서비스 상태 다시 확인' }).click();
+    await page.getByText('작업 준비 안 됨', { exact: true }).waitFor();
+    await page.getByRole('button', { name: '지우기', exact: true }).click();
+    await waitForCondition(async () => input.evaluate((element) => document.activeElement === element));
+    await input.fill('https://youtu.be/abc123_DEF0');
+    await page.getByRole('button', { name: '서비스 상태 다시 확인' }).click();
+    await waitForEnabled(submit);
+    await submit.click();
+    await page.getByRole('link', { name: '다운로드', exact: true }).waitFor();
+    assert.equal(healthCalls, 5);
+    assert.deepEqual(requests, [{ url: 'https://youtu.be/abc123_DEF0', type: 'video', quality: '720' }]);
+    assert.equal(await page.getByRole('progressbar').count(), 0);
+    assertNoRuntimeErrors();
+  } finally {
+    releaseHealth();
+    await context.close();
+  }
+}
+
 async function verifyRequestReadinessStatus() {
   /** readiness 상태를 확인할 요청 route. */
-  for (const routePath of ['/video', '/subtitles']) {
+  for (const routePath of ['/subtitles']) {
     /** readiness의 반응형 viewport 폭. */
     for (const width of [320, 390, 1280]) {
       /** readiness의 light·dark 테마. */
@@ -675,7 +847,7 @@ async function verifyVideoRequestFlows() {
     await submit.click();
     await createStartedPromise;
     await page.getByRole('heading', { name: '추출 요청을 준비하고 있습니다' }).waitFor();
-    assert.equal(await page.locator('.request-flow[data-flow-stage="extract"]').count(), 1);
+    assert.equal(await page.locator('.request-flow[data-flow-stage="extract"]').count(), 0);
 
     const historyLink = page.getByRole('link', { name: '요청 내역' });
     const videoLink = page.getByRole('link', { name: '영상 추출' });
@@ -697,7 +869,7 @@ async function verifyVideoRequestFlows() {
     releaseCreate();
     assert.equal(new URL(page.url()).pathname, '/video');
     await page.getByRole('heading', { name: '파일이 준비되었습니다' }).waitFor();
-    assert.equal(await page.locator('.request-flow[data-flow-stage="receipt"]').count(), 1);
+    assert.equal(await page.locator('.request-flow[data-flow-stage="receipt"]').count(), 0);
     assert.equal(await page.getByRole('button', { name: '요청 취소' }).count(), 0);
     assert.equal(await page.locator('.worker-health-status').count(), 0);
     const storedReceipt = await page.evaluate(
@@ -858,6 +1030,10 @@ async function verifyVideoTaskFirstLayout() {
         await page.goto(`${staticServer.origin}/video`);
         await page.getByRole('heading', { name: '영상 추출' }).waitFor();
         await page.getByLabel('YouTube URL').waitFor();
+        await documentFontsReady(page);
+        if (process.env.WEB_SMOKE_SCREENSHOTS) {
+          await page.screenshot({ path: `${process.env.WEB_SMOKE_SCREENSHOTS}/video-${width}-${theme}.png`, fullPage: true });
+        }
         /** 영상 요청 제출 button. */
         const submit = page.getByRole('button', { name: '추출 요청' });
         // 클래스 존재가 아니라 배포 스타일의 실제 우선순위를 검증한다.
@@ -866,11 +1042,7 @@ async function verifyVideoTaskFirstLayout() {
           const style = getComputedStyle(element);
           return [style.fontSize, style.fontWeight, style.lineHeight];
         }), ['18px', '600', '18px']);
-        assert.equal(await page.locator('.request-flow[data-flow-stage="source"]').count(), 1);
-        assert.deepEqual(
-          await page.locator('.request-flow__step > span:last-child').allTextContents(),
-          ['원본', '추출', '파일 수령'],
-        );
+        assert.equal(await page.getByRole('list', { name: '추출 흐름' }).count(), 0);
         assert.deepEqual(
           await page.locator('.quality-grid .quality-chip').allTextContents(),
           ['128 kbps', '192 kbps', '320 kbps'],
@@ -979,7 +1151,7 @@ async function verifyVideoTaskFirstLayout() {
           /** 영상 요청 form. */
           const form = document.querySelector('form');
           /** URL 입력을 포함한 작업 시작 field. */
-          const urlField = form?.querySelector('input[type="url"]')?.closest('label');
+          const urlField = form?.querySelector('input[type="url"]')?.closest('.field');
           /** 요청 form 안의 선택 fieldset 목록. */
           const fieldsets = [...(form?.querySelectorAll('fieldset') ?? [])];
           /** 추출 형식 선택 fieldset. */
@@ -997,7 +1169,7 @@ async function verifyVideoTaskFirstLayout() {
 
           return {
             formContainsReadiness: Boolean(form && readiness && form.contains(readiness)),
-            indexes: [readiness, urlField, formatFieldset, qualityFieldset, submit].map(
+            indexes: [urlField, formatFieldset, qualityFieldset, submit].map(
               (element) => (element ? [...document.querySelectorAll('*')].indexOf(element) : -1),
             ),
           };
@@ -1042,6 +1214,8 @@ async function verifyVideoTaskFirstLayout() {
               scrollWidth: document.documentElement.scrollWidth,
             },
             navigation: toBox(visibleNavigation),
+            format: toBox(document.querySelector('.segmented-control')),
+            quality: toBox(document.querySelector('.quality-grid')),
             header: toBox(header),
             panel: {
               backgroundColor: panelStyle?.backgroundColor,
@@ -1063,11 +1237,12 @@ async function verifyVideoTaskFirstLayout() {
         assert.equal(layoutMetrics.panel.boxShadow, 'none');
         assert.equal(layoutMetrics.panel.backgroundColor, 'rgba(0, 0, 0, 0)');
         assert.ok(layoutMetrics.url);
-        assert.ok(layoutMetrics.readiness);
-        assert.ok(layoutMetrics.readiness.top < layoutMetrics.url.top);
+        assert.equal(layoutMetrics.readiness, null);
         assert.ok(layoutMetrics.url.left >= 0);
         assert.ok(layoutMetrics.url.right <= width);
         assert.ok(layoutMetrics.submit);
+        if (width === 1280) assert.ok(Math.abs(layoutMetrics.format.top - layoutMetrics.quality.top) <= 1);
+        if (width <= 390) assert.ok(layoutMetrics.quality.top >= layoutMetrics.format.bottom);
         assert.equal(await page.locator('.submit-disabled-reason').count(), 0);
         assert.equal(
           await page.getByLabel('YouTube URL').getAttribute('aria-describedby'),
@@ -1085,7 +1260,7 @@ async function verifyVideoTaskFirstLayout() {
         }
 
         assert.equal(await page.getByRole('button', { name: '지우기' }).count(), 0);
-        await page.getByLabel('YouTube URL').fill('not-a-url');
+        await page.getByRole('textbox', { name: 'YouTube URL', exact: true }).fill('not-a-url');
         await waitForCondition(async () =>
           (await page.getByLabel('YouTube URL').getAttribute('aria-invalid')) === 'true',
         );
@@ -1122,8 +1297,32 @@ async function verifyVideoTaskFirstLayout() {
           async () => (await page.locator('.usage-guide').getAttribute('open')) === null,
         );
         await resetButton.click();
-        assert.equal(await page.getByLabel('YouTube URL').inputValue(), '');
+        assert.equal(await page.getByRole('textbox', { name: 'YouTube URL', exact: true }).inputValue(), '');
+        await waitForCondition(async () => page.getByLabel('YouTube URL', { exact: true }).evaluate((element) => document.activeElement === element));
         assert.equal(await page.getByRole('button', { name: '지우기' }).count(), 0);
+        // 긴 주소와 200% 글자 크기에서도 입력·선택·제출을 사용할 수 있어야 한다.
+        await page.getByLabel('YouTube URL', { exact: true }).fill(`https://www.youtube.com/watch?v=abc123_DEF0&list=${'x'.repeat(300)}`);
+        await page.evaluate(() => {
+          /** 입력과 실제 텍스트를 가진 요소의 확대 전 글자 크기. */
+          const sizes = [...document.querySelectorAll('body *')]
+            .filter((element) => element.matches('input[type="url"]') || [...element.childNodes].some((node) => node.nodeType === Node.TEXT_NODE && node.textContent.trim()))
+            .map((element) => [element, parseFloat(getComputedStyle(element).fontSize)]);
+          for (const [element, size] of sizes) element.style.fontSize = `${size * 2}px`;
+        });
+        await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+        await page.getByRole('radio', { name: /비디오/ }).check();
+        await page.getByRole('radio', { name: '720p', exact: true }).check();
+        await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
+        /** 확대된 제출과 하단 탭의 실제 좌표. */
+        const enlarged = await page.evaluate(() => ({
+          width: document.documentElement.clientWidth,
+          scrollWidth: document.documentElement.scrollWidth,
+          submitBottom: document.querySelector('button[type="submit"]').getBoundingClientRect().bottom,
+          tabTop: document.querySelector('.bottom-tab-bar').getBoundingClientRect().top,
+        }));
+        assert.equal(enlarged.width, enlarged.scrollWidth);
+        if (width <= 820) assert.ok(enlarged.submitBottom < enlarged.tabTop);
+        assert.equal(await page.getByRole('textbox', { name: 'YouTube URL', exact: true }).count(), 1);
         assertNoRuntimeErrors();
       } finally {
         await context.close();

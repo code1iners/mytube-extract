@@ -30,7 +30,7 @@
 
 ## 요청 접수
 
-- 영상은 worker 확인 후 `POST /downloads` 성공 시 접수증을 추가한다. 최초 health 응답이 없을 때만 status-first readiness 화면에서 form을 대체하며, 기존 `ready` form은 백그라운드 refetch 중 유지한다. 완료된 health 응답이 API 실패 또는 worker 미가용이면 form을 대체한다.
+- 영상은 준비 상태와 무관하게 입력을 표시한다. 제출 위치의 `RequestReadinessNotice`는 정상일 때 숨긴다. 제출 직전 준비 확인 실패는 생명주기의 request phase에서 처리하고, 실제 생성 요청 실패만 접수 오류로 처리한다. 영상 adapter가 `POST /downloads`를 수행한다.
 - 자막은 upload session, R2 part PUT, complete 전체가 성공한 뒤 접수증을 추가한다.
 - 접수증 key는 `mytube-extract:job-receipt:v2:<kind>:<jobId>`다.
 - value는 JSON `{ "acceptedAt": "<ISO timestamp>" }`만 저장한다.
@@ -42,8 +42,8 @@
 ## Request route query
 
 - job 생성 응답을 받기 전에는 처리 단계나 가짜 진행률 대신 경량 `accepting` 상태를 표시한다.
-- `RequestFlow`는 request/processing/error에서 `extract`, completed와 history의 완료 항목에서 `receipt`를 표시하며 API 상태 외의 진행률을 추정하지 않는다.
-- `/video`의 `U`, `/subtitles`의 `F` 단축키는 수정키·반복·text editing target을 제외하고 첫 입력 동작에 focus한다.
+- 영상은 `RequestProgress`로 서버 수치가 있을 때만 처리 진행률을 표시한다. 완료에는 막대를 표시하지 않는다. 자막·내역의 `RequestFlow`는 request/processing/error에서 `extract`, completed와 history의 완료 항목에서 `receipt`를 표시하며 API 상태 외의 진행률을 추정하지 않는다.
+- U/F 입력 이동 단축키는 제공하지 않는다.
 - 생성 응답의 `jobId`로 `/video`는 download job, `/subtitles`는 subtitle job 상태를 조회한다.
 - query key·재시도·2500ms polling·terminal 중단 정책은 history와 같은 공유 모듈을 사용한다.
 - completed는 현재 route에서 실제 `downloadUrl`을 제공하고, failed/expired는 오류 요약·접이식 기술 상세·기존 입력을 유지한 재요청 경로를 제공한다.
@@ -86,7 +86,7 @@
 - `pnpm --filter web run test`
 - `pnpm --filter web run build`
 - `pnpm run test:web:browser`
-- Browser: `/video`·`/subtitles` in-place 완료와 다운로드, 최초 health status-first gate와 백그라운드 form·입력 보존, failed/unavailable 전환·재확인, 접수 전 취소·AbortError·업로드 abort cleanup·응답 경쟁 접수증 보존, 상태 조회 오류 복구, `/history`, refresh, 두 endpoint, terminal polling, 오류별 보존/삭제, 실제 attachment, storage event/차단, mobile/desktop, `더보기` 메뉴 focus, U/F 단축키 안전성, 200% zoom, screen reader, Console/Network
+- Browser: `/video`·`/subtitles` in-place 완료와 다운로드, 영상의 최초 health·장애 중 입력과 자막의 status-first gate, 백그라운드 입력 보존, failed/unavailable 전환·재확인, 접수 전 취소·AbortError·업로드 abort cleanup·응답 경쟁 접수증 보존, 상태 조회 오류 복구, `/history`, refresh, 두 endpoint, terminal polling, 오류별 보존/삭제, 실제 attachment, storage event/차단, mobile/desktop, `더보기` 메뉴 focus, U/F 단축키 안전성, 200% zoom, screen reader, Console/Network
 
 ## 후속 보류
 
