@@ -41,6 +41,9 @@ const staticServer = await createStaticServer(outputRoot);
 const browser = await chromium.launch();
 
 try {
+  await run('video draft distinguishes late acceptance from new edits', verifyVideoLateAcceptanceDraft);
+  await run('video draft survives menu navigation', verifyVideoDraftNavigation);
+  await run('video draft clears accepted sources and survives storage failure', verifyVideoAcceptedDraftLifetime);
   await run('request routes do not restore stored jobs', verifyRequestRoutesDoNotRestore);
   await run('video missing download recovers through its receipt', verifyVideoMissingDownload);
   await run('video actual progress stops readiness after acceptance', verifyVideoActualProgress);
@@ -87,6 +90,193 @@ try {
 } finally {
   await browser.close();
   await staticServer.close();
+}
+
+/** 취소 뒤 늦게 성공한 접수는 내역에 남고 새로 편집한 초안은 보존된다. */
+async function verifyVideoLateAcceptanceDraft() {
+  for (const editAfterCancel of [false, true]) {
+    /** 취소 경쟁별 독립 탭. */
+    const context = await createContext();
+    /** 실제 앱과 브라우저 오류 검사. */
+    const { page, assertNoRuntimeErrors } = await createPage(context);
+    /** 서버 접수 응답을 취소·편집 뒤에 반환할 제어 장치. */
+    const gate = Promise.withResolvers();
+    /** 실제 생성 요청이 시작된 시점. */
+    const started = Promise.withResolvers();
+    try {
+      await page.addInitScript(() => {
+        /** 생성 요청만 취소 신호보다 성공 응답이 우선하는 통신 경계를 재현한다. */
+        const originalFetch = window.fetch;
+        window.fetch = (input, init) => originalFetch(input,
+          init?.method === 'POST' && String(input).endsWith('/downloads')
+            ? { ...init, signal: undefined }
+            : init,
+        );
+      });
+      await routeApi(page, async ({ request, route, url }) => {
+        if (url.pathname === '/health') return fulfillJson(route, healthResponse());
+        if (url.pathname === '/downloads' && request.method() === 'POST') {
+          started.resolve();
+          await gate.promise;
+          return fulfillJson(route, videoJob(VIDEO_ID, 'queued'));
+        }
+        if (url.pathname === `/downloads/${VIDEO_ID}`) return fulfillJson(route, videoJob(VIDEO_ID, 'queued'));
+        return fulfillJson(route, {}, 404);
+      });
+      await page.goto(`${staticServer.origin}/video`);
+      await page.getByLabel('YouTube URL').fill('https://youtu.be/abc123_DEF0');
+      await waitForEnabled(page.getByRole('button', { name: '추출 요청', exact: true }));
+      await page.getByRole('button', { name: '추출 요청', exact: true }).click();
+      await started.promise;
+      await page.getByRole('button', { name: '요청 취소', exact: true }).click();
+      await page.getByRole('link', { name: '자막 추출', exact: true }).click();
+      if (editAfterCancel) {
+        await page.getByRole('link', { name: '영상 추출', exact: true }).click();
+        await page.getByLabel('YouTube URL').fill('https://youtu.be/another_DEF0');
+      }
+      gate.resolve();
+      await waitForCondition(async () => await receiptCount(page) === 1);
+      if (editAfterCancel) await page.getByRole('link', { name: '자막 추출', exact: true }).click();
+      await page.getByRole('link', { name: '영상 추출', exact: true }).click();
+      assert.equal(await page.getByLabel('YouTube URL').inputValue(), editAfterCancel ? 'https://youtu.be/another_DEF0' : '');
+      assertNoRuntimeErrors();
+    } finally {
+      gate.resolve();
+      await context.close();
+    }
+  }
+}
+
+/** 미제출 영상 초안을 메뉴 복귀 뒤 실제 생성 요청까지 이어서 사용한다. */
+async function verifyVideoDraftNavigation() {
+  /** 메뉴 전환을 확인할 독립 브라우저 세션. */
+  const context = await createContext();
+  /** 실제 화면과 런타임 오류 검사. */
+  const { page, assertNoRuntimeErrors } = await createPage(context);
+  /** 서버로 전달된 생성 조건. */
+  const requests = [];
+  try {
+    await routeApi(page, async ({ request, route, url }) => {
+      if (url.pathname === '/health') return fulfillJson(route, healthResponse());
+      if (url.pathname === '/downloads' && request.method() === 'POST') {
+        requests.push(request.postDataJSON());
+        return fulfillJson(route, videoJob(VIDEO_ID, 'queued'));
+      }
+      if (url.pathname === `/downloads/${VIDEO_ID}`) return fulfillJson(route, videoJob(VIDEO_ID, 'completed'));
+      return fulfillJson(route, {}, 404);
+    });
+    await page.goto(`${staticServer.origin}/video`);
+    assert.equal(await page.locator('input[name="mode"][value="audio"]').isChecked(), true);
+    assert.equal(await page.locator('input[name="quality"][value="320"]').isChecked(), true);
+    await page.getByLabel('YouTube URL').fill('https://youtu.be/abc123_DEF0');
+    await page.locator('input[name="mode"][value="video"]').check();
+    assert.equal(await page.locator('input[name="quality"][value="1080"]').isChecked(), true);
+    await page.locator('input[name="quality"][value="720"]').check();
+    await page.getByRole('link', { name: '자막 추출', exact: true }).click();
+    await page.getByRole('heading', { name: '자막 추출', exact: true }).waitFor();
+    await page.getByRole('link', { name: '요청 내역', exact: true }).click();
+    await page.locator('.usage-guide summary').click();
+    await page.getByRole('link', { name: '설정', exact: true }).click();
+    // 다른 요청이 이후 기본값을 바꿔도 작성 중 초안과 복원 시 저장 규칙은 독립적이다.
+    await page.evaluate(() => localStorage.setItem('mytube-extract-request-preferences', JSON.stringify({
+      download: { mode: 'audio', quality: '128' }, whisperModel: 'base_en',
+    })));
+    await page.getByRole('link', { name: '영상 추출', exact: true }).click();
+    assert.equal(await page.getByLabel('YouTube URL').inputValue(), 'https://youtu.be/abc123_DEF0');
+    assert.equal(await page.locator('input[name="quality"][value="720"]').isChecked(), true);
+    await waitForEnabled(page.getByRole('button', { name: '추출 요청', exact: true }));
+    await page.getByRole('button', { name: '추출 요청', exact: true }).click();
+    await page.getByRole('heading', { name: '파일이 준비되었습니다' }).waitFor();
+    assert.deepEqual(requests, [{ url: 'https://youtu.be/abc123_DEF0', type: 'video', quality: '720' }]);
+    await page.getByRole('button', { name: '새 요청', exact: true }).click();
+    assert.equal(await page.getByLabel('YouTube URL').inputValue(), '');
+    assert.equal(await page.locator('input[name="quality"][value="720"]').isChecked(), true);
+    assert.equal(await receiptCount(page), 1);
+    assert.deepEqual(await page.evaluate(() => JSON.parse(localStorage.getItem('mytube-extract-request-preferences')).download), { mode: 'audio', quality: '128' });
+    await page.getByLabel('YouTube URL').fill('https://youtu.be/another_DEF0');
+    // 같은 브라우저의 새 탭도 원본 주소를 공유하지 않는다.
+    const otherPage = await context.newPage();
+    await routeApi(otherPage, ({ route }) => fulfillJson(route, healthResponse()));
+    await otherPage.goto(`${staticServer.origin}/video`);
+    assert.equal(await otherPage.getByLabel('YouTube URL').inputValue(), '');
+    assert.equal(await otherPage.locator('input[name="quality"][value="128"]').isChecked(), true);
+    await otherPage.close();
+    await page.reload();
+    assert.equal(await page.getByLabel('YouTube URL').inputValue(), '');
+    assert.equal(await page.locator('input[name="quality"][value="128"]').isChecked(), true);
+    await page.locator('input[name="mode"][value="video"]').check();
+    await page.locator('input[name="mode"][value="audio"]').check();
+    assert.equal(await page.locator('input[name="quality"][value="320"]').isChecked(), true);
+    assertNoRuntimeErrors();
+  } finally {
+    await context.close();
+  }
+}
+
+/** 접수된 원본의 화면 복구 수명과 저장 불가 시 메모리 선택을 확인한다. */
+async function verifyVideoAcceptedDraftLifetime() {
+  for (const status of ['queued', 'completed', 'failed', 'expired', 'status-error', 'storage-blocked']) {
+    /** 상태별로 독립된 탭과 저장 공간. */
+    const context = await createContext({ viewport: { width: 390, height: 844 } });
+    /** 상태 조회 실패만 허용하는 오류 수집기. */
+    const { page, assertNoRuntimeErrors } = await createPage(context, { ignoreHttpErrors: true });
+    /** 생성 요청 조건 기록. */
+    const requests = [];
+    try {
+      if (status === 'storage-blocked') {
+        await page.addInitScript(() => {
+          Storage.prototype.getItem = () => { throw new DOMException('blocked', 'SecurityError'); };
+          Storage.prototype.setItem = () => { throw new DOMException('blocked', 'SecurityError'); };
+        });
+      }
+      await routeApi(page, async ({ request, route, url }) => {
+        if (url.pathname === '/health') return fulfillJson(route, healthResponse());
+        if (url.pathname === '/downloads' && request.method() === 'POST') {
+          requests.push(request.postDataJSON());
+          return fulfillJson(route, videoJob(VIDEO_ID, 'queued'));
+        }
+        if (url.pathname === `/downloads/${VIDEO_ID}`) {
+          if (status === 'status-error') return fulfillJson(route, { message: 'forbidden' }, 403);
+          return fulfillJson(route, videoJob(VIDEO_ID, status === 'storage-blocked' ? 'completed' : status));
+        }
+        return fulfillJson(route, {}, 404);
+      });
+      await page.goto(`${staticServer.origin}/video`);
+      await page.getByLabel('YouTube URL').fill('https://youtu.be/abc123_DEF0');
+      await page.locator('input[name="mode"][value="video"]').check();
+      await page.locator('input[name="quality"][value="360"]').check();
+      await page.getByRole('link', { name: '자막 추출', exact: true }).click();
+      await page.getByRole('link', { name: '영상 추출', exact: true }).click();
+      assert.equal(await page.getByLabel('YouTube URL').inputValue(), 'https://youtu.be/abc123_DEF0');
+      await waitForEnabled(page.getByRole('button', { name: '추출 요청', exact: true }));
+      await page.getByRole('button', { name: '추출 요청', exact: true }).click();
+      if (['failed', 'expired', 'status-error'].includes(status)) {
+        await page.getByRole('button', { name: '요청 설정으로 돌아가기' }).click();
+        assert.equal(await page.getByLabel('YouTube URL').inputValue(), 'https://youtu.be/abc123_DEF0');
+        assert.equal(await page.locator('input[name="quality"][value="360"]').isChecked(), true);
+      } else {
+        await page.getByRole('heading', { name: status === 'queued' ? '작업 대기 중입니다' : '파일이 준비되었습니다' }).waitFor();
+      }
+      await page.getByRole('link', { name: '자막 추출', exact: true }).click();
+      await page.getByRole('link', { name: '영상 추출', exact: true }).click();
+      assert.equal(await page.getByLabel('YouTube URL').inputValue(), '', status);
+      assert.equal(await page.locator('input[name="quality"][value="360"]').isChecked(), true, status);
+      assert.deepEqual(requests, [{ url: 'https://youtu.be/abc123_DEF0', type: 'video', quality: '360' }]);
+      if (status === 'failed') {
+        await page.getByLabel('YouTube URL').fill('https://youtu.be/abc123_DEF0');
+        await waitForEnabled(page.getByRole('button', { name: '추출 요청', exact: true }));
+        await page.getByRole('button', { name: '추출 요청', exact: true }).click();
+        await page.getByRole('button', { name: '요청 설정으로 돌아가기' }).click();
+        await page.getByLabel('YouTube URL').fill('https://youtu.be/another_DEF0');
+        await page.getByRole('link', { name: '자막 추출', exact: true }).click();
+        await page.getByRole('link', { name: '영상 추출', exact: true }).click();
+        assert.equal(await page.getByLabel('YouTube URL').inputValue(), 'https://youtu.be/another_DEF0');
+      }
+      assertNoRuntimeErrors();
+    } finally {
+      await context.close();
+    }
+  }
 }
 
 async function verifyRequestRoutesDoNotRestore() {
@@ -683,6 +873,9 @@ async function verifyVideoRequestFlows() {
       'https://youtu.be/abc123_DEF0',
     );
 
+    await failurePage.getByRole('link', { name: '자막 추출', exact: true }).click();
+    await failurePage.getByRole('link', { name: '영상 추출', exact: true }).click();
+    assert.equal(await recoveredSourceUrl.inputValue(), 'https://youtu.be/abc123_DEF0');
     assert.equal(new URL(failurePage.url()).pathname, '/video');
     assert.equal(await receiptCount(failurePage), 0);
     assertFailureNoErrors();
@@ -751,6 +944,9 @@ async function verifyVideoRequestCancellation() {
     }
     assert.equal(await page.getByRole('button', { name: '요청 취소' }).count(), 0);
 
+    await page.getByRole('link', { name: '자막 추출', exact: true }).click();
+    await page.getByRole('link', { name: '영상 추출', exact: true }).click();
+    assert.equal(await sourceUrl.inputValue(), 'https://youtu.be/abc123_DEF0');
     releaseCreate();
     await page.waitForTimeout(100);
     assert.equal(await receiptCount(page), 0);

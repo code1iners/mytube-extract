@@ -166,6 +166,7 @@ export function VideoExtractPage() {
     draft,
     handleDownloadFormSubmit,
     handleModeChange,
+    handleQualityChange,
     handleSourceUrlReset,
     isDownloadPending,
     qualityOptions,
@@ -173,6 +174,7 @@ export function VideoExtractPage() {
     requestNotice,
     retryWorkerHealth,
     returnToRequest,
+    startNewRequest,
     statusErrorDetail,
     statusIconName,
     statusJob,
@@ -247,7 +249,7 @@ export function VideoExtractPage() {
             <legend className={VIDEO_OPTION_LEGEND_CLASS_NAME}>품질</legend>
             {qualityOptions.map((option) => (
               <label className={`${VIDEO_OPTION_BASE_CLASS_NAME}${draft.quality === option.value ? ` ${VIDEO_OPTION_SELECTED_CLASS_NAME}` : ''} quality-chip`} key={option.value}>
-                <input className={VIDEO_OPTION_INPUT_CLASS_NAME} type="radio" value={option.value} {...register('quality', { onChange: clearRequestError })} />
+                <input className={VIDEO_OPTION_INPUT_CLASS_NAME} type="radio" value={option.value} {...register('quality', { onChange: handleQualityChange })} />
                 {option.label}
               </label>
             ))}
@@ -337,7 +339,7 @@ export function VideoExtractPage() {
               요청 내역에서 다시 확인
             </Link>
           )}
-          <button className={VIDEO_NEW_REQUEST_BUTTON_CLASS_NAME} type="button" onClick={returnToRequest}><AppIcon name="newRequest" />새 요청</button>
+          <button className={VIDEO_NEW_REQUEST_BUTTON_CLASS_NAME} type="button" onClick={startNewRequest}><AppIcon name="newRequest" />새 요청</button>
         </div>
       </section>
     );

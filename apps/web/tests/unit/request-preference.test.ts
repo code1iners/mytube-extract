@@ -1,9 +1,11 @@
-import { afterEach, describe, expect, it, vi } from 'vitest';
-import {
-  getRequestPreferences,
-  setDownloadPreferences,
-  setSubtitleWhisperModelPreference,
-} from '../../src/app/utils/request-preference.util';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+/** 각 테스트가 새 탭처럼 독립된 메모리 선호를 사용한다. */
+let preferences: typeof import('../../src/app/utils/request-preference.util');
+
+beforeEach(async () => {
+  vi.resetModules();
+  preferences = await import('../../src/app/utils/request-preference.util');
+});
 
 afterEach(() => {
   vi.unstubAllGlobals();
@@ -16,10 +18,10 @@ describe('request preferences', () => {
 
     vi.stubGlobal('window', { localStorage: storage });
 
-    setDownloadPreferences({ mode: 'video', quality: '720' });
-    setSubtitleWhisperModelPreference('small_en');
+    preferences.setDownloadPreferences({ mode: 'video', quality: '720' });
+    preferences.setSubtitleWhisperModelPreference('small_en');
 
-    expect(getRequestPreferences()).toEqual({
+    expect(preferences.getRequestPreferences()).toEqual({
       download: { mode: 'video', quality: '720' },
       whisperModel: 'small_en',
     });
@@ -37,9 +39,26 @@ describe('request preferences', () => {
 
     vi.stubGlobal('window', { localStorage: storage });
 
-    expect(getRequestPreferences()).toEqual({
+    expect(preferences.getRequestPreferences()).toEqual({
       download: { mode: 'video', quality: '1080' },
       whisperModel: 'base_en',
+    });
+  });
+
+  it('keeps newer selections when only writes fail and persists them when storage recovers', () => {
+    /** 쓰기 실패 전에 저장돼 있던 선택. */
+    const storage = createStorage('{"download":{"mode":"audio","quality":"128"},"whisperModel":"base_en"}');
+    /** 저장 공간 부족을 재현하는 쓰기 경계. */
+    const write = vi.spyOn(storage, 'setItem').mockImplementation(() => {
+      throw new DOMException('Quota exceeded.', 'QuotaExceededError');
+    });
+    vi.stubGlobal('window', { localStorage: storage });
+    preferences.setDownloadPreferences({ mode: 'video', quality: '360' });
+    expect(preferences.getRequestPreferences().download).toEqual({ mode: 'video', quality: '360' });
+    write.mockRestore();
+    preferences.setSubtitleWhisperModelPreference('small_en');
+    expect(JSON.parse(storage.getItem('mytube-extract-request-preferences') ?? '{}')).toEqual({
+      download: { mode: 'video', quality: '360' }, whisperModel: 'small_en',
     });
   });
 
@@ -56,14 +75,18 @@ describe('request preferences', () => {
 
     vi.stubGlobal('window', { localStorage: unavailableStorage });
 
-    expect(getRequestPreferences()).toEqual({
+    expect(preferences.getRequestPreferences()).toEqual({
       download: { mode: 'audio', quality: '320' },
       whisperModel: 'base_en',
     });
     expect(() =>
-      setDownloadPreferences({ mode: 'video', quality: '720' }),
+      preferences.setDownloadPreferences({ mode: 'video', quality: '720' }),
     ).not.toThrow();
-    expect(() => setSubtitleWhisperModelPreference('small_en')).not.toThrow();
+    expect(() => preferences.setSubtitleWhisperModelPreference('small_en')).not.toThrow();
+    expect(preferences.getRequestPreferences()).toEqual({
+      download: { mode: 'video', quality: '720' },
+      whisperModel: 'small_en',
+    });
   });
 });
 

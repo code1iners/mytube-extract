@@ -7,6 +7,7 @@
 - shared layout/header/primary navigation/bottom tabs: `apps/web/src/app/components/*`
 - API client: `apps/web/src/api/mytube-extract.api.ts`
 - receipt storage: `apps/web/src/app/utils/job-receipt.util.ts`
+- request draft memory: `apps/web/src/app/utils/request-draft.util.ts` (영상 전용 공간, 주소 영속화 없음)
 - request preference storage: `apps/web/src/app/utils/request-preference.util.ts`
 - shared job polling: `apps/web/src/app/utils/job-status-polling.util.ts`
 - extraction request lifecycle: `apps/web/src/app/hooks/use-extraction-request-lifecycle.ts`, `apps/web/src/app/adapters/*-request.adapter.ts`
@@ -56,7 +57,9 @@
 
 - key는 `mytube-extract-request-preferences`다.
 - 다운로드 형식·형식에 맞는 품질·Whisper 모델만 저장한다.
-- 서버 지원 선택지 밖의 값, 손상된 JSON, 차단된 localStorage는 제품 기본값으로 안전하게 폴백한다.
+- 서버 지원 선택지 밖의 값과 손상된 JSON은 제품 기본값으로 안전하게 폴백한다. 저장 실패 이후의 선택은 현재 탭 메모리에서 유지하며 새로고침 복원은 보장하지 않는다.
+- 영상은 직접 형식·품질을 바꿀 때만 저장한다. 초안 복원·화면 재진입은 저장하지 않는다. 이후 기본값은 영상 미제출 초안과 별개이며 자막 선택 저장 시에도 보존한다.
+- 영상 미제출 주소·선택은 같은 탭 메뉴 이동 중 유지한다. 접수된 원본은 현재 화면의 오류 복구에만 사용하고 메뉴 재진입에서는 비운다. 완료 후 새 요청은 주소만 비우고 현재 선택을 유지한다. 자세한 수명은 `routes/video.md`를 따른다.
 
 ## History query
 

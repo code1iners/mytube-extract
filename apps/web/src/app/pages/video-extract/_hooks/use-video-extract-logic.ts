@@ -1,12 +1,11 @@
 import { zodResolver } from '@hookform/resolvers/zod';
-import { type ChangeEvent, useEffect, useMemo } from 'react';
+import { type ChangeEvent, useEffect, useMemo, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import {
   AUDIO_QUALITY_OPTIONS,
   type DownloadDraft,
   type DownloadDisplayStatus,
   type DownloadResponse,
-  INITIAL_DOWNLOAD_DRAFT,
   VIDEO_QUALITY_OPTIONS,
   downloadDraftSchema,
   getDefaultDownloadQuality,
@@ -29,10 +28,8 @@ import {
   createJobStatusRequestErrorDetail,
   createTerminalJobErrorDetail,
 } from '../../../utils/job-status-polling.util';
-import {
-  getRequestPreferences,
-  setDownloadPreferences,
-} from '../../../utils/request-preference.util';
+import { setDownloadPreferences } from '../../../utils/request-preference.util';
+import { getVideoRequestDraft } from '../../../utils/request-draft.util';
 import {
   getWorkerHealthSubmitReason,
 } from '../../../utils/worker-health-notice.util';
@@ -66,8 +63,12 @@ export function useVideoExtractLogic() {
 
   // Hooks.
 
+  /** 화면을 떠나도 남는 미제출 입력과 접수 여부. */
+  const [requestDraft] = useState(getVideoRequestDraft);
+
   /** 다운로드 입력 form 상태. */
   const {
+    getValues,
     handleSubmit,
     register,
     setFocus,
@@ -75,10 +76,7 @@ export function useVideoExtractLogic() {
     watch,
     formState: { isValid },
   } = useForm<DownloadDraft>({
-    defaultValues: {
-      ...INITIAL_DOWNLOAD_DRAFT,
-      ...getRequestPreferences().download,
-    },
+    defaultValues: requestDraft.value,
     mode: 'onChange',
     resolver: zodResolver(downloadDraftSchema),
   });
@@ -90,8 +88,24 @@ export function useVideoExtractLogic() {
   const validation = validateDownloadDraft(draft);
   /** 영상 요청 통신을 lifecycle adapter seam에 연결한다. */
   const videoRequestAdapter = useMemo(
-    () => createVideoRequestAdapter({ apiBaseUrl }),
-    [apiBaseUrl],
+    () => {
+      /** 기존 생명주기의 통신·취소 계약을 유지할 영상 어댑터. */
+      const adapter = createVideoRequestAdapter({ apiBaseUrl });
+      return {
+        ...adapter,
+        async createRequest(input: DownloadDraft, signal: AbortSignal) {
+          /** 취소 뒤 새로 작성한 초안을 늦은 응답으로 초기화하지 않도록 접수 시점을 잡는다. */
+          const submittedRevision = requestDraft.revision;
+          /** 취소 뒤 늦게 도착해도 실제 접수된 원본은 다음 초안으로 복원하지 않는다. */
+          const job = await adapter.createRequest(input, signal);
+          if (requestDraft.revision === submittedRevision) {
+            requestDraft.accepted = true;
+          }
+          return job;
+        },
+      };
+    },
+    [apiBaseUrl, requestDraft],
   );
   /** 영상 route가 사용하는 추출 요청 생명주기 deep module. */
   const requestLifecycle = useExtractionRequestLifecycle({
@@ -158,8 +172,10 @@ export function useVideoExtractLogic() {
     );
   }
 
-  /** 입력 변경 후 이전 실패 상태를 초기화한다. */
+  /** 직접 편집한 입력은 새 미제출 초안으로 구분하고 이전 실패 상태를 지운다. */
   function clearRequestError() {
+    requestDraft.revision += 1;
+    requestDraft.accepted = false;
     requestLifecycle.actions.clearRequestError();
   }
 
@@ -196,29 +212,56 @@ export function useVideoExtractLogic() {
     focusRequestStart();
   }
 
+  /** 완료 후 주소만 비우고 현재 선택으로 새 초안을 시작한다. */
+  function startNewRequest() {
+    requestDraft.revision += 1;
+    requestDraft.accepted = false;
+    setValue('sourceUrl', '', { shouldDirty: true, shouldValidate: true });
+    requestDraft.value = getValues();
+    requestLifecycle.actions.reset?.();
+    focusRequestStart();
+  }
+
   // Effects.
 
   useEffect(
-    function persistDownloadPreferences() {
-      setDownloadPreferences({ mode: draft.mode, quality: draft.quality });
+    function preserveVideoDraft() {
+      requestDraft.value = {
+        sourceUrl: draft.sourceUrl,
+        mode: draft.mode,
+        quality: draft.quality,
+      };
     },
-    [draft.mode, draft.quality],
+    [draft.sourceUrl, draft.mode, draft.quality, requestDraft],
   );
-
 
   // Handlers.
 
   /** 다운로드 형식 변경 이벤트를 처리한다. */
   function handleModeChange(event: ChangeEvent<HTMLInputElement>) {
     clearRequestError();
+    /** 직접 선택한 형식의 기본 품질을 현재 입력과 이후 기본값에 함께 반영한다. */
+    const mode = event.target.value as DownloadDraft['mode'];
+    /** 기존 형식 전환 규칙에 따른 품질. */
+    const quality = getDefaultDownloadQuality(mode);
+    setDownloadPreferences({ mode, quality });
     setValue(
       'quality',
-      getDefaultDownloadQuality(event.target.value as DownloadDraft['mode']),
+      quality,
       {
         shouldDirty: true,
         shouldValidate: true,
       },
     );
+  }
+
+  /** 직접 품질을 바꿀 때만 이후 기본값을 갱신한다. */
+  function handleQualityChange(event: ChangeEvent<HTMLInputElement>) {
+    clearRequestError();
+    setDownloadPreferences({
+      mode: getValues('mode'),
+      quality: event.target.value as DownloadDraft['quality'],
+    });
   }
 
   /** YouTube URL 입력값을 비우고 다시 입력할 수 있게 focus를 돌린다. */
@@ -248,6 +291,7 @@ export function useVideoExtractLogic() {
     filledProgressCells,
     handleDownloadFormSubmit: handleSubmit(handleDownloadSubmit),
     handleModeChange,
+    handleQualityChange,
     handleSourceUrlReset,
     isDownloadPending: isSubmitting,
     progressLabel,
@@ -266,6 +310,7 @@ export function useVideoExtractLogic() {
     cancelRequest,
     requestNotice,
     returnToRequest,
+    startNewRequest,
     validation,
     viewPhase,
     workerHealthFailed,
