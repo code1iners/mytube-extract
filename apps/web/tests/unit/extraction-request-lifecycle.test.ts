@@ -768,42 +768,53 @@ describe('request lifecycle adapter seam', () => {
   });
 
   it('keeps both receipts when a cancelled history acceptance finishes during the next request', async () => {
+    /** 서로 다른 종류를 한 생명주기에 전달할 공개 입력. */
+    type MixedRequest = { kind: 'video' | 'subtitle' };
     /** 취소된 요청과 새 요청의 성공 순서를 직접 제어한다. */
     const first = createDeferred<TestVideoJob>();
     const second = createDeferred<TestVideoJob>();
     /** 공개 인터페이스와 저장 경계에서 관찰할 결과. */
-    let latest: RequestLifecycleResult<TestVideoJob, TestVideoJob> | undefined;
+    let latest: RequestLifecycleResult<MixedRequest, TestVideoJob> | undefined;
     const saved: string[] = [];
     const locks: boolean[] = [];
     let calls = 0;
     let renderer: ReturnType<typeof create>;
-    const options: UseExtractionRequestLifecycleOptions<TestVideoJob, TestVideoJob, 'video'> = {
-      adapter: createInMemoryRequestLifecycleAdapter({
-        kind: 'video', readiness: readyResponse,
-        createRequest: async () => (++calls === 1 ? first.promise : second.promise),
-        getStatus: async () => { throw new Error('내역 목록이 상태를 조회해야 합니다.'); },
-      }),
+    const options: UseExtractionRequestLifecycleOptions<MixedRequest, TestVideoJob, 'video' | 'subtitle'> = {
+      adapter: {
+        ...createInMemoryRequestLifecycleAdapter<MixedRequest, TestVideoJob, 'video' | 'subtitle'>({
+          kind: 'video', readiness: readyResponse,
+          createRequest: async () => (++calls === 1 ? first.promise : second.promise),
+          getStatus: async () => { throw new Error('내역 목록이 상태를 조회해야 합니다.'); },
+        }),
+        kind: (request) => request.kind,
+      },
       trackAcceptedJob: false,
       messages: { cancelled: '접수 취소', unavailable: '준비 실패' },
       navigation: { setLocked: (locked) => locks.push(locked), setHistoryDestination: () => undefined },
-      receiptStore: { save: (_kind, jobId) => {
-        saved.push(jobId);
-        return { storageFailed: true, to: `/history?kind=video&jobId=${jobId}` };
+      receiptStore: { save: (kind, jobId) => {
+        saved.push(`${kind}:${jobId}`);
+        return { storageFailed: true, to: `/history?kind=${kind}&jobId=${jobId}` };
       } },
     };
+    /** 동일 생명주기의 혼합 요청 결과를 관찰한다. */
+    function MixedLifecycleProbe() {
+      latest = useExtractionRequestLifecycle(options);
+      return null;
+    }
     await act(async () => {
-      renderer = create(createElement(LifecycleProbe, { options, onValue: (value) => { latest = value; } }));
+      renderer = create(createElement(MixedLifecycleProbe));
     });
-    await act(async () => { latest?.actions.submit?.(createJob()); });
+    await act(async () => { latest?.actions.submit?.({ kind: 'subtitle' }); });
     await act(async () => { latest?.actions.cancel?.(); });
-    await act(async () => { latest?.actions.submit?.(createJob()); });
+    await act(async () => { latest?.actions.submit?.({ kind: 'video' }); });
     await act(async () => { first.resolve(createJob({ jobId: 'old-request' })); });
-    expect(saved).toEqual(['old-request']);
+    expect(saved).toEqual(['subtitle:old-request']);
     expect(latest?.phase).toBe('accepting');
     expect(locks.at(-1)).toBe(true);
     await act(async () => { second.resolve(createJob({ jobId: 'new-request' })); });
-    expect(saved).toEqual(['old-request', 'new-request']);
+    expect(saved).toEqual(['subtitle:old-request', 'video:new-request']);
     expect(latest?.receipt?.jobId).toBe('new-request');
+    expect(latest?.receipt?.kind).toBe('video');
     expect(latest?.canSubmit).toBe(true);
     expect(latest?.error).toBeNull();
     expect(latest?.receiptStorageFailed).toBe(true);

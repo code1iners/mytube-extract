@@ -41,6 +41,8 @@ const staticServer = await createStaticServer(outputRoot);
 const browser = await chromium.launch();
 
 try {
+  await run('subtitle history retry preserves files, modes, drafts and defaults', verifyHistorySubtitleRetry);
+  await run('subtitle history retry handles selection, upload and cancellation boundaries', verifyHistorySubtitleBoundaries);
   await run('history retry prunes the oldest deep link after successful storage', verifyHistoryDeepLinkRetention);
   await run('history retry trims session receipts permanently at twenty', verifyHistorySessionRetention);
   await run('history retry failure cancellation and storage boundaries', verifyHistoryRetryBoundaries);
@@ -87,7 +89,7 @@ try {
   await run('blocked storage reports undo restoration failure', verifyHistoryUndoStorageFailure);
   await run('cross-tab delete and re-add stay synchronized', verifyCrossTabStorage);
   await run('blocked localStorage keeps the deep-link item', verifyBlockedStorageFallback);
-  await run('failed video uses direct retry and subtitle keeps its route', verifyRetryRoutes);
+  await run('failed video and subtitle expose direct retry', verifyRetryRoutes);
   await run('empty history explains both request paths and retention', verifyEmptyHistoryProductModel);
   await run('history keeps video titles and identifies untitled requests', verifyHistoryTitles);
   await run('history replaces the source link with an acquired title before failure', verifyHistoryTitleArrivalDuringProcessing);
@@ -284,6 +286,219 @@ async function verifyHistoryRetryBoundaries() {
   }
 }
 
+/** 파일 재선택은 이전 처리 방식으로 전송하고 두 종류의 초안은 보존한다. */
+async function verifyHistorySubtitleRetry() {
+  for (const status of ['failed', 'expired']) {
+    for (const model of ['base_en', 'small_en']) {
+      /** 상태·처리 방식마다 독립된 저장소와 브라우저. */
+      const context = await createContext({ viewport: { width: 390, height: 844 } });
+      const { page, assertNoRuntimeErrors } = await createPage(context);
+      const uploads = [];
+      const bodies = [];
+      let completes = 0;
+      try {
+        await seedReceipts(page, [['subtitle', SUBTITLE_ID, '2026-08-11T00:00:00.000Z']]);
+        await page.route('https://upload.example/**', async (route) => {
+          bodies.push(route.request().postDataBuffer().toString());
+          return route.fulfill({ status: 200, body: '', headers: {
+            'Access-Control-Allow-Origin': '*', 'Access-Control-Expose-Headers': 'ETag', ETag: '"part"',
+          } });
+        });
+        await routeApi(page, async ({ request, route, url }) => {
+          if (url.pathname === '/health') return fulfillJson(route, healthResponse());
+          if (url.pathname === `/subtitles/jobs/${SUBTITLE_ID}`) return fulfillJson(route, { ...subtitleJob(SUBTITLE_ID, status), whisperModel: model });
+          if (url.pathname === '/subtitles/uploads') {
+            uploads.push(request.postDataJSON());
+            return fulfillJson(route, { expiresAt: '2026-10-05T12:00:00.000Z', objectKey: 'source/retry.mp4', partSizeBytes: 1024,
+              parts: [{ partNumber: 1, uploadUrl: 'https://upload.example/retry' }], uploadId: 'retry-upload', uploadToken: 'retry-token' });
+          }
+          if (url.pathname === '/subtitles/uploads/complete') {
+            completes += 1;
+            return fulfillJson(route, { ...subtitleJob(SUBTITLE_OTHER_ID, 'queued'), whisperModel: model });
+          }
+          if (url.pathname === `/subtitles/jobs/${SUBTITLE_OTHER_ID}`) return fulfillJson(route, { ...subtitleJob(SUBTITLE_OTHER_ID, 'completed'), fileName: '재선택 완료.mp4', whisperModel: model });
+          return fulfillJson(route, {}, 404);
+        });
+        await page.goto(`${staticServer.origin}/video`);
+        await page.getByLabel('YouTube URL').fill('https://youtu.be/abc123_DEF0');
+        await page.locator('input[name="quality"][value="192"]').check();
+        await page.getByRole('link', { name: '자막 추출', exact: true }).click();
+        await page.locator('input[type="file"]').setInputFiles({ name: '초안.mp4', mimeType: 'video/mp4', buffer: Buffer.from('draft bytes') });
+        await page.getByRole('radio', { name: model === 'base_en' ? /정확도 우선/ : /속도 우선/ }).check();
+        await page.getByRole('link', { name: '요청 내역', exact: true }).click();
+        /** 키보드로 연 네이티브 선택기에 새 파일을 직접 전달한다. */
+        const retry = page.getByRole('button', { name: '다시 요청', exact: true });
+        await waitForEnabled(retry);
+        await retry.focus();
+        const chooserPromise = page.waitForEvent('filechooser');
+        await page.keyboard.press('Enter');
+        const chooser = await chooserPromise;
+        await chooser.setFiles({ name: '재선택.mp4', mimeType: 'video/mp4', buffer: Buffer.from('reselected bytes') });
+        await page.getByRole('heading', { name: '재선택 완료.mp4', exact: true }).waitFor();
+        assert.equal(completes, 1);
+        assert.equal(uploads.length, 1);
+        assert.equal(uploads[0].fileName, '재선택.mp4');
+        assert.equal(uploads[0].whisperModel, model);
+        assert.deepEqual(bodies, ['reselected bytes']);
+        assert.equal(new URL(page.url()).pathname, '/history');
+        assert.equal(await page.locator('.history-item').count(), 2);
+        assert.equal(await page.getByRole('link', { name: '다운로드', exact: true }).count(), 1);
+        await waitForCondition(async () => page.getByRole('heading', { name: '재선택 완료.mp4', exact: true }).evaluate((element) => document.activeElement === element));
+        assert.ok(await page.evaluate((key) => localStorage.getItem(key), receiptKey('subtitle', SUBTITLE_ID)));
+        assert.ok(await page.evaluate((key) => localStorage.getItem(key), receiptKey('subtitle', SUBTITLE_OTHER_ID)));
+        await page.getByRole('link', { name: '영상 추출', exact: true }).click();
+        assert.equal(await page.getByLabel('YouTube URL').inputValue(), 'https://youtu.be/abc123_DEF0');
+        assert.equal(await page.locator('input[name="quality"][value="192"]').isChecked(), true);
+        await page.getByRole('link', { name: '자막 추출', exact: true }).click();
+        await page.getByText('초안.mp4', { exact: true }).waitFor();
+        assert.equal(await page.getByRole('radio', { name: model === 'base_en' ? /정확도 우선/ : /속도 우선/ }).isChecked(), true);
+        assert.deepEqual(await page.evaluate(() => JSON.parse(localStorage.getItem('mytube-extract-request-preferences'))), { download: { mode: 'audio', quality: '192' }, whisperModel: model });
+        await page.reload();
+        assert.equal(await page.getByRole('radio', { name: model === 'base_en' ? /속도 우선/ : /정확도 우선/ }).isChecked(), true);
+        assert.equal(await page.getByText('초안.mp4', { exact: true }).count(), 0);
+        assertNoRuntimeErrors();
+      } finally { await context.close(); }
+    }
+  }
+}
+
+/** 파일 오류·취소·실패·늦은 성공과 다른 종류의 중복 실행을 같은 화면에서 확인한다. */
+async function verifyHistorySubtitleBoundaries() {
+  for (const outcome of ['selection', 'missing-model', 'readiness-error', 'too-large', 'upload-error', 'cancel-upload', 'late-success', 'storage']) {
+    /** 취소 또는 저장 차단 이전에 멈출 네트워크 경계. */
+    let release;
+    const gate = new Promise((resolve) => { release = resolve; });
+    const context = await createContext({ viewport: { width: outcome === 'upload-error' ? 320 : outcome === 'late-success' ? 1280 : 390, height: 844 } });
+    const { page, assertNoRuntimeErrors } = await createPage(context, { ignoreHttpErrors: true });
+    let uploads = 0;
+    let completes = 0;
+    let aborts = 0;
+    let videos = 0;
+    let recovered = false;
+    let readinessFailed = false;
+    try {
+      await page.emulateMedia({ colorScheme: outcome === 'storage' ? 'dark' : 'light' });
+      await seedReceipts(page, [['subtitle', SUBTITLE_ID, '2026-08-11T00:00:00.000Z'], ['video', VIDEO_ID, '2026-08-11T00:01:00.000Z']]);
+      await page.route('https://upload.example/**', async (route) => {
+        if (outcome === 'cancel-upload' || outcome === 'upload-error') await gate;
+        return route.fulfill({ status: outcome === 'upload-error' ? 500 : 200, body: '', headers: {
+          'Access-Control-Allow-Origin': '*', 'Access-Control-Expose-Headers': 'ETag', ETag: '"part"',
+        } });
+      });
+      await routeApi(page, async ({ request, route, url }) => {
+        if (url.pathname === '/health') return fulfillJson(route, readinessFailed ? {} : healthResponse(), readinessFailed ? 503 : 200);
+        if (url.pathname === `/subtitles/jobs/${SUBTITLE_ID}`) return fulfillJson(route, { ...subtitleJob(SUBTITLE_ID, 'failed'), whisperModel: outcome === 'missing-model' && !recovered ? null : 'small_en' });
+        if (url.pathname === `/downloads/${VIDEO_ID}`) return fulfillJson(route, videoJob(VIDEO_ID, 'failed', { sourceUrl: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ' }));
+        if (url.pathname === '/downloads' && request.method() === 'POST') { videos += 1; return fulfillJson(route, videoJob(VIDEO_OTHER_ID, 'queued')); }
+        if (url.pathname === `/downloads/${VIDEO_OTHER_ID}`) return fulfillJson(route, videoJob(VIDEO_OTHER_ID, 'completed'));
+        if (url.pathname === '/subtitles/uploads') {
+          uploads += 1;
+          if (outcome === 'too-large') return fulfillJson(route, {}, 413);
+          return fulfillJson(route, { expiresAt: '2026-10-05T12:00:00.000Z', objectKey: 'source/retry.mp4', partSizeBytes: 1024,
+            parts: [{ partNumber: 1, uploadUrl: 'https://upload.example/retry' }], uploadId: 'retry-upload', uploadToken: 'retry-token' });
+        }
+        if (url.pathname === '/subtitles/uploads/complete') { completes += 1; await gate; return fulfillJson(route, subtitleJob(SUBTITLE_OTHER_ID, 'queued')); }
+        if (url.pathname === '/subtitles/uploads/abort') { aborts += 1; return fulfillJson(route, {}); }
+        if (url.pathname === `/subtitles/jobs/${SUBTITLE_OTHER_ID}`) return fulfillJson(route, { ...subtitleJob(SUBTITLE_OTHER_ID, 'completed'), fileName: '새 자막.mp4' });
+        return fulfillJson(route, {}, 404);
+      });
+      await page.goto(`${staticServer.origin}/video`);
+      await page.getByLabel('YouTube URL').fill('https://youtu.be/abc123_DEF0');
+      await page.locator('input[name="quality"][value="192"]').check();
+      await page.getByRole('link', { name: '자막 추출', exact: true }).click();
+      await page.locator('input[type="file"]').setInputFiles({ name: '보존 초안.mp4', mimeType: 'video/mp4', buffer: Buffer.from('draft') });
+      await page.getByRole('link', { name: '요청 내역', exact: true }).click();
+      await page.evaluate(() => localStorage.setItem('mytube-extract-request-preferences', JSON.stringify({ download: { mode: 'audio', quality: '192' }, whisperModel: 'base_en' })));
+      const row = page.locator('article').filter({ has: page.locator(`#history-item-subtitle-${SUBTITLE_ID}`) });
+      const retry = row.getByRole('button', { name: '다시 요청', exact: true });
+      if (outcome === 'missing-model') {
+        await row.getByText('재요청 조건을 확인할 수 없습니다. 상태를 다시 확인해 주세요.', { exact: true }).waitFor();
+        assert.equal(await retry.isDisabled(), true);
+        recovered = true;
+        await row.getByRole('button', { name: '다시 확인', exact: true }).click();
+        await waitForEnabled(retry);
+        assert.equal(uploads, 0);
+        assert.equal(await row.getByRole('heading').evaluate((element) => document.activeElement === element), true);
+        continue;
+      }
+      await waitForEnabled(retry);
+      const chooserPromise = page.waitForEvent('filechooser');
+      await retry.click();
+      const chooser = await chooserPromise;
+      if (outcome === 'selection') {
+        await page.locator('input[type="file"]').dispatchEvent('cancel');
+        await row.getByText(/파일 선택을 취소했습니다/).waitFor();
+        await waitForCondition(async () => row.getByRole('heading').evaluate((element) => document.activeElement === element));
+        const invalidChooserPromise = page.waitForEvent('filechooser');
+        await retry.click();
+        const invalidChooser = await invalidChooserPromise;
+        await invalidChooser.setFiles({ name: 'bad.txt', mimeType: 'text/plain', buffer: Buffer.from('bad') });
+        await row.getByText('mp4, mov, webm 영상 파일만 사용할 수 있습니다.', { exact: true }).waitFor();
+        assert.equal(uploads, 0);
+        assert.equal(completes, 0);
+        assert.equal(await page.evaluate(() => JSON.parse(localStorage.getItem('mytube-extract-request-preferences')).whisperModel), 'base_en');
+        continue;
+      }
+      if (outcome === 'readiness-error') readinessFailed = true;
+      await chooser.setFiles({ name: 'retry.mp4', mimeType: 'video/mp4', buffer: Buffer.from('new file') });
+      if (outcome === 'readiness-error') {
+        await row.getByRole('button', { name: '서비스 상태 다시 확인', exact: true }).waitFor();
+        readinessFailed = false;
+        await row.getByRole('button', { name: '서비스 상태 다시 확인', exact: true }).click();
+        await waitForEnabled(retry);
+        assert.equal(uploads, 0);
+        assert.equal(await row.getByRole('heading').evaluate((element) => document.activeElement === element), true);
+        continue;
+      }
+      if (outcome === 'too-large') {
+        await row.getByRole('alert').filter({ hasText: '파일이 너무 큽니다' }).waitFor();
+      } else {
+        await row.getByRole('button', { name: '접수 취소', exact: true }).waitFor();
+        if (['late-success', 'storage'].includes(outcome)) await waitForCondition(async () => completes === 1);
+        else await page.getByRole('progressbar', { name: '원본 업로드 진행률' }).waitFor();
+        // 렌더된 비활성 버튼과 같은 이벤트 루프의 반복 클릭 모두 새 요청을 만들지 않는다.
+        await page.getByRole('button', { name: /접수 중|다시 요청/ }).evaluateAll((buttons) => buttons.forEach((button) => { button.click(); button.click(); }));
+        assert.equal(videos, 0);
+        assert.equal(await page.getByRole('link', { name: '영상 추출', exact: true }).getAttribute('aria-disabled'), 'true');
+        if (process.env.WEB_SMOKE_SCREENSHOTS) await page.screenshot({ path: `${process.env.WEB_SMOKE_SCREENSHOTS}/subtitle-history-${outcome}.png`, fullPage: true });
+        if (outcome === 'cancel-upload' || outcome === 'late-success') {
+          await row.getByRole('button', { name: '접수 취소', exact: true }).click();
+          await row.getByText(/접수를 중단했습니다/).waitFor();
+          if (outcome === 'late-success') {
+            await page.locator('article').filter({ has: page.locator(`#history-item-video-${VIDEO_ID}`) }).getByRole('button', { name: '다시 요청', exact: true }).click();
+            await waitForCondition(async () => videos === 1);
+          }
+        }
+        if (outcome === 'storage') await page.evaluate(() => { Storage.prototype.setItem = () => { throw new DOMException('blocked', 'QuotaExceededError'); }; });
+        release();
+        if (outcome === 'upload-error') await row.getByRole('alert').filter({ hasText: '요청을 접수하지 못했습니다' }).waitFor();
+        if (outcome === 'upload-error' || outcome === 'cancel-upload') { await waitForCondition(async () => aborts === 1); assert.equal(completes, 0); }
+        if (outcome === 'late-success' || outcome === 'storage') {
+          await page.getByRole('heading', { name: '새 자막.mp4', exact: true }).waitFor();
+          assert.equal(completes, 1);
+          await page.getByRole('link', { name: '자막 추출', exact: true }).click();
+          await page.getByText('보존 초안.mp4', { exact: true }).waitFor();
+          assert.equal(await page.getByRole('radio', { name: /속도 우선/ }).isChecked(), true);
+          await page.getByRole('link', { name: '요청 내역', exact: true }).click();
+          await page.getByRole('heading', { name: '새 자막.mp4', exact: true }).waitFor();
+        }
+      }
+      assert.equal(uploads, 1);
+      if (!['late-success', 'storage'].includes(outcome)) {
+        assert.equal(await page.evaluate(() => JSON.parse(localStorage.getItem('mytube-extract-request-preferences')).whisperModel), 'base_en');
+        assert.equal(await page.locator('.history-item').count(), 2);
+      }
+      await page.getByRole('link', { name: '영상 추출', exact: true }).click();
+      assert.equal(await page.getByLabel('YouTube URL').inputValue(), 'https://youtu.be/abc123_DEF0');
+      assert.equal(await page.locator('input[name="quality"][value="192"]').isChecked(), true);
+      await page.getByRole('link', { name: '자막 추출', exact: true }).click();
+      await page.getByText('보존 초안.mp4', { exact: true }).waitFor();
+      assert.equal(await page.getByRole('radio', { name: /속도 우선/ }).isChecked(), true);
+      assertNoRuntimeErrors();
+    } finally { release(); await context.close(); }
+  }
+}
+
 /** 실패·만료의 두 형식은 한 번의 실행으로 새 접수증을 만들고 독립 초안을 보존한다. */
 async function verifyHistoryVideoRetry() {
   for (const type of ['video', 'audio']) {
@@ -368,7 +583,7 @@ async function verifyHistoryMinimalList() {
     });
     await page.goto(`${staticServer.origin}/history`);
     await page.getByRole('link', { name: '다운로드', exact: true }).waitFor();
-    assert.equal(await page.getByRole('link', { name: '다시 요청', exact: true }).isVisible(), true);
+    assert.equal(await page.getByRole('button', { name: '다시 요청', exact: true }).isVisible(), true);
     assert.equal(await page.getByRole('button', { name: /내역에서 삭제/ }).count(), 0);
     assert.equal(await page.getByRole('progressbar').count(), 0);
     assert.equal(await page.locator('.request-flow').count(), 0);
@@ -4585,13 +4800,8 @@ async function verifyRetryRoutes() {
     });
     await page.goto(`${staticServer.origin}/history`);
 
-    const retryLinks = page.getByRole('link', { name: '다시 요청' });
-    await waitForCondition(async () => (await retryLinks.count()) === 1);
-    assert.equal(await page.getByRole('button', { name: '다시 요청' }).count(), 1);
-    assert.deepEqual(
-      (await retryLinks.evaluateAll((links) => links.map((link) => link.getAttribute('href')))).sort(),
-      ['/subtitles'],
-    );
+    await waitForCondition(async () => (await page.getByRole('button', { name: '다시 요청' }).count()) === 2);
+    assert.equal(await page.getByRole('link', { name: '다시 요청' }).count(), 0);
     assertNoRuntimeErrors();
   } finally {
     await context.close();
@@ -5252,8 +5462,8 @@ async function verifyPopulatedHistoryResponsiveLayout() {
         assert.equal(await page.locator('.history-status--failed').count(), 1);
         assert.equal(await page.locator('.history-status--expired').count(), 1);
         assert.equal(await page.getByRole('link', { name: '다운로드' }).count(), 1);
-        assert.equal(await page.getByRole('link', { name: '다시 요청' }).count(), 1);
-        assert.equal(await page.getByRole('button', { name: '다시 요청' }).count(), 1);
+        assert.equal(await page.getByRole('button', { name: '다시 요청' }).count(), 2);
+        assert.equal(await page.getByRole('link', { name: '다시 요청' }).count(), 0);
         assert.equal(await page.locator('.request-flow').count(), 0);
 
         const layoutMetrics = await page.evaluate(() => {

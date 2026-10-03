@@ -105,5 +105,5 @@ export function useHistoryAcceptance<TRequest, TJob extends RequestLifecycleJob,
     lifecycle.actions.submit(request);
   }
 
-  return { source, lifecycle, submit };
+  return { source, lifecycle, submit, isSubmitting: () => submittingRef.current };
 }

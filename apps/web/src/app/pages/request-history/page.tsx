@@ -3,15 +3,15 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { NavLink, useLocation } from 'react-router';
 import {
   JobStatusRequestError,
+  SubtitleUploadTooLargeError,
   buildApiUrl,
 } from '../../../api/mytube-extract.api';
 import { AUDIO_QUALITY_OPTIONS, VIDEO_QUALITY_OPTIONS, downloadDraftSchema, type DownloadDraft, type DownloadResponse } from '../../../domain/download-request/download-request';
-import type { SubtitleJobResponse } from '../../../domain/subtitle-request/subtitle-request';
+import { validateSubtitleFile, type SubtitleWhisperModel, type SubtitleJobResponse } from '../../../domain/subtitle-request/subtitle-request';
 import { AppIcon, type AppIconName } from '../../components/app-icon';
-import { createVideoRequestAdapter } from '../../adapters/video-request.adapter';
+import { createHistoryRequestAdapter, type HistoryRequest } from '../../adapters/history-request.adapter';
 import { useNavigation } from '../../components/navigation-context';
 import { RequestReadinessNotice } from '../../components/request-readiness-notice';
-import { setDownloadPreferences } from '../../utils/request-preference.util';
 import { useHistoryAcceptance, getHistorySessionReceipts, forgetHistorySessionReceipt, isHistoryReceiptPruned } from './use-history-acceptance';
 import { PanelTitle } from '../../components/panel-title';
 import { ROUTE_PATHS } from '../../constants/route-paths.constant';
@@ -195,21 +195,22 @@ export function RequestHistoryPage() {
   });
   const previousStatuses = useRef(new Map<string, string>());
   const apiBaseUrl = getApiBaseUrl();
-  /** 내역의 원래 조건만 사용하고 작성 중 초안에는 접근하지 않는다. */
-  const retryAdapter = useMemo(() => {
-    /** 기존 영상 통신과 입력 검증을 그대로 재사용한다. */
-    const adapter = createVideoRequestAdapter({ apiBaseUrl });
-    return {
-      ...adapter,
-      async createRequest(input: DownloadDraft, signal: AbortSignal) {
-        /** 서버 접수가 확인된 뒤에만 이후 기본값을 기억한다. */
-        const job = await adapter.createRequest(input, signal);
-        setDownloadPreferences({ mode: input.mode, quality: input.quality });
-        return job;
-      },
-    };
-  }, [apiBaseUrl]);
-  /** 영상·오디오 전체가 공유하는 한 번의 접수 제어. */
+  /** 파일 선택은 초안과 분리된 내역 전용 입력 한 개를 사용한다. */
+  const fileInput = useRef<HTMLInputElement>(null);
+  /** 네이티브 선택 창을 연 항목과 서버에서 확인한 처리 방식. */
+  const fileTarget = useRef<{ receipt: JobReceipt; whisperModel: SubtitleWhisperModel } | null>(null);
+  /** 선택 창이 열린 동안 다른 종류의 재요청도 중복 실행하지 않는다. */
+  const [selectingFile, setSelectingFile] = useState(false);
+  /** 접수 전 파일 오류·취소 안내는 발생한 행에만 표시한다. */
+  const [fileFeedback, setFileFeedback] = useState<{ receipt: JobReceipt; message: string } | null>(null);
+  /** 기존 어댑터가 알려 준 실제 전송률. */
+  const [uploadProgress, setUploadProgress] = useState<number | null>(null);
+  /** 두 종류의 통신과 접수 성공 기본값 저장을 기존 생명주기에 연결한다. */
+  const retryAdapter = useMemo(() => createHistoryRequestAdapter({
+    apiBaseUrl,
+    onProgress: (progress) => setUploadProgress(progress?.percent ?? null),
+  }), [apiBaseUrl]);
+  /** 영상·오디오·자막 전체가 공유하는 한 번의 접수 제어. */
   const acceptance = useHistoryAcceptance(retryAdapter, (receipt, storageFailed) => {
     setReceipts(readReceipts(deepReceipt).receipts);
     if (storageFailed) setStorageAvailable(false);
@@ -220,6 +221,69 @@ export function RequestHistoryPage() {
   });
   /** 조회 실패와 별개로 현재 접수 조작만 잠근다. */
   const accepting = acceptance.lifecycle.phase === 'accepting';
+  /** 파일 선택·검증 결과를 알리고 실제 보이는 제목으로 포커스를 복구한다. */
+  function finishFileSelection(message: string) {
+    /** 비동기 렌더 전 현재 선택 대상을 해제한다. */
+    const target = fileTarget.current;
+    fileTarget.current = null;
+    setSelectingFile(false);
+    if (target) {
+      setFileFeedback({ receipt: target.receipt, message });
+      window.requestAnimationFrame(() => document.getElementById(getHistoryTitleId(target.receipt))?.focus());
+    }
+  }
+
+  /** 파일 선택 취소는 접수나 기본값 갱신을 일으키지 않는다. */
+  function cancelFileSelection() {
+    finishFileSelection('파일 선택을 취소했습니다. 기존 내역과 작성 중인 입력은 그대로입니다.');
+  }
+
+  useEffect(function listenForFileSelectionCancel() {
+    /** React가 노출하지 않는 네이티브 파일 선택 cancel 이벤트. */
+    const input = fileInput.current;
+    input?.addEventListener('cancel', cancelFileSelection);
+    return () => input?.removeEventListener('cancel', cancelFileSelection);
+  }, []);
+
+  /** 서버 조건이 유효한 행에서만 호출하며 현재 초안을 참조하지 않는다. */
+  function retry(receipt: JobReceipt, request: DownloadDraft | SubtitleWhisperModel) {
+    if (fileTarget.current || acceptance.isSubmitting() || !acceptance.lifecycle.canSubmit) return;
+    setFileFeedback(null);
+    setUploadProgress(null);
+    if (typeof request !== 'string') {
+      acceptance.submit(receipt, { kind: 'video', input: request });
+      return;
+    }
+    fileTarget.current = { receipt, whisperModel: request };
+    setSelectingFile(true);
+    acceptance.lifecycle.actions.clearRequestError();
+    if (fileInput.current) {
+      fileInput.current.value = '';
+      fileInput.current.click();
+    }
+  }
+
+  /** 새로 고른 파일만 기존 검증과 공통 접수 제어로 넘긴다. */
+  function acceptSelectedFile() {
+    /** 이번 선택 대상과 실제 선택한 파일. */
+    const target = fileTarget.current;
+    const file = fileInput.current?.files?.[0] ?? null;
+    if (!target) return;
+    if (!file) { cancelFileSelection(); return; }
+    /** 입력 화면과 동일한 파일 규칙. */
+    const validation = validateSubtitleFile(file);
+    if (validation.kind !== 'ready') { finishFileSelection(validation.message); return; }
+    fileTarget.current = null;
+    setSelectingFile(false);
+    if (fileInput.current) fileInput.current.value = '';
+    if (!acceptance.lifecycle.canSubmit) {
+      setFileFeedback({ receipt: target.receipt, message: '서비스 상태를 다시 확인한 후 파일을 선택해 주세요.' });
+      window.requestAnimationFrame(() => document.getElementById(getHistoryTitleId(target.receipt))?.focus());
+      return;
+    }
+    acceptance.submit(target.receipt, { kind: 'subtitle', input: { file, whisperModel: target.whisperModel } });
+  }
+
   /** 비활성화된 실행 버튼에서 실패 안내의 시작 위치로 포커스를 복구한다. */
   const wasAccepting = useRef(false);
   useEffect(function focusFailedAcceptance() {
@@ -483,6 +547,14 @@ export function RequestHistoryPage() {
 
   return (
     <section className={HISTORY_PANEL_CLASS_NAME} aria-labelledby="history-title">
+      <input
+        ref={fileInput}
+        type="file"
+        accept=".mp4,.mov,.webm,video/mp4,video/quicktime,video/webm"
+        aria-label="다시 요청할 자막 원본 파일"
+        hidden
+        onChange={acceptSelectedFile}
+      />
       <PanelTitle
         icon="queued"
         id="history-title"
@@ -512,7 +584,10 @@ export function RequestHistoryPage() {
           id="history-readiness"
           status={acceptance.lifecycle.readiness.status}
           isFetching={acceptance.lifecycle.readiness.isFetching}
-          onRetry={() => acceptance.lifecycle.actions.retryReadiness?.()}
+          onRetry={() => {
+            document.getElementById('history-title')?.focus();
+            acceptance.lifecycle.actions.retryReadiness?.();
+          }}
         />
       ) : null}
       {undoReceipt ? (
@@ -555,6 +630,10 @@ export function RequestHistoryPage() {
               onRemove={() => handleRemove(receipt, index)}
               acceptance={acceptance}
               accepting={accepting}
+              selectingFile={selectingFile}
+              onRetry={retry}
+              uploadProgress={uploadProgress}
+              fileFeedback={fileFeedback && getReceiptIdentity(fileFeedback.receipt) === getReceiptIdentity(receipt) ? fileFeedback.message : null}
             />
           ))}
         </ul>
@@ -610,9 +689,17 @@ function HistoryItem(props: {
   /** 브라우저에 저장된 접수증. */
   receipt: JobReceipt;
   /** 목록 공통 접수 상태와 조작. */
-  acceptance: ReturnType<typeof useHistoryAcceptance<DownloadDraft, DownloadResponse, 'video'>>;
+  acceptance: ReturnType<typeof useHistoryAcceptance<HistoryRequest, JobStatus, JobReceiptKind>>;
   /** 접수 중에는 다른 재요청과 원래 항목 삭제를 막는다. */
   accepting: boolean;
+  /** 네이티브 파일 선택이 끝날 때까지 실행을 잠근다. */
+  selectingFile: boolean;
+  /** 검증한 기존 조건으로 직접 실행하거나 파일 선택을 연다. */
+  onRetry: (receipt: JobReceipt, request: DownloadDraft | SubtitleWhisperModel) => void;
+  /** 자막 업로드의 실제 진행률. */
+  uploadProgress: number | null;
+  /** 접수 전 선택 취소 또는 파일 검증 안내. */
+  fileFeedback: string | null;
   /** 접수증만 삭제하는 동작. */
   onRemove: () => void;
 }) {
@@ -640,8 +727,11 @@ function HistoryItem(props: {
     retryDraft.data.mode === 'audio' ? AUDIO_QUALITY_OPTIONS : VIDEO_QUALITY_OPTIONS
   ).some((option) => option.value === retryDraft.data.quality) ? retryDraft.data : null;
   /** 재요청 가능한 종료 상태에서만 조건 복구를 요구한다. */
-  const needsRetryConditions = receipt.kind === 'video' &&
-    (job?.displayStatus === 'failed' || job?.displayStatus === 'expired') && !validRetryDraft;
+  const retryModel = job && 'whisperModel' in job && (job.whisperModel === 'base_en' || job.whisperModel === 'small_en') ? job.whisperModel : null;
+  /** 없는 처리 방식은 기본 모델로 보정하지 않고 재조회한다. */
+  const needsRetryConditions =
+    (job?.displayStatus === 'failed' || job?.displayStatus === 'expired') &&
+    (receipt.kind === 'video' ? !validRetryDraft : !retryModel);
   /** 해당 항목의 공통 접수 제어. */
   const lifecycle = props.acceptance.lifecycle;
   /** 제목과 상세 영역의 접근성 연결 기준. */
@@ -750,24 +840,19 @@ function HistoryItem(props: {
             ) : null}
             {!isConnectionError && (job?.displayStatus === 'failed' ||
             job?.displayStatus === 'expired') ? (
-              receipt.kind === 'video' ? (
-                <button
-                  className={`${HISTORY_PRIMARY_ACTION_CLASS_NAME} disabled:opacity-60 disabled:cursor-not-allowed`}
-                  type="button"
-                  disabled={props.accepting || !lifecycle.canSubmit || !validRetryDraft}
-                  aria-describedby={isRetrySource ? `${titleId}-acceptance` : lifecycle.readiness.status.kind !== 'ready' ? 'history-readiness' : undefined}
-                  onClick={() => { if (validRetryDraft) props.acceptance.submit(receipt, validRetryDraft); }}
-                >
-                  {isRetrySource && props.accepting ? '접수 중' : '다시 요청'}
-                </button>
-              ) : (
-                <NavLink
-                  className={HISTORY_PRIMARY_ACTION_CLASS_NAME}
-                  to={ROUTE_PATHS.subtitles}
-                  aria-disabled={props.accepting || undefined}
-                  onClick={(event) => { if (props.accepting) event.preventDefault(); }}
-                >다시 요청</NavLink>
-              )
+              <button
+                className={`${HISTORY_PRIMARY_ACTION_CLASS_NAME} disabled:opacity-60 disabled:cursor-not-allowed`}
+                type="button"
+                disabled={props.accepting || props.selectingFile || !lifecycle.canSubmit || needsRetryConditions}
+                aria-describedby={isRetrySource ? `${titleId}-acceptance` : lifecycle.readiness.status.kind !== 'ready' ? 'history-readiness' : undefined}
+                onClick={() => {
+                  /** 종류에 맞는 원래 조건만 공통 접수 제어로 넘긴다. */
+                  const conditions = receipt.kind === 'video' ? validRetryDraft : retryModel;
+                  if (conditions) props.onRetry(receipt, conditions);
+                }}
+              >
+                {isRetrySource && props.accepting ? '접수 중' : '다시 요청'}
+              </button>
             ) : null}
             {(isConnectionError || isCompletedWithoutUrl || needsRetryConditions) &&
             !(
@@ -777,18 +862,28 @@ function HistoryItem(props: {
               <button
                 className={HISTORY_SECONDARY_ACTION_CLASS_NAME}
                 type="button"
-                onClick={() => void query.refetch()}
+                onClick={() => {
+                  document.getElementById(titleId)?.focus();
+                  void query.refetch();
+                }}
               >
                 다시 확인
               </button>
             ) : null}
           </div>
         </div>
+        {props.fileFeedback ? <p className={HISTORY_MESSAGE_CLASS_NAME} role="status">{props.fileFeedback}</p> : null}
         {isRetrySource ? (
           <div id={`${titleId}-acceptance`} className="grid min-w-0 gap-mytube-8">
             {props.accepting ? (
               <>
                 <p className={HISTORY_MESSAGE_CLASS_NAME} role="status">새 요청을 접수하고 있습니다. 접수 전에는 취소할 수 있습니다.</p>
+                {receipt.kind === 'subtitle' && props.uploadProgress !== null ? (
+                  <div className={HISTORY_PROGRESS_CLASS_NAME}>
+                    <progress aria-label="원본 업로드 진행률" className={HISTORY_PROGRESS_BAR_CLASS_NAME} max={100} value={props.uploadProgress} />
+                    <span>{props.uploadProgress}%</span>
+                  </div>
+                ) : null}
                 <button
                   className={`${HISTORY_SECONDARY_ACTION_CLASS_NAME} justify-self-start`}
                   type="button"
@@ -804,11 +899,14 @@ function HistoryItem(props: {
                   id="history-readiness"
                   status={lifecycle.readiness.status}
                   isFetching={lifecycle.readiness.isFetching}
-                  onRetry={() => lifecycle.actions.retryReadiness?.()}
+                  onRetry={() => {
+                    document.getElementById(titleId)?.focus();
+                    lifecycle.actions.retryReadiness?.();
+                  }}
                 />
                 {lifecycle.error?.source === 'request' ? (
                   <p className={`${HISTORY_MESSAGE_CLASS_NAME} ${HISTORY_ERROR_MESSAGE_CLASS_NAME}`} role="alert">
-                    요청을 접수하지 못했습니다. 기존 내역과 입력은 그대로입니다. 다시 요청해 주세요.
+                    {lifecycle.error.cause instanceof SubtitleUploadTooLargeError ? '파일이 너무 큽니다. 더 작은 영상 파일을 선택해 주세요.' : '요청을 접수하지 못했습니다. 기존 내역과 입력은 그대로입니다. 다시 요청해 주세요.'}
                   </p>
                 ) : lifecycle.requestNotice ? (
                   <p className={HISTORY_MESSAGE_CLASS_NAME} role="status">{lifecycle.requestNotice}</p>
