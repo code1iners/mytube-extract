@@ -101,7 +101,7 @@ const SUBTITLE_SELECTED_FILE_NAME_CLASS_NAME =
   'block min-w-0 [overflow-wrap:anywhere] text-mytube-text-primary text-[16px] font-semibold';
 /** 선택 파일 제거 button의 Tailwind layout·state className. */
 const SUBTITLE_SELECTED_FILE_CLEAR_CLASS_NAME =
-  'inline-flex min-w-[44px] min-h-[44px] items-center justify-center px-mytube-8 border border-mytube-border rounded-mytube-sm bg-mytube-surface text-mytube-text-secondary cursor-pointer text-[13px] font-semibold focus-visible:outline-2 focus-visible:outline-mytube-focus focus-visible:outline-offset-2 hover:bg-mytube-surface-alt hover:text-mytube-text-primary';
+  'inline-flex min-w-[44px] min-h-[44px] items-center justify-center px-mytube-8 border border-mytube-border rounded-mytube-sm bg-mytube-surface text-mytube-text-secondary cursor-pointer text-[14px] font-semibold focus-visible:outline-2 focus-visible:outline-mytube-focus focus-visible:outline-offset-2 hover:bg-mytube-surface-alt hover:text-mytube-text-primary';
 /** 자막 처리 방식 fieldset의 Tailwind layout className. */
 const SUBTITLE_PROCESSING_METHOD_CLASS_NAME =
   'segmented-control subtitle-processing-method grid min-w-0 grid-cols-1 gap-mytube-8 m-0 border-0 p-0 max-[561px]:gap-mytube-8';
@@ -154,7 +154,7 @@ const SUBTITLE_STATUS_ICON_CLASS_NAME =
 const SUBTITLE_STATUS_COPY_CLASS_NAME = 'min-w-0';
 /** 자막 상태 제목의 Tailwind typography className. */
 const SUBTITLE_STATUS_TITLE_CLASS_NAME =
-  'm-0 text-[21px] font-semibold leading-[1.3] max-[821px]:text-[19px]';
+  'm-0 text-[21px] font-semibold leading-[1.3] max-[821px]:text-[18px]';
 /** 자막 상태 설명의 Tailwind typography·overflow className. */
 const SUBTITLE_STATUS_MESSAGE_CLASS_NAME =
   'm-[6px_0_0] text-mytube-text-secondary text-[16px] leading-[1.4] break-keep break-words';
@@ -447,7 +447,7 @@ export function SubtitlesExtractPage() {
       </p>
       <div className={SUBTITLE_RESULT_ACTIONS_CLASS_NAME}>
         {downloadHref ? <a className={SUBTITLE_DOWNLOAD_BUTTON_CLASS_NAME} download href={downloadHref}><AppIcon name="download" />영어 SRT 다운로드</a> : <Link className={SUBTITLE_DOWNLOAD_BUTTON_CLASS_NAME} to={`/history?kind=subtitle&jobId=${encodeURIComponent(statusJob.jobId)}`}>요청 내역에서 다시 확인</Link>}
-        <button className={SUBTITLE_NEW_REQUEST_BUTTON_CLASS_NAME} type="button" onClick={returnToRequest}>새 요청</button>
+        <button className={SUBTITLE_NEW_REQUEST_BUTTON_CLASS_NAME} type="button" onClick={clearSelectedFile}>새 요청</button>
       </div>
     </section>;
   }

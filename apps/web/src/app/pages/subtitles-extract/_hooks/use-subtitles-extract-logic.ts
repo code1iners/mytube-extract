@@ -34,10 +34,8 @@ import {
   createJobStatusRequestErrorDetail,
   createTerminalJobErrorDetail,
 } from '../../../utils/job-status-polling.util';
-import {
-  getRequestPreferences,
-  setSubtitleWhisperModelPreference,
-} from '../../../utils/request-preference.util';
+import { getSubtitleRequestDraft } from '../../../utils/request-draft.util';
+import { setSubtitleWhisperModelPreference } from '../../../utils/request-preference.util';
 import { getWorkerHealthSubmitReason } from '../../../utils/worker-health-notice.util';
 
 /** worker 미가용 안내 문구. */
@@ -91,12 +89,14 @@ export function useSubtitlesExtractLogic() {
 
   // States.
 
+  /** 메뉴 전환보다 오래 유지할 자막 입력과 접수 여부. */
+  const [requestDraft] = useState(getSubtitleRequestDraft);
   /** 사용자가 선택한 로컬 영상 파일. */
-  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [selectedFile, setSelectedFile] = useState<File | null>(requestDraft.value.file);
   /** 사용자가 선택한 Whisper 모델. */
   const [selectedWhisperModel, setSelectedWhisperModel] =
     useState<SubtitleWhisperModel>(
-      () => getRequestPreferences().whisperModel,
+      requestDraft.value.whisperModel,
     );
   /** multipart 원본 업로드 진행률. */
   const [uploadProgress, setUploadProgress] = useState<number | null>(null);
@@ -112,13 +112,28 @@ export function useSubtitlesExtractLogic() {
 
   /** 자막 요청 통신과 multipart 세부를 감싼 adapter. */
   const subtitleRequestAdapter = useMemo(
-    () =>
-      createSubtitleRequestAdapter({
+    () => {
+      /** 기존 분할 업로드·취소·접수증 계약을 유지하는 어댑터. */
+      const adapter = createSubtitleRequestAdapter({
         apiBaseUrl,
         onProgress: (progress) =>
           setUploadProgress(progress ? progress.percent : null),
-      }),
-    [apiBaseUrl],
+      });
+      return {
+        ...adapter,
+        async createRequest(input: SubtitleRequest, signal: AbortSignal) {
+          /** 취소 뒤 새로 편집한 초안을 늦은 성공으로 초기화하지 않는다. */
+          const submittedRevision = requestDraft.revision;
+          /** complete 응답은 취소와 경쟁해도 실제 접수 여부를 결정한다. */
+          const job = await adapter.createRequest(input, signal);
+          if (requestDraft.revision === submittedRevision) {
+            requestDraft.accepted = true;
+          }
+          return job;
+        },
+      };
+    },
+    [apiBaseUrl, requestDraft],
   );
   /** 추출 진행 중 route 이동 차단 상태를 갱신한다. */
   const { setHistoryDestination, setNavigationLocked } = useNavigation();
@@ -212,13 +227,6 @@ export function useSubtitlesExtractLogic() {
   );
 
   useEffect(
-    function persistWhisperModelPreference() {
-      setSubtitleWhisperModelPreference(selectedWhisperModel);
-    },
-    [selectedWhisperModel],
-  );
-
-  useEffect(
     function resetDropzoneDragStateWhenDragEnds() {
       /** dropzone 밖에서 끝난 drag도 위치 안내를 해제한다. */
       function handleDocumentDragEnd() {
@@ -250,6 +258,7 @@ export function useSubtitlesExtractLogic() {
   /** 선택 파일과 현재 lifecycle 결과를 초기화한다. */
   function clearSelectedFile() {
     resetDropzoneDragState();
+    updateRequestDraft({ file: null, whisperModel: selectedWhisperModel });
     setSelectedFile(null);
     setFileDropErrorMessage('');
     setFileUploadErrorMessage('');
@@ -260,13 +269,18 @@ export function useSubtitlesExtractLogic() {
       fileInputRef.current.value = '';
     }
 
-    // 파일을 지운 뒤 다시 파일 선택 control에 포커스를 돌린다.
-    filePickerButtonRef.current?.focus();
+    // 지우기는 즉시 포커스를 복원하고 완료 화면의 새 요청은 입력이 렌더된 뒤 이동한다.
+    if (filePickerButtonRef.current) {
+      filePickerButtonRef.current.focus();
+    } else {
+      focusRequestStart();
+    }
   }
 
   /** 파일 선택과 이전 요청 오류를 상태에 반영한다. */
   function selectFile(file: File | null) {
     resetDropzoneDragState();
+    updateRequestDraft({ file, whisperModel: selectedWhisperModel });
     setSelectedFile(file);
     setFileDropErrorMessage('');
     setFileUploadErrorMessage('');
@@ -414,7 +428,18 @@ export function useSubtitlesExtractLogic() {
 
   /** Whisper 모델 변경 이벤트를 처리한다. */
   function handleWhisperModelChange(event: ChangeEvent<HTMLInputElement>) {
-    setSelectedWhisperModel(event.target.value as SubtitleWhisperModel);
+    /** 사용자가 직접 선택한 처리 방식만 이후 기본값으로 저장한다. */
+    const whisperModel = event.target.value as SubtitleWhisperModel;
+    updateRequestDraft({ file: selectedFile, whisperModel });
+    setSelectedWhisperModel(whisperModel);
+    setSubtitleWhisperModelPreference(whisperModel);
+  }
+
+  /** 직접 편집한 입력은 이전 접수와 독립된 미제출 초안으로 보관한다. */
+  function updateRequestDraft(value: typeof requestDraft.value) {
+    requestDraft.revision += 1;
+    requestDraft.accepted = false;
+    requestDraft.value = value;
   }
 
   return {

@@ -41,6 +41,10 @@ const staticServer = await createStaticServer(outputRoot);
 const browser = await chromium.launch();
 
 try {
+  await run('subtitle draft keeps the real file independently of video input', verifySubtitleDraftNavigation);
+  await run('subtitle draft separates preferences, refresh, and file edits', verifySubtitleDraftPreferences);
+  await run('subtitle draft distinguishes accepted recovery and new edits', verifySubtitleAcceptedDraftLifetime);
+  await run('subtitle draft protects new input from late acceptance', verifySubtitleLateAcceptanceDraft);
   await run('video draft distinguishes late acceptance from new edits', verifyVideoLateAcceptanceDraft);
   await run('video draft survives menu navigation', verifyVideoDraftNavigation);
   await run('video draft clears accepted sources and survives storage failure', verifyVideoAcceptedDraftLifetime);
@@ -90,6 +94,236 @@ try {
 } finally {
   await browser.close();
   await staticServer.close();
+}
+
+/** 메뉴 복귀 후 실제 파일 바이트와 처리 방식으로 업로드하고 새 요청을 시작한다. */
+async function verifySubtitleDraftNavigation() {
+  /** 두 종류의 초안을 함께 작성할 모바일 탭. */
+  const context = await createContext({ viewport: { width: 390, height: 844 } });
+  /** 사용자 조작과 런타임 오류를 확인할 화면. */
+  const { page, assertNoRuntimeErrors } = await createPage(context);
+  /** 실제 업로드 세션에 전달된 원본과 선택값. */
+  const uploads = [];
+  /** 실제 분할 업로드로 보낸 파일 내용. */
+  const parts = [];
+  try {
+    await page.route('https://upload.example/**', async (route) => {
+      parts.push(route.request().postDataBuffer()?.toString());
+      return route.fulfill({ status: 200, body: '', headers: {
+        'Access-Control-Allow-Origin': '*', 'Access-Control-Expose-Headers': 'ETag', ETag: '"draft-part"',
+      } });
+    });
+    await routeApi(page, async ({ request, route, url }) => {
+      if (url.pathname === '/health') return fulfillJson(route, healthResponse());
+      if (url.pathname === '/subtitles/uploads' && request.method() === 'POST') {
+        uploads.push(request.postDataJSON());
+        return fulfillJson(route, {
+          expiresAt: '2026-10-05T12:00:00.000Z', objectKey: 'source/draft.mp4', partSizeBytes: 1024,
+          parts: [{ partNumber: 1, uploadUrl: 'https://upload.example/draft' }],
+          uploadId: 'draft-upload', uploadToken: 'draft-token',
+        });
+      }
+      if (url.pathname === '/subtitles/uploads/complete' || url.pathname === `/subtitles/jobs/${SUBTITLE_ID}`) {
+        return fulfillJson(route, subtitleJob(SUBTITLE_ID, 'completed', { fileName: 'draft.mp4' }));
+      }
+      return fulfillJson(route, {}, 404);
+    });
+    await page.goto(`${staticServer.origin}/video`);
+    await page.getByLabel('YouTube URL').fill('https://youtu.be/abc123_DEF0');
+    await page.locator('input[name="quality"][value="192"]').check();
+    await page.getByRole('link', { name: '자막 추출', exact: true }).click();
+    await page.locator('input[type="file"]').setInputFiles({ name: 'draft.mp4', mimeType: 'video/mp4', buffer: Buffer.from('original subtitle draft bytes') });
+    await page.getByRole('radio', { name: /정확도 우선/ }).check();
+    await page.getByRole('link', { name: '영상 추출', exact: true }).click();
+    assert.equal(await page.getByLabel('YouTube URL').inputValue(), 'https://youtu.be/abc123_DEF0');
+    assert.equal(await page.locator('input[name="quality"][value="192"]').isChecked(), true);
+    await page.getByRole('link', { name: '자막 추출', exact: true }).click();
+    await page.locator('.subtitle-form').waitFor();
+    assert.equal(await page.getByText('draft.mp4', { exact: true }).count(), 1);
+    assert.equal(await page.getByRole('radio', { name: /정확도 우선/ }).isChecked(), true);
+    await waitForEnabled(page.getByRole('button', { name: '영어 SRT 생성' }));
+    await page.getByRole('button', { name: '영어 SRT 생성' }).click();
+    await page.getByRole('heading', { name: '영어 자막 파일이 준비되었습니다' }).waitFor();
+    assert.equal(uploads[0].fileName, 'draft.mp4');
+    assert.equal(uploads[0].whisperModel, 'small_en');
+    assert.deepEqual(parts, ['original subtitle draft bytes']);
+    await page.evaluate(() => localStorage.setItem('mytube-extract-request-preferences', JSON.stringify({ download: { mode: 'audio', quality: '192' }, whisperModel: 'base_en' })));
+    await page.getByRole('button', { name: '새 요청', exact: true }).click();
+    await page.locator('.subtitle-form').waitFor();
+    assert.equal(await page.locator('.selected-file-row').count(), 0);
+    assert.equal(await page.getByRole('radio', { name: /정확도 우선/ }).isChecked(), true);
+    await waitForCondition(async () => page.getByRole('button', { name: '영상 선택 또는 드래그 (로컬 영상 파일)' }).evaluate((element) => document.activeElement === element));
+    assert.equal(await page.evaluate(() => JSON.parse(localStorage.getItem('mytube-extract-request-preferences')).whisperModel), 'base_en');
+    assert.ok(await page.evaluate((key) => localStorage.getItem(key), receiptKey('subtitle', SUBTITLE_ID)));
+    assertNoRuntimeErrors();
+  } finally {
+    await context.close();
+  }
+}
+
+/** 새 탭·새로고침·기본값 변경은 작성 중 파일과 선택을 덮어쓰지 않는다. */
+async function verifySubtitleDraftPreferences() {
+  /** 실제 저장 공간을 공유하는 독립 탭 컨텍스트. */
+  const context = await createContext();
+  /** 메뉴 왕복과 새로고침을 확인할 화면. */
+  const { page, assertNoRuntimeErrors } = await createPage(context);
+  try {
+    await routeApi(page, async ({ route, url }) => fulfillJson(route, url.pathname === '/health' ? healthResponse() : {}, url.pathname === '/health' ? 200 : 404));
+    await page.goto(`${staticServer.origin}/subtitles`);
+    assert.equal(await page.getByRole('radio', { name: /속도 우선/ }).isChecked(), true);
+    await page.locator('input[type="file"]').setInputFiles({ name: 'first.mp4', mimeType: 'video/mp4', buffer: Buffer.from('first') });
+    await page.getByRole('radio', { name: /정확도 우선/ }).check();
+    await dispatchSubtitleFileDrop(page, page.locator('.subtitle-dropzone'), { name: 'invalid.txt', mimeType: 'text/plain' });
+    await page.getByRole('link', { name: '영상 추출', exact: true }).click();
+    // 다른 요청이 기억한 기본값을 바꿔도 기존 초안 복원은 이를 덮어쓰지 않는다.
+    await page.evaluate(() => localStorage.setItem('mytube-extract-request-preferences', JSON.stringify({ download: { mode: 'audio', quality: '128' }, whisperModel: 'base_en' })));
+    await page.getByRole('link', { name: '자막 추출', exact: true }).click();
+    await page.getByText('first.mp4', { exact: true }).waitFor();
+    assert.equal(await page.getByRole('radio', { name: /정확도 우선/ }).isChecked(), true);
+    assert.equal(await page.evaluate(() => JSON.parse(localStorage.getItem('mytube-extract-request-preferences')).whisperModel), 'base_en');
+    /** 새 탭은 실제 원본 파일을 공유하지 않는다. */
+    const otherPage = await context.newPage();
+    await routeApi(otherPage, async ({ route }) => fulfillJson(route, healthResponse()));
+    await otherPage.goto(`${staticServer.origin}/subtitles`);
+    await otherPage.locator('.subtitle-form').waitFor();
+    assert.equal(await otherPage.locator('.selected-file-row').count(), 0);
+    assert.equal(await otherPage.getByRole('radio', { name: /속도 우선/ }).isChecked(), true);
+    await otherPage.close();
+    await page.reload();
+    await page.locator('.subtitle-form').waitFor();
+    assert.equal(await page.locator('.selected-file-row').count(), 0);
+    assert.equal(await page.getByRole('radio', { name: /속도 우선/ }).isChecked(), true);
+    await page.locator('input[type="file"]').setInputFiles({ name: 'replacement.mp4', mimeType: 'video/mp4', buffer: Buffer.from('replacement') });
+    await page.getByRole('link', { name: '영상 추출', exact: true }).click();
+    await page.getByRole('link', { name: '자막 추출', exact: true }).click();
+    await page.getByText('replacement.mp4', { exact: true }).waitFor();
+    await page.getByRole('button', { name: '지우기', exact: true }).click();
+    await page.getByRole('link', { name: '영상 추출', exact: true }).click();
+    await page.getByRole('link', { name: '자막 추출', exact: true }).click();
+    await page.locator('.subtitle-form').waitFor();
+    assert.equal(await page.locator('.selected-file-row').count(), 0);
+    assertNoRuntimeErrors();
+  } finally {
+    await context.close();
+  }
+}
+
+/** 접수 후 같은 화면의 복구용 파일은 메뉴 재진입에서 새 초안이 되지 않는다. */
+async function verifySubtitleAcceptedDraftLifetime() {
+  for (const status of ['queued', 'completed', 'failed', 'expired', 'status-error', 'storage-blocked']) {
+    /** 각 접수 상태의 독립 저장 공간. */
+    const context = await createContext({ viewport: { width: 390, height: 844 } });
+    /** 상태 조회 실패와 저장 차단을 허용한 브라우저. */
+    const { page, assertNoRuntimeErrors } = await createPage(context, { ignoreHttpErrors: true });
+    try {
+      if (status === 'storage-blocked') {
+        await page.addInitScript(() => {
+          Storage.prototype.getItem = () => { throw new DOMException('blocked', 'SecurityError'); };
+          Storage.prototype.setItem = () => { throw new DOMException('blocked', 'SecurityError'); };
+        });
+      }
+      await routeSubtitleDraftUpload(page, async (route) => fulfillJson(route, subtitleJob(SUBTITLE_ID, 'queued')), status);
+      await page.goto(`${staticServer.origin}/subtitles`);
+      await page.locator('input[type="file"]').setInputFiles({ name: 'accepted.mp4', mimeType: 'video/mp4', buffer: Buffer.from('accepted') });
+      await page.getByRole('radio', { name: /정확도 우선/ }).check();
+      await page.getByRole('link', { name: '영상 추출', exact: true }).click();
+      await page.getByRole('link', { name: '자막 추출', exact: true }).click();
+      await page.getByText('accepted.mp4', { exact: true }).waitFor();
+      await waitForEnabled(page.getByRole('button', { name: '영어 SRT 생성' }));
+      await page.getByRole('button', { name: '영어 SRT 생성' }).click();
+      if (['failed', 'expired', 'status-error'].includes(status)) {
+        await page.getByRole('button', { name: '요청 설정으로 돌아가기' }).click();
+        await page.getByText('accepted.mp4', { exact: true }).waitFor();
+        assert.equal(await page.getByRole('radio', { name: /정확도 우선/ }).isChecked(), true);
+      } else {
+        await page.getByRole('heading', { name: status === 'queued' ? '작업 대기 중입니다' : '영어 자막 파일이 준비되었습니다' }).waitFor();
+      }
+      await page.getByRole('link', { name: '영상 추출', exact: true }).click();
+      await page.getByRole('link', { name: '자막 추출', exact: true }).click();
+      await page.locator('.subtitle-form').waitFor();
+      assert.equal(await page.locator('.selected-file-row').count(), 0, status);
+      assert.equal(await page.getByRole('radio', { name: /정확도 우선/ }).isChecked(), true, status);
+      if (status === 'failed') {
+        await page.locator('input[type="file"]').setInputFiles({ name: 'retry.mp4', mimeType: 'video/mp4', buffer: Buffer.from('retry') });
+        await waitForEnabled(page.getByRole('button', { name: '영어 SRT 생성' }));
+        await page.getByRole('button', { name: '영어 SRT 생성' }).click();
+        await page.getByRole('button', { name: '요청 설정으로 돌아가기' }).click();
+        await page.locator('input[type="file"]').setInputFiles({ name: 'new.mp4', mimeType: 'video/mp4', buffer: Buffer.from('new') });
+        await page.getByRole('link', { name: '영상 추출', exact: true }).click();
+        await page.getByRole('link', { name: '자막 추출', exact: true }).click();
+        await page.getByText('new.mp4', { exact: true }).waitFor();
+      }
+      assertNoRuntimeErrors();
+    } finally {
+      await context.close();
+    }
+  }
+}
+
+/** complete 응답과 취소가 경쟁할 때 접수된 파일과 새로 작성한 파일을 구분한다. */
+async function verifySubtitleLateAcceptanceDraft() {
+  for (const editAfterCancel of [false, true]) {
+    /** 경쟁 상황별 독립 브라우저. */
+    const context = await createContext();
+    /** 지연 응답을 받는 자막 화면. */
+    const { page, assertNoRuntimeErrors } = await createPage(context);
+    /** 서버 접수 요청 시작 신호. */
+    const started = Promise.withResolvers();
+    /** 사용자 취소·편집 후 성공을 반환하는 게이트. */
+    const gate = Promise.withResolvers();
+    try {
+      await routeSubtitleDraftUpload(page, async (route) => {
+        started.resolve();
+        await gate.promise;
+        return fulfillJson(route, subtitleJob(SUBTITLE_ID, 'queued'));
+      });
+      await page.goto(`${staticServer.origin}/subtitles`);
+      await page.locator('input[type="file"]').setInputFiles({ name: 'late.mp4', mimeType: 'video/mp4', buffer: Buffer.from('late') });
+      await page.getByRole('radio', { name: /정확도 우선/ }).check();
+      await waitForEnabled(page.getByRole('button', { name: '영어 SRT 생성' }));
+      await page.getByRole('button', { name: '영어 SRT 생성' }).click();
+      await started.promise;
+      await page.getByRole('button', { name: '요청 취소' }).click();
+      await page.getByText('late.mp4', { exact: true }).waitFor();
+      if (editAfterCancel) {
+        await page.locator('input[type="file"]').setInputFiles({ name: 'after-cancel.mp4', mimeType: 'video/mp4', buffer: Buffer.from('after-cancel') });
+      }
+      // 화면을 떠나도 늦은 성공 접수증과 제출 버전 판정은 완료되어야 한다.
+      await page.getByRole('link', { name: '영상 추출', exact: true }).click();
+      gate.resolve();
+      await waitForCondition(async () => (await receiptCount(page)) === 1);
+      await page.getByRole('link', { name: '자막 추출', exact: true }).click();
+      await page.locator('.subtitle-form').waitFor();
+      assert.equal(await page.locator('.selected-file-row').count(), editAfterCancel ? 1 : 0);
+      if (editAfterCancel) await page.getByText('after-cancel.mp4', { exact: true }).waitFor();
+      assert.equal(await page.getByRole('radio', { name: /정확도 우선/ }).isChecked(), true);
+      assertNoRuntimeErrors();
+    } finally {
+      gate.resolve();
+      await context.close();
+    }
+  }
+}
+
+/** 자막 입력 수명 시나리오가 사용할 외부 분할 업로드·상태 응답. */
+async function routeSubtitleDraftUpload(page, complete, status = 'queued') {
+  await page.route('https://upload.example/**', (route) => route.fulfill({ status: 200, body: '', headers: {
+    'Access-Control-Allow-Origin': '*', 'Access-Control-Expose-Headers': 'ETag', ETag: '"draft-part"',
+  } }));
+  await routeApi(page, async ({ request, route, url }) => {
+    if (url.pathname === '/health') return fulfillJson(route, healthResponse());
+    if (url.pathname === '/subtitles/uploads' && request.method() === 'POST') return fulfillJson(route, {
+      expiresAt: '2026-10-05T12:00:00.000Z', objectKey: 'source/draft.mp4', partSizeBytes: 1024,
+      parts: [{ partNumber: 1, uploadUrl: 'https://upload.example/draft' }], uploadId: 'draft-upload', uploadToken: 'draft-token',
+    });
+    if (url.pathname === '/subtitles/uploads/complete') return complete(route);
+    if (url.pathname === '/subtitles/uploads/abort') return fulfillJson(route, {});
+    if (url.pathname === `/subtitles/jobs/${SUBTITLE_ID}`) {
+      if (status === 'status-error') return fulfillJson(route, { message: 'forbidden' }, 403);
+      return fulfillJson(route, subtitleJob(SUBTITLE_ID, status === 'storage-blocked' ? 'completed' : status));
+    }
+    return fulfillJson(route, {}, 404);
+  });
 }
 
 /** 취소 뒤 늦게 성공한 접수는 내역에 남고 새로 편집한 초안은 보존된다. */
@@ -354,6 +588,11 @@ async function verifySubtitleRequestErrorRecovery() {
       recoveredPicker.evaluate((element) => document.activeElement === element),
     );
     await failurePage.getByText('failed-video.mp4', { exact: true }).waitFor();
+    await failurePage.getByRole('radio', { name: /정확도 우선/ }).check();
+    await failurePage.getByRole('link', { name: '영상 추출', exact: true }).click();
+    await failurePage.getByRole('link', { name: '자막 추출', exact: true }).click();
+    await failurePage.getByText('failed-video.mp4', { exact: true }).waitFor();
+    assert.equal(await failurePage.getByRole('radio', { name: /정확도 우선/ }).isChecked(), true);
     assertFailureNoErrors();
   } finally {
     await failureContext.close();
@@ -1987,6 +2226,9 @@ async function verifySubtitleRequestCancellation() {
     assert.equal(completeCalls, 0);
     assert.equal(cancelCalls, 0);
     assert.equal(await receiptCount(page), 0);
+    await page.getByRole('link', { name: '영상 추출', exact: true }).click();
+    await page.getByRole('link', { name: '자막 추출', exact: true }).click();
+    await page.getByText('cancel-video.mp4', { exact: true }).waitFor();
     for (const link of await page.locator('nav[aria-label="주요 메뉴"]:visible a').all()) {
       assert.equal(await link.getAttribute('aria-disabled'), null);
     }
