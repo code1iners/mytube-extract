@@ -9,7 +9,6 @@ import type { DownloadResponse } from '../../../domain/download-request/download
 import type { SubtitleJobResponse } from '../../../domain/subtitle-request/subtitle-request';
 import { AppIcon, type AppIconName } from '../../components/app-icon';
 import { PanelTitle } from '../../components/panel-title';
-import { RequestFlow } from '../../components/request-flow';
 import { ROUTE_PATHS } from '../../constants/route-paths.constant';
 import {
   type JobReceipt,
@@ -27,7 +26,6 @@ import {
   parseHistoryDeepLink,
   updateDismissedReceiptKeys,
 } from './request-history.logic';
-import { getRequestFlowStage } from '../../utils/request-flow.util';
 
 type JobStatus = DownloadResponse | SubtitleJobResponse;
 
@@ -80,18 +78,18 @@ const HISTORY_EMPTY_NOTE_CLASS_NAME =
 const HISTORY_EMPTY_NOTE_ICON_CLASS_NAME = 'size-5 shrink-0';
 /** 요청 내역 목록의 Tailwind layout className. */
 const HISTORY_LIST_CLASS_NAME =
-  'history-list grid min-w-0 gap-mytube-12 m-0 p-0 list-none';
+  'history-list grid min-w-0 m-0 p-0 list-none border-t border-mytube-border';
 /** 요청 내역 항목의 Tailwind surface className. */
 const HISTORY_ITEM_CLASS_NAME =
-  'history-item min-w-0 p-mytube-16 border border-mytube-border rounded-mytube-lg bg-mytube-surface';
+  'history-item min-w-0 py-mytube-24 border-b border-mytube-border';
 /** deep link로 강조된 요청 내역 항목의 border className. */
-const HISTORY_ITEM_HIGHLIGHTED_CLASS_NAME = 'border-mytube-focus';
+const HISTORY_ITEM_HIGHLIGHTED_CLASS_NAME = 'outline-2 outline-mytube-focus [outline-offset:4px]';
 /** 요청 내역 항목 내부의 Tailwind layout className. */
 const HISTORY_ITEM_ARTICLE_CLASS_NAME =
   'grid min-w-0 gap-mytube-16';
 /** 요청 내역 항목 header의 Tailwind responsive layout className. */
 const HISTORY_ITEM_HEADER_CLASS_NAME =
-  'history-item__header grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-start gap-mytube-12 max-[561px]:grid-cols-1';
+  'history-item__header grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-start gap-mytube-12';
 /** 요청 내역 항목 제목의 typography·focus className. */
 const HISTORY_ITEM_TITLE_CLASS_NAME =
   'm-0 text-[18px] font-semibold leading-[1.4] [overflow-wrap:anywhere] focus:outline-2 focus:outline-mytube-focus focus:[outline-offset:2px]';
@@ -103,7 +101,7 @@ const HISTORY_ITEM_DETAIL_CLASS_NAME =
   'history-item__header-detail m-0 mt-[4px] text-mytube-text-secondary text-[14px] leading-[1.5] [overflow-wrap:anywhere]';
 /** 요청 내역 상태 label의 공통 Tailwind className. */
 const HISTORY_STATUS_CLASS_NAME =
-  'history-status inline-flex items-center gap-[6px] text-[14px] font-semibold leading-[1.4] whitespace-nowrap';
+  'history-status inline-flex items-center gap-[6px] text-[14px] font-semibold leading-[1.4]';
 /** 요청 내역 상태 tone. */
 type HistoryStatusTone =
   | 'queued'
@@ -117,7 +115,7 @@ const HISTORY_STATUS_TONE_CLASS_NAMES: Record<HistoryStatusTone, string> = {
   processing: 'text-mytube-status-processing',
   completed: 'text-mytube-status-completed',
   failed: 'text-mytube-status-failed',
-  expired: 'text-mytube-status-expired',
+  expired: 'text-mytube-text-secondary',
 };
 /** 요청 내역 진행률의 Tailwind layout className. */
 const HISTORY_PROGRESS_CLASS_NAME =
@@ -351,11 +349,14 @@ export function RequestHistoryPage() {
     );
 
     window.requestAnimationFrame(function focusAfterHistoryRemoval() {
-      const buttons = document.querySelectorAll<HTMLButtonElement>(
-        '.history-remove-button',
-      );
-      /** 삭제 후 우선 focus할 다음 또는 이전 삭제 button. */
-      const nextFocusTarget = buttons[index] ?? buttons[index - 1];
+      /** 삭제 뒤 실제 목록 순서의 다음 항목, 없으면 이전 항목. */
+      const items = document.querySelectorAll<HTMLElement>('.history-item');
+      /** 닫힌 상세 안의 삭제 버튼을 건너뛰고 항상 노출된 조작을 찾는다. */
+      const adjacentItem = items[index] ?? items[index - 1];
+      /** 주요 행동이 없으면 상세 펼치기로 이동한다. */
+      const nextFocusTarget = adjacentItem?.querySelector<HTMLElement>(
+        '.history-actions a, .history-actions button:not(:disabled)',
+      ) ?? adjacentItem?.querySelector<HTMLElement>('.history-details-toggle');
 
       if (nextFocusTarget) {
         nextFocusTarget.focus();
@@ -441,7 +442,7 @@ export function RequestHistoryPage() {
         요청 내역
       </PanelTitle>
       <p className={HISTORY_DESCRIPTION_CLASS_NAME}>
-        이 브라우저가 접수한 최근 요청 20건을 API 응답의 최신 상태로 확인합니다.
+        이 브라우저에서 접수한 최근 요청 20건입니다.
       </p>
       {storageFailed ? (
         <div className={HISTORY_STORAGE_NOTICE_CLASS_NAME} role="status">
@@ -507,7 +508,6 @@ function HistoryEmptyState() {
   return (
     <div className={HISTORY_EMPTY_CLASS_NAME}>
       <h3 className={HISTORY_EMPTY_PROMPT_CLASS_NAME}>시작할 작업을 선택하세요.</h3>
-      <RequestFlow current="source" />
       <div className={HISTORY_EMPTY_LINKS_CLASS_NAME}>
         <NavLink className={HISTORY_EMPTY_LINK_CLASS_NAME} to={ROUTE_PATHS.video}>
           <AppIcon className="size-7 text-mytube-action-primary" name="video" />
@@ -541,35 +541,70 @@ function HistoryEmptyState() {
   );
 }
 
+/** 접힌 목록에서도 요청 식별 정보와 상태별 주요 행동을 제공한다. */
 function HistoryItem(props: {
+  /** 직접 연결된 항목의 시각적 강조 여부. */
   highlighted: boolean;
+  /** 기존 주기적 상태 조회 결과. */
   query: UseQueryResult<JobStatus, Error>;
+  /** 브라우저에 저장된 접수증. */
   receipt: JobReceipt;
+  /** 접수증만 삭제하는 동작. */
   onRemove: () => void;
 }) {
+  /** 목록 식별자와 서버 상태 조회 결과. */
   const { query, receipt } = props;
-  const job = query.data as JobStatus | undefined;
+  /** 상태 갱신과 독립적으로 유지할 상세 열림 상태. */
+  const [detailsOpen, setDetailsOpen] = useState(false);
+  /** 마지막으로 확인한 서버 작업. */
+  const job = query.data;
+  /** 작업 실패와 별개인 조회 연결 오류. */
   const isConnectionError =
-    query.failureCount > 0 || query.fetchStatus === 'paused';
+    query.isError || query.failureCount > 0 || query.fetchStatus === 'paused';
+  /** 완료 응답에 다운로드 주소가 없어 재조회해야 하는 상태. */
   const isCompletedWithoutUrl =
     job?.displayStatus === 'completed' && !job.downloadUrl;
+  /** 후속 재요청 티켓 전까지 유지할 기존 입력 화면 연결. */
   const retryPath =
     receipt.kind === 'video' ? ROUTE_PATHS.video : ROUTE_PATHS.subtitles;
+  /** 제목과 상세 영역의 접근성 연결 기준. */
   const titleId = getHistoryTitleId(receipt);
-  /** 현재 요청 항목의 상태 tone. */
-  const statusTone = getStatusTone(job?.displayStatus);
-  /** 현재 상태 tone에 대응하는 Tailwind color className. */
+  /** 조회 복구가 필요한 경우 실제 작업 실패로 표현하지 않는다. */
+  const statusTone =
+    isConnectionError || isCompletedWithoutUrl
+      ? 'failed'
+      : getStatusTone(job?.displayStatus);
+  /** 화면 상태의 텍스트·아이콘과 함께 사용할 색. */
   const statusClassName = [
     HISTORY_STATUS_CLASS_NAME,
     `history-status--${statusTone}`,
     HISTORY_STATUS_TONE_CLASS_NAMES[statusTone],
   ].join(' ');
+  /** 종료된 요청에는 서버의 마지막 진행률도 표시하지 않는다. */
+  const isActive =
+    job &&
+    ['queued', 'processing', 'extracting_audio', 'transcribing'].includes(
+      job.displayStatus,
+    );
+  /** 서버가 확인해 준 유효 범위의 진행률만 사용한다. */
+  const progress =
+    isActive &&
+    !isConnectionError &&
+    typeof job.progress === 'number' &&
+    Number.isFinite(job.progress) &&
+    job.progress >= 0 &&
+    job.progress <= 100
+      ? job.progress
+      : null;
 
   return (
     <li
       className={`${HISTORY_ITEM_CLASS_NAME}${props.highlighted ? ` is-highlighted ${HISTORY_ITEM_HIGHLIGHTED_CLASS_NAME}` : ''}`}
     >
-      <article className={HISTORY_ITEM_ARTICLE_CLASS_NAME} aria-labelledby={titleId}>
+      <article
+        className={HISTORY_ITEM_ARTICLE_CLASS_NAME}
+        aria-labelledby={titleId}
+      >
         <div className={HISTORY_ITEM_HEADER_CLASS_NAME}>
           <div className="min-w-0">
             <h3
@@ -582,74 +617,150 @@ function HistoryItem(props: {
             <p className={HISTORY_ITEM_DETAIL_CLASS_NAME}>
               {job
                 ? formatJobDetail(receipt.kind, job)
-                : `접수 ${formatDate(receipt.acceptedAt)}`}
+                : `${formatKind(receipt.kind)} · 접수 ${formatDate(receipt.acceptedAt)}`}
             </p>
           </div>
-          <span className={statusClassName}>
-            <AppIcon name={getStatusIcon(job?.displayStatus)} />
-            {query.isPending ? '상태 확인 중' : formatStatus(job?.displayStatus)}
-          </span>
+          <button
+            aria-controls={`${titleId}-details`}
+            aria-expanded={detailsOpen}
+            aria-labelledby={`${titleId} ${titleId}-toggle-label`}
+            className="history-details-toggle grid size-11 shrink-0 place-items-center border-0 bg-transparent rounded-mytube-md text-mytube-text-primary cursor-pointer hover:bg-mytube-surface-alt focus-visible:outline-2 focus-visible:outline-mytube-focus focus-visible:[outline-offset:2px]"
+            type="button"
+            onClick={() => setDetailsOpen((open) => !open)}
+          >
+            <span className="sr-only" id={`${titleId}-toggle-label`}>
+              상세
+            </span>
+            <svg
+              aria-hidden="true"
+              className="size-5"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              viewBox="0 0 24 24"
+            >
+              <path d={detailsOpen ? 'm6 15 6-6 6 6' : 'm6 9 6 6 6-6'} />
+            </svg>
+          </button>
         </div>
-        <RequestFlow current={getRequestFlowStage(job?.displayStatus)} />
-        {job?.progress !== null && job?.progress !== undefined ? (
+        <div className="flex min-w-0 flex-wrap items-center justify-between gap-mytube-12">
+          <span className={statusClassName}>
+            <AppIcon
+              name={
+                isConnectionError || isCompletedWithoutUrl
+                  ? 'info'
+                  : getStatusIcon(job?.displayStatus)
+              }
+            />
+            {isConnectionError
+              ? '조회 오류'
+              : isCompletedWithoutUrl
+                ? '파일 확인 필요'
+                : query.isPending
+                  ? '상태 확인 중'
+                  : formatStatus(job?.displayStatus)}
+          </span>
+          <div className={HISTORY_ACTIONS_CLASS_NAME}>
+            {job?.displayStatus === 'completed' && job.downloadUrl ? (
+              <a
+                className={HISTORY_PRIMARY_ACTION_CLASS_NAME}
+                download
+                href={buildApiUrl(job.downloadUrl, getApiBaseUrl())}
+              >
+                <AppIcon name="download" />
+                다운로드
+              </a>
+            ) : null}
+            {job?.displayStatus === 'failed' ||
+            job?.displayStatus === 'expired' ? (
+              <NavLink
+                className={HISTORY_PRIMARY_ACTION_CLASS_NAME}
+                to={retryPath}
+              >
+                다시 요청
+              </NavLink>
+            ) : null}
+            {(query.isError || isCompletedWithoutUrl) &&
+            !(
+              query.error instanceof JobStatusRequestError &&
+              query.error.responseStatus === 404
+            ) ? (
+              <button
+                className={HISTORY_SECONDARY_ACTION_CLASS_NAME}
+                type="button"
+                onClick={() => void query.refetch()}
+              >
+                다시 확인
+              </button>
+            ) : null}
+          </div>
+        </div>
+        {progress !== null ? (
           <div className={HISTORY_PROGRESS_CLASS_NAME}>
             <progress
+              aria-label="처리 진행률"
               className={HISTORY_PROGRESS_BAR_CLASS_NAME}
               max={100}
-              value={job.progress}
+              value={progress}
             >
-              {job.progress}%
+              {progress}%
             </progress>
-            <span>{job.progress}%</span>
+            <span>{progress}%</span>
           </div>
         ) : null}
         {isConnectionError ? (
           <p className={HISTORY_MESSAGE_CLASS_NAME}>
             서버 연결이 불안정합니다. 내역을 유지하고 다시 확인합니다.
           </p>
-        ) : job ? (
-          <p className={HISTORY_MESSAGE_CLASS_NAME}>{job.message}</p>
-        ) : null}
-        {isCompletedWithoutUrl ? (
+        ) : isCompletedWithoutUrl ? (
           <p
-            className={`${HISTORY_MESSAGE_CLASS_NAME} history-message--error ${HISTORY_ERROR_MESSAGE_CLASS_NAME}`}
+            className={`${HISTORY_MESSAGE_CLASS_NAME} ${HISTORY_ERROR_MESSAGE_CLASS_NAME}`}
           >
             완료 파일 주소를 받지 못했습니다. 서버 상태를 다시 확인해 주세요.
           </p>
+        ) : job?.displayStatus === 'completed' ? (
+          <p className={HISTORY_MESSAGE_CLASS_NAME}>
+            {receipt.kind === 'subtitle' ? '영어 SRT · ' : ''}완료 파일은{' '}
+            {job.retentionDays}일 동안 보관됩니다.
+          </p>
+        ) : job ? (
+          <p className={HISTORY_MESSAGE_CLASS_NAME}>{job.message}</p>
         ) : null}
-        <div className={HISTORY_ACTIONS_CLASS_NAME}>
-          {job?.displayStatus === 'completed' && job.downloadUrl ? (
-            <a
-              className={HISTORY_PRIMARY_ACTION_CLASS_NAME}
-              download
-              href={buildApiUrl(job.downloadUrl, getApiBaseUrl())}
-            >
-              <AppIcon name="download" />다운로드
-            </a>
-          ) : null}
-          {job?.displayStatus === 'failed' || job?.displayStatus === 'expired' ? (
-            <NavLink className={HISTORY_PRIMARY_ACTION_CLASS_NAME} to={retryPath}>
-              다시 요청
-            </NavLink>
-          ) : null}
-          {(query.isError || isCompletedWithoutUrl) &&
-          !(query.error instanceof JobStatusRequestError && query.error.responseStatus === 404) ? (
+        <div
+          className="history-details min-w-0"
+          hidden={!detailsOpen}
+          id={`${titleId}-details`}
+        >
+          <div className="grid min-w-0 gap-mytube-12">
+            {job && 'sourceUrl' in job && job.title?.trim() ? (
+              <p className={HISTORY_MESSAGE_CLASS_NAME}>
+                원본:{' '}
+                <a
+                  className={HISTORY_SOURCE_LINK_CLASS_NAME}
+                  href={job.sourceUrl}
+                >
+                  {job.sourceUrl}
+                </a>
+              </p>
+            ) : null}
+            <p className={HISTORY_MESSAGE_CLASS_NAME}>
+              작업 식별자: {receipt.jobId}
+            </p>
+            <p className={HISTORY_MESSAGE_CLASS_NAME}>
+              접수 {formatDate(receipt.acceptedAt)}
+            </p>
+            <p className={HISTORY_MESSAGE_CLASS_NAME}>
+              내역에서만 삭제하며 서버 작업은 취소하지 않습니다.
+            </p>
             <button
-              className={HISTORY_SECONDARY_ACTION_CLASS_NAME}
+              aria-label={`${formatKind(receipt.kind)} 요청 내역에서 삭제`}
+              className={`${HISTORY_REMOVE_ACTION_CLASS_NAME} justify-self-start`}
               type="button"
-              onClick={() => void query.refetch()}
+              onClick={props.onRemove}
             >
-              다시 확인
+              내역에서 삭제
             </button>
-          ) : null}
-          <button
-            aria-label={`${formatKind(receipt.kind)} 요청 내역에서 삭제`}
-            className={HISTORY_REMOVE_ACTION_CLASS_NAME}
-            type="button"
-            onClick={props.onRemove}
-          >
-            내역에서 삭제
-          </button>
+          </div>
         </div>
       </article>
     </li>
@@ -695,7 +806,9 @@ function formatStatus(status?: string) {
   if (status === 'completed') return '완료';
   if (status === 'failed') return '실패';
   if (status === 'expired') return '만료';
-  if (status === 'processing' || status === 'extracting_audio' || status === 'transcribing') return '처리 중';
+  if (status === 'extracting_audio') return '오디오 추출 중';
+  if (status === 'transcribing') return '자막 생성 중';
+  if (status === 'processing') return '처리 중';
   return status === 'queued' ? '대기 중' : '상태 확인 중';
 }
 
@@ -716,11 +829,15 @@ function getStatusIcon(status?: string): AppIconName {
 function formatJobDetail(kind: JobReceiptKind, job: JobStatus) {
   return kind === 'video' && 'type' in job
     ? `${job.type === 'audio' ? '오디오' : '비디오'} · ${job.type === 'audio' ? `${job.quality} kbps` : `${job.quality}p`} · ${formatDate(job.createdAt)}`
-    : `${'fileName' in job ? job.fileName : '자막'} · ${formatDate(job.createdAt)}`;
+    : `자막 · ${'whisperModel' in job && job.whisperModel === 'small_en' ? '정확도 우선' : '속도 우선'} · ${formatDate(job.createdAt)}`;
 }
 
 /** 제목이 있으면 일반 텍스트로, 없으면 식별 가능한 원본 링크로 표시한다. */
 function renderHistoryTitle(kind: JobReceiptKind, job: JobStatus | undefined) {
+  if (kind === 'subtitle' && job && 'fileName' in job && job.fileName.trim()) {
+    return job.fileName;
+  }
+
   if (kind !== 'video' || !job || !('type' in job)) {
     return `${formatKind(kind)} 요청`;
   }

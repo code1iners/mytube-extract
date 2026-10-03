@@ -41,6 +41,8 @@ const staticServer = await createStaticServer(outputRoot);
 const browser = await chromium.launch();
 
 try {
+  await run('history missing download recovers without restarting the job', verifyHistoryMissingDownload);
+  await run('history minimal list exposes actions and keyboard details', verifyHistoryMinimalList);
   await run('subtitle draft keeps the real file independently of video input', verifySubtitleDraftNavigation);
   await run('subtitle draft separates preferences, refresh, and file edits', verifySubtitleDraftPreferences);
   await run('subtitle draft distinguishes accepted recovery and new edits', verifySubtitleAcceptedDraftLifetime);
@@ -94,6 +96,106 @@ try {
 } finally {
   await browser.close();
   await staticServer.close();
+}
+
+/** 주요 행동은 접힌 상태에서, 삭제와 부가 정보는 키보드로 펼쳐 사용한다. */
+async function verifyHistoryMinimalList() {
+  /** 실제 목록을 확인할 독립 브라우저. */
+  const context = await createContext({ viewport: { height: 844, width: 390 } });
+  /** 목록 페이지와 런타임 오류 수집기. */
+  const { page, assertNoRuntimeErrors } = await createPage(context);
+  try {
+    await seedReceipts(page, [
+      ['video', VIDEO_ID, '2026-08-11T00:03:00.000Z'],
+      ['subtitle', SUBTITLE_ID, '2026-08-11T00:02:00.000Z'],
+    ]);
+    await routeApi(page, async ({ route, url }) => {
+      if (url.pathname === `/downloads/${VIDEO_ID}`) {
+        return fulfillJson(route, videoJob(VIDEO_ID, 'completed', { title: '완료된 영상' }));
+      }
+      if (url.pathname === `/subtitles/jobs/${SUBTITLE_ID}`) {
+        return fulfillJson(route, { ...subtitleJob(SUBTITLE_ID, 'failed'), whisperModel: 'small_en' });
+      }
+      return fulfillJson(route, {}, 404);
+    });
+    await page.goto(`${staticServer.origin}/history`);
+    await page.getByRole('link', { name: '다운로드', exact: true }).waitFor();
+    assert.equal(await page.getByRole('link', { name: '다시 요청', exact: true }).isVisible(), true);
+    assert.equal(await page.getByRole('button', { name: /내역에서 삭제/ }).count(), 0);
+    assert.equal(await page.getByRole('progressbar').count(), 0);
+    assert.equal(await page.locator('.request-flow').count(), 0);
+    assert.equal(await page.getByRole('heading', { name: 'sample.mp4', exact: true }).isVisible(), true);
+    assert.equal(await page.getByText(/자막 · 정확도 우선/).isVisible(), true);
+    assert.equal(await page.getByText('완료 파일은 3일 동안 보관됩니다.', { exact: true }).isVisible(), true);
+    /** 제목에 연결된 상세 조작. */
+    const details = page.getByRole('button', { name: '완료된 영상 상세', exact: true });
+    assert.equal(await details.getAttribute('aria-expanded'), 'false');
+    await details.focus();
+    await page.keyboard.press('Enter');
+    assert.equal(await details.getAttribute('aria-expanded'), 'true');
+    assert.equal(await page.getByRole('button', { name: '영상 요청 내역에서 삭제' }).isVisible(), true);
+    assert.equal(await page.getByText('내역에서만 삭제하며 서버 작업은 취소하지 않습니다.', { exact: true }).first().isVisible(), true);
+    await page.keyboard.press('Space');
+    assert.equal(await details.getAttribute('aria-expanded'), 'false');
+    assert.equal(await page.getByRole('button', { name: /내역에서 삭제/ }).count(), 0);
+    assertNoRuntimeErrors();
+  } finally {
+    await context.close();
+  }
+}
+
+/** 다운로드 주소 누락은 조회 복구로 처리하고 종료된 요청의 진행률은 숨긴다. */
+async function verifyHistoryMissingDownload() {
+  /** 영상·자막 모두 기존 재조회 동작을 거친다. */
+  for (const kind of ['video', 'subtitle']) {
+    /** 주소 누락과 재조회 성공을 분리할 응답 상태. */
+    let recovered = false;
+    /** 처리 중 행과 함께 조회하는 독립 브라우저. */
+    const context = await createContext();
+    /** 현재 종류의 내역 페이지. */
+    const { page, assertNoRuntimeErrors } = await createPage(context);
+    /** 복구할 작업 식별자. */
+    const jobId = kind === 'video' ? VIDEO_ID : SUBTITLE_ID;
+    try {
+      await seedReceipts(page, [
+        [kind, jobId, '2026-08-11T00:01:00.000Z'],
+        ['video', VIDEO_OTHER_ID, '2026-08-11T00:00:00.000Z'],
+      ]);
+      await routeApi(page, async ({ route, url }) => {
+        if (url.pathname === `/downloads/${VIDEO_OTHER_ID}`) {
+          return fulfillJson(route, videoJob(VIDEO_OTHER_ID, 'processing', { title: '진행률 없는 작업', progress: null }));
+        }
+        if (url.pathname === `/downloads/${VIDEO_ID}` || url.pathname === `/subtitles/jobs/${SUBTITLE_ID}`) {
+          /** 재확인 전에는 다운로드 주소가 없는 완료 응답. */
+          const job = kind === 'video' ? videoJob(jobId, 'completed') : subtitleJob(jobId, 'completed');
+          return fulfillJson(route, { ...job, downloadUrl: recovered ? job.downloadUrl : null });
+        }
+        return fulfillJson(route, {}, 404);
+      });
+      await page.goto(`${staticServer.origin}/history`);
+      await page.getByText('파일 확인 필요', { exact: true }).waitFor();
+      assert.equal(await page.getByRole('link', { name: '다운로드', exact: true }).count(), 0);
+      assert.equal(await page.getByRole('link', { name: '다시 요청', exact: true }).count(), 0);
+      assert.equal(await page.getByRole('progressbar').count(), 0);
+      assert.equal(await receiptCount(page), 2);
+      recovered = true;
+      await page.getByRole('button', { name: '다시 확인', exact: true }).click();
+      await page.getByRole('link', { name: '다운로드', exact: true }).waitFor();
+      assert.equal(await page.getByText('파일 확인 필요', { exact: true }).count(), 0);
+      assert.equal(await page.getByRole('progressbar').count(), 0);
+      // 다음 처리 항목에 주요 행동이 없으면 닫힌 상세의 펼치기로 포커스를 돌린다.
+      await page.locator('.history-details-toggle').first().click();
+      await page.getByRole('button', { name: /내역에서 삭제/ }).click();
+      await waitForHistoryCount(page, 1);
+      /** 처리 중인 남은 항목의 보이는 조작. */
+      const details = page.getByRole('button', { name: '진행률 없는 작업 상세', exact: true });
+      await waitForCondition(async () => details.evaluate((element) => element === document.activeElement));
+      assert.equal(await details.getAttribute('aria-expanded'), 'false');
+      assertNoRuntimeErrors();
+    } finally {
+      await context.close();
+    }
+  }
 }
 
 /** 메뉴 복귀 후 실제 파일 바이트와 처리 방식으로 업로드하고 새 요청을 시작한다. */
@@ -3658,6 +3760,8 @@ async function verifyReceiptErrorHandling() {
     await page.getByText('더 이상 조회할 수 없는 요청을 내역에서 제거했습니다.').waitFor();
     await waitForCondition(async () => transientCalls > 0);
     await waitForCondition(async () => networkCalls > 0);
+    await waitForCondition(async () => (await page.getByText('조회 오류', { exact: true }).count()) === 2);
+    assert.equal(await page.getByText('실패', { exact: true }).count(), 0);
 
     assert.notEqual(
       await page.evaluate((key) => localStorage.getItem(key), receiptKey('video', VIDEO_ID)),
@@ -3726,8 +3830,9 @@ async function verifyHistoryDeleteUndo() {
     await page.goto(`${staticServer.origin}/history`);
     await waitForHistoryCount(page, 3);
 
-    /** 중간 항목을 삭제해 다음 삭제 버튼 focus를 확인한다. */
+    /** 중간 항목을 삭제해 다음 항목의 다운로드 focus를 확인한다. */
     const deleteButtons = page.locator('.history-remove-button');
+    await page.locator('.history-details-toggle').nth(1).click();
     await deleteButtons.nth(1).click();
     await waitForHistoryCount(page, 2);
     assert.equal(
@@ -3748,7 +3853,7 @@ async function verifyHistoryDeleteUndo() {
     assert.match(await page.locator('.history-undo').textContent(), /8초/);
     await waitForCondition(
       async () =>
-        await deleteButtons.nth(1).evaluate(
+        await page.locator('.history-actions a').nth(1).evaluate(
           (element) => document.activeElement === element,
         ),
     );
@@ -3764,7 +3869,7 @@ async function verifyHistoryDeleteUndo() {
     );
     assert.deepEqual(
       await page.locator('.history-item h3').allTextContents(),
-      ['자막 요청', restoredVideoTitle, remainingVideoTitle],
+      ['sample.mp4', restoredVideoTitle, remainingVideoTitle],
     );
     await waitForCondition(
       async () =>
@@ -3775,12 +3880,13 @@ async function verifyHistoryDeleteUndo() {
     assert.equal(await page.locator('[role="status"]').count(), 1);
     assert.equal(await page.locator('[role="alert"]').count(), 0);
 
-    /** 마지막 항목 삭제 후에는 이전 삭제 button으로 focus를 되돌린다. */
+    /** 마지막 항목 삭제 후에는 이전 항목의 다운로드로 focus를 되돌린다. */
+    await page.locator('.history-details-toggle').last().click();
     await page.locator('.history-remove-button').last().click();
     await waitForHistoryCount(page, 2);
     await waitForCondition(
       async () =>
-        await page.locator('.history-remove-button').last().evaluate(
+        await page.locator('.history-actions a').last().evaluate(
           (element) => document.activeElement === element,
         ),
     );
@@ -3788,12 +3894,14 @@ async function verifyHistoryDeleteUndo() {
     await waitForHistoryCount(page, 3);
 
     /** 첫 삭제를 두 번째 삭제로 교체해 가장 최근 undo만 남는지 확인한다. */
+    await page.locator('.history-details-toggle').first().click();
     await page.locator('.history-remove-button').first().click();
     await waitForHistoryCount(page, 2);
     assert.equal(
       await page.getByRole('button', { name: '삭제한 자막 요청 되돌리기' }).count(),
       1,
     );
+    await page.locator('.history-details-toggle').first().click();
     await page.locator('.history-remove-button').first().click();
     await waitForHistoryCount(page, 1);
     assert.equal(
@@ -3826,6 +3934,7 @@ async function verifyHistoryDeleteUndo() {
     );
 
     /** undo 시간이 지나면 동작이 닫히고 삭제가 유지되는지 확인한다. */
+    await page.locator('.history-details-toggle').first().click();
     await page.locator('.history-remove-button').first().click();
     await waitForHistoryCount(page, 1);
     await page.getByRole('button', { name: '삭제한 영상 요청 되돌리기' }).waitFor();
@@ -3837,6 +3946,7 @@ async function verifyHistoryDeleteUndo() {
     );
 
     /** 마지막 항목 삭제 후에는 목록 제목으로 focus를 옮긴다. */
+    await page.locator('.history-details-toggle').first().click();
     await page.locator('.history-remove-button').first().click();
     await waitForHistoryCount(page, 0);
     await waitForCondition(
@@ -3896,7 +4006,8 @@ async function verifyHistoryDeleteUndoResponsiveLayout() {
 
         await page.goto(`${staticServer.origin}/history`);
         await waitForHistoryCount(page, 1);
-        await page.locator('.history-remove-button').click();
+        await page.locator('.history-details-toggle').click();
+    await page.locator('.history-remove-button').click();
         await waitForHistoryCount(page, 0);
         await page.getByText('시작할 작업을 선택하세요.', { exact: true }).waitFor();
         await page
@@ -4007,6 +4118,7 @@ async function verifyHistoryDeleteStorageFailure() {
 
     await page.goto(`${staticServer.origin}/history`);
     await waitForHistoryCount(page, 1);
+    await page.locator('.history-details-toggle').click();
     await page.locator('.history-remove-button').click();
 
     /** 삭제 실패를 전달한 alert 문장. */
@@ -4062,6 +4174,7 @@ async function verifyHistoryUndoStorageFailure() {
 
     await page.goto(`${staticServer.origin}/history`);
     await waitForHistoryCount(page, 1);
+    await page.locator('.history-details-toggle').click();
     await page.locator('.history-remove-button').click();
     await waitForHistoryCount(page, 0);
     await page.getByRole('button', { name: '삭제한 영상 요청 되돌리기' }).click();
@@ -4139,7 +4252,7 @@ async function verifyCrossTabStorage() {
 
     await writerPage.evaluate((key) => localStorage.removeItem(key), receiptKey('video', VIDEO_ID));
     await waitForHistoryCount(historyPage, 1);
-    assert.equal(await historyPage.getByRole('heading', { name: '자막 요청' }).count(), 1);
+    assert.equal(await historyPage.getByRole('heading', { name: 'sample.mp4' }).count(), 1);
 
     await writerPage.evaluate(
       ({ key, value }) => localStorage.setItem(key, value),
@@ -4255,7 +4368,7 @@ async function verifyEmptyHistoryProductModel() {
         assert.equal(await page.getByRole('heading', { name: '요청 내역' }).count(), 1);
         assert.equal(
           await page
-            .getByText('이 브라우저가 접수한 최근 요청 20건을 API 응답의 최신 상태로 확인합니다.', {
+            .getByText('이 브라우저에서 접수한 최근 요청 20건입니다.', {
               exact: true,
             })
             .count(),
@@ -4313,10 +4426,10 @@ async function verifyEmptyHistoryProductModel() {
             .count(),
           1,
         );
-        assert.equal(await page.locator('.request-flow[data-flow-stage="source"]').count(), 1);
+        assert.equal(await page.locator('.request-flow').count(), 0);
         assert.deepEqual(
           await page.locator('.request-flow__step > span:last-child').allTextContents(),
-          ['원본', '추출', '파일 수령'],
+          [],
         );
 
         /** 빈 내역 표면과 링크의 실제 viewport 영역. */
@@ -4779,6 +4892,7 @@ async function verifyHistoryTitleInteractions() {
     });
     await updatePage.goto(`${staticServer.origin}/history`);
     await updatePage.getByRole('heading', { name: `https://www.youtube.com/watch?v=${VIDEO_ID}`, exact: true }).waitFor();
+    await updatePage.locator('.history-details-toggle').click();
     const deleteButton = updatePage.locator('.history-remove-button');
     await deleteButton.focus();
     await updatePage.getByRole('heading', { name: acquiredTitle, exact: true }).waitFor();
@@ -4801,6 +4915,9 @@ async function verifyPopulatedHistoryResponsiveLayout() {
         viewport: { height: width <= 820 ? 844 : 900, width },
       });
       const { page, assertNoRuntimeErrors } = await createPage(context);
+      /** 확대에서도 잘리지 않아야 하는 원본 제목과 주소. */
+      const longTitle = '긴영상제목'.repeat(20);
+      const longSource = `https://www.youtube.com/watch?v=${VIDEO_OTHER_ID}&list=${'x'.repeat(120)}`;
       const longFileName = `${'long-file-name-'.repeat(12)}.mp4`;
       const longStatusMessage = `${'긴 상태 안내 문구 '.repeat(12)}확인해 주세요.`;
 
@@ -4819,7 +4936,7 @@ async function verifyPopulatedHistoryResponsiveLayout() {
         ]);
         await routeApi(page, async ({ route, url }) => {
           if (url.pathname === `/downloads/${VIDEO_ID}`) {
-            return fulfillJson(route, videoJob(VIDEO_ID, 'processing'));
+            return fulfillJson(route, videoJob(VIDEO_ID, 'processing', { title: longTitle }));
           }
           if (url.pathname === `/subtitles/jobs/${SUBTITLE_ID}`) {
             return fulfillJson(route, {
@@ -4828,7 +4945,7 @@ async function verifyPopulatedHistoryResponsiveLayout() {
             });
           }
           if (url.pathname === `/downloads/${VIDEO_OTHER_ID}`) {
-            return fulfillJson(route, videoJob(VIDEO_OTHER_ID, 'failed'));
+            return fulfillJson(route, videoJob(VIDEO_OTHER_ID, 'failed', { title: null, sourceUrl: longSource }));
           }
           if (url.pathname === `/subtitles/jobs/${SUBTITLE_OTHER_ID}`) {
             return fulfillJson(
@@ -4842,7 +4959,7 @@ async function verifyPopulatedHistoryResponsiveLayout() {
           return fulfillJson(route, {}, 404);
         });
         await page.goto(`${staticServer.origin}/history`);
-        const detail = page.locator('.history-item__header p');
+        const detail = page.locator('.history-item__header h3');
         await detail.first().waitFor();
         await waitForCondition(
           async () =>
@@ -4854,7 +4971,7 @@ async function verifyPopulatedHistoryResponsiveLayout() {
         assert.equal(await page.locator('.history-item').count(), 4);
         assert.deepEqual(
           await page.locator('.history-item h3').allTextContents(),
-          ['영상 요청', '자막 요청', '영상 요청', '자막 요청'],
+          [longTitle, longFileName, longSource, 'sample.mp4'],
         );
         assert.deepEqual(
           await page.locator('.history-status').allTextContents(),
@@ -4862,7 +4979,7 @@ async function verifyPopulatedHistoryResponsiveLayout() {
         );
         assert.deepEqual(
           await page.locator('.history-progress span').allTextContents(),
-          ['50%', '100%', '0%', '0%'],
+          ['50%'],
         );
         assert.equal(await page.locator('.history-status--processing').count(), 1);
         assert.equal(await page.locator('.history-status--completed').count(), 1);
@@ -4870,7 +4987,7 @@ async function verifyPopulatedHistoryResponsiveLayout() {
         assert.equal(await page.locator('.history-status--expired').count(), 1);
         assert.equal(await page.getByRole('link', { name: '다운로드' }).count(), 1);
         assert.equal(await page.getByRole('link', { name: '다시 요청' }).count(), 2);
-        assert.equal(await page.locator('.request-flow[data-flow-stage="receipt"]').count(), 1);
+        assert.equal(await page.locator('.request-flow').count(), 0);
 
         const layoutMetrics = await page.evaluate(() => {
           /** 목록과 항목의 실제 viewport 및 scroll 영역. */
@@ -4952,6 +5069,60 @@ async function verifyPopulatedHistoryResponsiveLayout() {
                 action.right <= width,
             ),
         );
+        await documentFontsReady(page);
+        /** 실제 표면의 텍스트 대비를 확인한다. */
+        const contrasts = await page.locator('.history-status, .history-item__header-detail, .history-message, .history-primary-action, .history-details-toggle').evaluateAll((elements) => {
+          /** 브라우저 계산 RGB를 상대 휘도로 변환한다. */
+          const luminance = (color) => {
+            const channels = color.match(/[\d.]+/g).slice(0, 3).map(Number).map((value) => {
+              const channel = value / 255;
+              return channel <= 0.04045 ? channel / 12.92 : ((channel + 0.055) / 1.055) ** 2.4;
+            });
+            return channels[0] * 0.2126 + channels[1] * 0.7152 + channels[2] * 0.0722;
+          };
+          return elements.filter((element) => element.checkVisibility()).map((element) => {
+            let surface = element;
+            while (surface.parentElement && getComputedStyle(surface).backgroundColor === 'rgba(0, 0, 0, 0)') surface = surface.parentElement;
+            const foreground = luminance(getComputedStyle(element).color);
+            const background = luminance(getComputedStyle(surface).backgroundColor);
+            return { text: element.textContent, ratio: (Math.max(foreground, background) + 0.05) / (Math.min(foreground, background) + 0.05) };
+          });
+        });
+        assert.ok(contrasts.every(({ ratio }) => ratio >= 4.5), JSON.stringify(contrasts));
+        if (process.env.WEB_SMOKE_SCREENSHOTS) {
+          await page.screenshot({ path: `${process.env.WEB_SMOKE_SCREENSHOTS}/history-${width}-${theme}.png`, fullPage: true });
+        }
+        // 펼친 상세와 긴 내용도 실제 글자 크기를 두 배로 올려 확인한다.
+        for (const toggle of await page.locator('.history-details-toggle').all()) await toggle.click();
+        await page.evaluate(() => {
+          /** 자식에 같은 배율을 중복 적용하지 않도록 확대 전 크기를 수집한다. */
+          const sizes = [...document.querySelectorAll('body *')]
+            .filter((element) => [...element.childNodes].some((node) => node.nodeType === Node.TEXT_NODE && node.textContent.trim()))
+            .map((element) => [element, parseFloat(getComputedStyle(element).fontSize)]);
+          for (const [element, size] of sizes) element.style.fontSize = `${size * 2}px`;
+        });
+        /** 확대 뒤에도 상세·삭제·주 행동은 44px 이상이며 수평으로 가려지지 않는다. */
+        const controls = page.locator('.history-details-toggle, .history-remove-button, .history-actions a, .history-actions button');
+        for (const control of await controls.all()) {
+          await control.focus();
+          assert.equal(await control.evaluate((element) => document.activeElement === element), true);
+          const box = await control.boundingBox();
+          assert.ok(box && box.width >= 44 && box.height >= 44 && box.x >= 0 && box.x + box.width <= width);
+        }
+        await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
+        /** 마지막 삭제 조작과 고정 탭 사이의 실제 여유. */
+        const enlarged = await page.evaluate(() => ({
+          overflow: document.documentElement.scrollWidth > document.documentElement.clientWidth,
+          itemsOverflow: [...document.querySelectorAll('.history-item')].some((item) => item.scrollWidth > item.clientWidth),
+          lastActionBottom: [...document.querySelectorAll('.history-remove-button')].at(-1).getBoundingClientRect().bottom,
+          tabTop: document.querySelector('.bottom-tab-bar').getBoundingClientRect().top,
+        }));
+        assert.equal(enlarged.overflow, false);
+        assert.equal(enlarged.itemsOverflow, false);
+        if (width <= 820) assert.ok(enlarged.lastActionBottom <= enlarged.tabTop, JSON.stringify(enlarged));
+        if (process.env.WEB_SMOKE_SCREENSHOTS) {
+          await page.screenshot({ path: `${process.env.WEB_SMOKE_SCREENSHOTS}/history-expanded-200-${width}-${theme}.png`, fullPage: true });
+        }
         assertNoRuntimeErrors();
       } finally {
         await context.close();
