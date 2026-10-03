@@ -1,3 +1,4 @@
+import { Link } from 'react-router';
 import {
   PRIMARY_BUTTON_UTILITY_CLASS_NAME,
   SECONDARY_BUTTON_UTILITY_CLASS_NAME,
@@ -5,18 +6,9 @@ import {
 import { ErrorDetailsDisclosure } from '../../components/error-details-disclosure';
 import { AppIcon, type AppIconName } from '../../components/app-icon';
 import { PanelTitle } from '../../components/panel-title';
-import { RequestFlow } from '../../components/request-flow';
-import { RequestReadinessPanel } from '../../components/request-readiness-panel';
-import { WorkerHealthStatusNotice } from '../../components/worker-health-status';
-import { type SubtitleStepKey, type SubtitleStatusTone, useSubtitlesExtractLogic } from './_hooks/use-subtitles-extract-logic';
-
-/** 처리 화면에서 표시할 자막 단계. */
-const SUBTITLE_STEPS: Array<{ /** 단계 key. */ key: SubtitleStepKey; /** 화면 라벨. */ label: string }> = [
-  { key: 'queued', label: '대기' },
-  { key: 'extracting_audio', label: '음성 추출' },
-  { key: 'transcribing', label: '영어 SRT 생성' },
-  { key: 'completed', label: '완료' },
-];
+import { RequestProgress } from '../../components/request-progress';
+import { RequestReadinessNotice } from '../../components/request-readiness-notice';
+import { type SubtitleStatusTone, useSubtitlesExtractLogic } from './_hooks/use-subtitles-extract-logic';
 
 /** 선택 화면에서 안내할 자막 처리 방식. */
 const SUBTITLE_PROCESSING_OPTIONS = [
@@ -59,7 +51,7 @@ const SUBTITLE_REQUEST_PANEL_CLASS_NAME =
   'phase-panel subtitle-request-panel grid min-w-0 w-full max-w-none gap-mytube-24 m-0 p-0 min-[821px]:self-start max-[561px]:gap-mytube-8';
 /** 자막 요청 form의 Tailwind layout className. */
 const SUBTITLE_REQUEST_FORM_CLASS_NAME =
-  'subtitle-form grid gap-mytube-16 max-[561px]:gap-mytube-4';
+  'subtitle-form grid gap-mytube-16 max-[561px]:gap-mytube-8';
 /** 자막 파일 field의 Tailwind layout className. */
 const SUBTITLE_FILE_FIELD_CLASS_NAME = 'field grid gap-mytube-8';
 /** 자막 파일 field label의 Tailwind typography className. */
@@ -67,7 +59,7 @@ const SUBTITLE_FILE_FIELD_LABEL_CLASS_NAME =
   'field-label text-mytube-text-primary text-[16px] font-semibold leading-[1.4]';
 /** 자막 파일 picker의 Tailwind layout·state className. */
 const SUBTITLE_DROPZONE_CLASS_NAME =
-  'subtitle-dropzone grid min-h-[160px] w-full min-w-0 place-items-center gap-[10px] p-mytube-12 border border-dashed border-mytube-border rounded-mytube-lg bg-mytube-surface-alt text-mytube-text-secondary cursor-pointer font-semibold focus-visible:outline-2 focus-visible:outline-mytube-focus focus-visible:outline-offset-2 hover:border-mytube-text-secondary hover:bg-mytube-surface hover:text-mytube-text-primary max-[561px]:min-h-[140px]';
+  'subtitle-dropzone grid min-h-[80px] w-full min-w-0 place-items-center gap-[10px] p-mytube-12 border border-dashed border-mytube-border rounded-mytube-lg bg-mytube-surface-alt text-mytube-text-secondary cursor-pointer font-semibold focus-visible:outline-2 focus-visible:outline-mytube-focus focus-visible:outline-offset-2 hover:border-mytube-text-secondary hover:bg-mytube-surface hover:text-mytube-text-primary ';
 /** 자막 파일 picker의 파일 drag 위치 강조 state className. */
 const SUBTITLE_DROPZONE_DRAG_ACTIVE_CLASS_NAME =
   'is-drag-active !border-mytube-status-processing !bg-mytube-surface';
@@ -76,7 +68,7 @@ const SUBTITLE_DROPZONE_DRAG_UNSUPPORTED_CLASS_NAME =
   'is-drag-unsupported !border-mytube-status-failed !bg-mytube-surface';
 /** 자막 파일 picker icon의 Tailwind size·color className. */
 const SUBTITLE_DROPZONE_ICON_CLASS_NAME =
-  'pointer-events-none !size-[32px] text-mytube-action-primary';
+  'pointer-events-none !size-[24px] text-mytube-action-primary';
 /** 자막 파일 picker의 drag 위치 강조 icon className. */
 const SUBTITLE_DROPZONE_DRAG_ACTIVE_ICON_CLASS_NAME =
   '!text-mytube-status-processing';
@@ -103,22 +95,16 @@ const SUBTITLE_DRAG_UNSUPPORTED_FEEDBACK_ID =
   'subtitle-drag-unsupported-feedback';
 /** 선택 파일 row의 Tailwind layout·surface className. */
 const SUBTITLE_SELECTED_FILE_ROW_CLASS_NAME =
-  'selected-file-row grid min-w-0 grid-cols-[40px_minmax(0,1fr)_auto] items-center gap-mytube-12 p-mytube-12 border border-mytube-border rounded-mytube-md bg-mytube-surface-alt';
-/** 선택 파일 icon의 Tailwind size·color className. */
-const SUBTITLE_SELECTED_FILE_ICON_CLASS_NAME =
-  '!size-6 text-mytube-text-secondary';
+  'selected-file-row grid min-w-0 grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-mytube-8 border border-mytube-border rounded-mytube-md bg-mytube-surface-alt p-mytube-8';
 /** 선택 파일 이름의 Tailwind overflow·typography className. */
 const SUBTITLE_SELECTED_FILE_NAME_CLASS_NAME =
-  'block min-w-0 truncate text-mytube-text-primary text-[16px] font-semibold';
-/** 선택 파일 메타의 Tailwind overflow·typography className. */
-const SUBTITLE_SELECTED_FILE_META_CLASS_NAME =
-  'mt-mytube-4 block min-w-0 truncate text-mytube-text-secondary text-[13px]';
+  'block min-w-0 [overflow-wrap:anywhere] text-mytube-text-primary text-[16px] font-semibold';
 /** 선택 파일 제거 button의 Tailwind layout·state className. */
 const SUBTITLE_SELECTED_FILE_CLEAR_CLASS_NAME =
   'inline-flex min-w-[44px] min-h-[44px] items-center justify-center px-mytube-8 border border-mytube-border rounded-mytube-sm bg-mytube-surface text-mytube-text-secondary cursor-pointer text-[13px] font-semibold focus-visible:outline-2 focus-visible:outline-mytube-focus focus-visible:outline-offset-2 hover:bg-mytube-surface-alt hover:text-mytube-text-primary';
 /** 자막 처리 방식 fieldset의 Tailwind layout className. */
 const SUBTITLE_PROCESSING_METHOD_CLASS_NAME =
-  'segmented-control subtitle-processing-method grid min-w-0 grid-cols-1 gap-mytube-8 m-0 border-0 p-0 max-[561px]:gap-mytube-4';
+  'segmented-control subtitle-processing-method grid min-w-0 grid-cols-1 gap-mytube-8 m-0 border-0 p-0 max-[561px]:gap-mytube-8';
 /** 자막 처리 방식 legend의 Tailwind typography className. */
 const SUBTITLE_PROCESSING_LEGEND_CLASS_NAME =
   'col-span-full m-0 p-0 text-mytube-text-primary text-[16px] font-semibold leading-[1.4]';
@@ -155,9 +141,6 @@ const SUBTITLE_PROCESSING_TECHNICAL_CLASS_NAME =
 /** 자막 제출 button의 Tailwind layout·state className. */
 const SUBTITLE_SUBMIT_BUTTON_CLASS_NAME =
   'subtitle-submit-button inline-flex w-full min-h-[48px] items-center justify-center gap-mytube-8 border border-mytube-action-primary rounded-mytube-md bg-mytube-action-primary text-mytube-on-primary cursor-pointer text-[18px] font-semibold leading-[1] shadow-mytube-soft focus-visible:outline-2 focus-visible:outline-mytube-focus focus-visible:outline-offset-2 enabled:hover:brightness-[0.92] enabled:active:brightness-[0.84] disabled:border-mytube-border disabled:bg-mytube-surface-alt disabled:text-mytube-text-disabled disabled:cursor-not-allowed disabled:shadow-none';
-/** 자막 제출 불가 사유의 Tailwind typography className. */
-const SUBTITLE_SUBMIT_DISABLED_REASON_CLASS_NAME =
-  'subtitle-submit-disabled-reason m-[-12px_0_0] text-mytube-text-secondary text-[14px] leading-[1.4] break-keep [overflow-wrap:anywhere]';
 /** 자막 생명주기 panel의 Tailwind surface·layout className. */
 const SUBTITLE_STATUS_PANEL_CLASS_NAME =
   'subtitle-status-panel grid min-w-0 w-full max-w-none m-0 gap-[18px] border border-mytube-border rounded-mytube-lg bg-mytube-surface p-[20px] shadow-mytube-soft max-[821px]:p-mytube-16';
@@ -208,33 +191,12 @@ const SUBTITLE_STATUS_TONE_CLASS_NAMES: Record<
     title: 'text-mytube-status-expired',
   },
 };
-/** 자막 작업 단계 목록의 Tailwind layout className. */
-const SUBTITLE_STEP_TABS_CLASS_NAME =
-  'subtitle-step-tabs grid min-w-0 grid-cols-4 gap-mytube-8 max-[821px]:grid-cols-1';
-/** 자막 작업 단계 항목의 Tailwind surface·typography className. */
-const SUBTITLE_STEP_TAB_BASE_CLASS_NAME =
-  'subtitle-step-tab inline-flex min-w-0 min-h-[44px] items-center justify-center gap-[6px] border border-mytube-border rounded-mytube-md bg-mytube-surface text-mytube-text-secondary font-semibold max-[821px]:min-h-[40px] max-[821px]:text-[13px]';
-/** 현재 자막 작업 단계의 Tailwind state className. */
-const SUBTITLE_STEP_TAB_SELECTED_CLASS_NAME =
-  'border-mytube-status-processing bg-mytube-surface-alt text-mytube-status-processing';
-/** 자막 진행률 meter의 Tailwind layout className. */
-const SUBTITLE_PROGRESS_METER_CLASS_NAME =
-  'subtitle-progress-meter grid min-w-0 grid-cols-10 gap-mytube-4';
-/** 자막 진행률 cell의 기본 Tailwind surface className. */
-const SUBTITLE_PROGRESS_CELL_CLASS_NAME =
-  'h-[8px] rounded-mytube-full bg-mytube-surface-alt';
-/** 채워진 자막 진행률 cell의 Tailwind status className. */
-const SUBTITLE_PROGRESS_FILLED_CELL_CLASS_NAME =
-  'bg-mytube-status-processing';
-/** 자막 진행률 보조 문구의 Tailwind typography className. */
-const SUBTITLE_PROGRESS_LABEL_CLASS_NAME =
-  'subtitle-progress-label m-0 text-mytube-status-processing text-[16px] font-semibold text-center';
 /** 자막 상태 상세 목록의 Tailwind layout className. */
 const SUBTITLE_STATUS_DETAILS_CLASS_NAME =
   'subtitle-status-details grid min-w-0 gap-0 m-0 border-t border-mytube-border';
 /** 자막 상태 상세 한 행의 Tailwind layout·border className. */
 const SUBTITLE_STATUS_DETAIL_ROW_CLASS_NAME =
-  'grid min-w-0 grid-cols-[minmax(0,1fr)_auto] gap-mytube-16 border-b border-mytube-border py-[11px]';
+  'grid min-w-0 grid-cols-[auto_minmax(0,1fr)] gap-mytube-16 border-b border-mytube-border py-[11px]';
 /** 자막 상태 상세 label의 Tailwind typography className. */
 const SUBTITLE_STATUS_DETAIL_LABEL_CLASS_NAME =
   'm-0 text-mytube-text-secondary text-[14px] font-normal';
@@ -275,18 +237,19 @@ export function SubtitlesExtractPage() {
 
   /** 자막 업로드 form, job 상태, 사용자 동작. */
   const {
-    canSubmit, canChangeWhisperModel, cancelRequest, clearSelectedFile, currentStepKey, downloadHref, fileInputRef,
+    uploadProgress, canSubmit, canChangeWhisperModel, cancelRequest, clearSelectedFile, downloadHref, fileInputRef,
     fileFeedbackIsError, fileFeedbackMessage, filePickerButtonRef,
-    filledProgressCells, handleDropzoneDragEnd, handleDropzoneDragEnter, handleDropzoneDragLeave,
+    handleDropzoneDragEnd, handleDropzoneDragEnter, handleDropzoneDragLeave,
     handleDropzoneDragOver, handleDropzoneDrop, handleFileInputChange,
     handleFilePickerOpen, handleSubtitleSubmit, handleWhisperModelChange, isSubtitlePending,
     isDropzoneDragActive, isDropzoneDragUnsupported, requestNotice, retryWorkerHealth, returnToRequest, selectedFile, selectedFileMeta,
     selectedWhisperModel, statusErrorDetail, statusIconName, statusJob, statusMessage, statusTitle,
-    statusTone, submitDisabledReason, viewPhase, workerHealthCheckedAt, workerHealthFailed,
-    workerHealthDetail, workerHealthIsFetching, workerHealthIsRefreshing, workerHealthStatus,
+    statusTone, viewPhase, workerHealthFailed,
+    workerHealthDetail, workerHealthIsFetching, workerHealthStatus,
   } = useSubtitlesExtractLogic();
   /** 파일 picker가 현재 drag 사전 안내와 기존 오류를 함께 설명하도록 연결할 id 목록. */
   const filePickerDescribedBy = [
+    selectedFile ? 'subtitle-selected-file' : undefined,
     fileFeedbackMessage ? SUBTITLE_FILE_FEEDBACK_ID : undefined,
     isDropzoneDragUnsupported
       ? SUBTITLE_DRAG_UNSUPPORTED_FEEDBACK_ID
@@ -319,44 +282,15 @@ export function SubtitlesExtractPage() {
           copy: '영상 선택 또는 드래그',
         };
 
-  if (
-    viewPhase === 'request' &&
-    workerHealthStatus.kind !== 'ready'
-  ) {
-    return (
-      <RequestReadinessPanel
-        healthId={SUBTITLE_WORKER_HEALTH_TITLE_ID}
-        icon="subtitle"
-        id="subtitles-title"
-        isFetching={workerHealthIsFetching}
-        lastCheckedAt={workerHealthCheckedAt}
-        status={workerHealthStatus}
-        technicalDetail={workerHealthDetail}
-        title="자막 추출"
-        onRetry={retryWorkerHealth}
-      />
-    );
-  }
-
   if (viewPhase === 'request') {
     return <section className={SUBTITLE_REQUEST_PANEL_CLASS_NAME} aria-labelledby="subtitles-title">
         <PanelTitle
           className={SUBTITLE_REQUEST_TITLE_CLASS_NAME}
           icon="subtitle"
           id="subtitles-title"
-        isRefreshing={workerHealthIsRefreshing}
       >
         자막 추출
       </PanelTitle>
-      <WorkerHealthStatusNotice
-        id={SUBTITLE_WORKER_HEALTH_TITLE_ID}
-        isFetching={workerHealthIsFetching}
-        lastCheckedAt={workerHealthCheckedAt}
-        status={workerHealthStatus}
-        technicalDetail={workerHealthDetail}
-        onRetry={retryWorkerHealth}
-      />
-      <RequestFlow current="source" />
       {requestNotice ? <RequestNotice message={requestNotice} /> : null}
       <form className={SUBTITLE_REQUEST_FORM_CLASS_NAME} onSubmit={handleSubtitleSubmit}>
         <div className={`${SUBTITLE_FILE_FIELD_CLASS_NAME}${fileFeedbackIsError ? ' has-error' : ''}`}>
@@ -371,31 +305,42 @@ export function SubtitlesExtractPage() {
             type="file"
             onChange={handleFileInputChange}
           />
-          <button
-            aria-describedby={filePickerDescribedBy}
-            aria-label={SUBTITLE_FILE_PICKER_LABEL}
-            className={`${SUBTITLE_DROPZONE_CLASS_NAME}${fileFeedbackIsError && !isDropzoneDragActive ? ' !border-mytube-status-failed' : ''}${dropzonePresentation.className}`}
-            ref={filePickerButtonRef}
-            type="button"
-            onClick={handleFilePickerOpen}
+          <div
+            className={selectedFile ? SUBTITLE_SELECTED_FILE_ROW_CLASS_NAME : undefined}
             onDragEnd={handleDropzoneDragEnd}
             onDragEnter={handleDropzoneDragEnter}
             onDragLeave={handleDropzoneDragLeave}
             onDragOver={handleDropzoneDragOver}
             onDrop={handleDropzoneDrop}
           >
-            <AppIcon
+          {selectedFile ? (
+            <div className="min-w-0" id="subtitle-selected-file" role="status" aria-atomic="true">
+              <strong className={SUBTITLE_SELECTED_FILE_NAME_CLASS_NAME}>{selectedFile.name}</strong>
+              <span className="block text-[14px] text-mytube-text-secondary">{selectedFileMeta}</span>
+            </div>
+          ) : null}
+          <button
+            aria-describedby={filePickerDescribedBy}
+            aria-label={selectedFile ? '파일 변경 (로컬 영상 파일)' : SUBTITLE_FILE_PICKER_LABEL}
+            className={`${SUBTITLE_DROPZONE_CLASS_NAME}${selectedFile ? ' !min-h-[44px] max-w-[112px] !p-mytube-8 !border-solid !rounded-mytube-sm !bg-mytube-surface' : ''}${fileFeedbackIsError && !isDropzoneDragActive ? ' !border-mytube-status-failed' : ''}${dropzonePresentation.className}`}
+            ref={filePickerButtonRef}
+            type="button"
+            onClick={handleFilePickerOpen}
+          >
+            {!selectedFile || isDropzoneDragActive ? <AppIcon
               className={`${SUBTITLE_DROPZONE_ICON_CLASS_NAME}${dropzonePresentation.iconClassName}`}
               name={dropzonePresentation.icon}
-            />
+            /> : null}
             <strong
-              className={`${SUBTITLE_DROPZONE_PRIMARY_COPY_CLASS_NAME}${dropzonePresentation.copyClassName}`}
+              className={`${SUBTITLE_SELECTED_FILE_NAME_CLASS_NAME} ${SUBTITLE_DROPZONE_PRIMARY_COPY_CLASS_NAME}${dropzonePresentation.copyClassName}`}
               id={isDropzoneDragUnsupported ? SUBTITLE_DRAG_UNSUPPORTED_FEEDBACK_ID : undefined}
             >
-              {dropzonePresentation.copy}
+              {isDropzoneDragActive ? dropzonePresentation.copy : selectedFile ? '파일 변경' : dropzonePresentation.copy}
             </strong>
-            <span className={SUBTITLE_DROPZONE_HINT_CLASS_NAME}>mp4, mov, webm</span>
+            {!selectedFile ? <span className={SUBTITLE_DROPZONE_HINT_CLASS_NAME}>mp4, mov, webm</span> : null}
           </button>
+          {selectedFile ? <button className={SUBTITLE_SELECTED_FILE_CLEAR_CLASS_NAME} type="button" onClick={clearSelectedFile}>지우기</button> : null}
+          </div>
           {fileFeedbackMessage ? (
             <p
               className={`${SUBTITLE_FILE_FEEDBACK_CLASS_NAME}${fileFeedbackIsError ? ' !text-mytube-status-failed' : ''}`}
@@ -406,7 +351,6 @@ export function SubtitlesExtractPage() {
             </p>
           ) : null}
         </div>
-        {selectedFile ? <div className={SUBTITLE_SELECTED_FILE_ROW_CLASS_NAME}><AppIcon className={SUBTITLE_SELECTED_FILE_ICON_CLASS_NAME} name="video" /><div className="min-w-0"><strong className={SUBTITLE_SELECTED_FILE_NAME_CLASS_NAME}>{selectedFile.name}</strong><span className={SUBTITLE_SELECTED_FILE_META_CLASS_NAME}>{selectedFileMeta}</span></div><button className={SUBTITLE_SELECTED_FILE_CLEAR_CLASS_NAME} type="button" onClick={clearSelectedFile}>지우기</button></div> : null}
         <fieldset
           aria-describedby="subtitle-processing-guidance"
           className={SUBTITLE_PROCESSING_METHOD_CLASS_NAME}
@@ -436,6 +380,24 @@ export function SubtitlesExtractPage() {
               </span>
             </label>
           ))}
+
+        </fieldset>
+        <RequestReadinessNotice
+          id={SUBTITLE_WORKER_HEALTH_TITLE_ID}
+          isFetching={workerHealthIsFetching}
+          status={workerHealthStatus}
+          technicalDetail={workerHealthDetail}
+          onRetry={retryWorkerHealth}
+        />
+        <button
+          aria-describedby={workerHealthStatus.kind !== 'ready' ? SUBTITLE_WORKER_HEALTH_TITLE_ID : undefined}
+          className={SUBTITLE_SUBMIT_BUTTON_CLASS_NAME}
+          disabled={!canSubmit}
+          type="submit"
+        >
+          <AppIcon name="subtitle" />
+          {isSubtitlePending ? '요청 중' : '영어 SRT 생성'}
+        </button>
           <details className={SUBTITLE_PROCESSING_DETAILS_CLASS_NAME}>
             <summary className={SUBTITLE_PROCESSING_SUMMARY_CLASS_NAME}>기술적인 처리 정보</summary>
             <div className={SUBTITLE_PROCESSING_TECHNICAL_CLASS_NAME}>
@@ -445,25 +407,6 @@ export function SubtitlesExtractPage() {
               ))}
             </div>
           </details>
-        </fieldset>
-        <button
-          aria-describedby={
-            !canSubmit && submitDisabledReason
-              ? 'subtitle-submit-disabled-reason'
-              : undefined
-          }
-          className={SUBTITLE_SUBMIT_BUTTON_CLASS_NAME}
-          disabled={!canSubmit}
-          type="submit"
-        >
-          <AppIcon name="subtitle" />
-          {isSubtitlePending ? '요청 중' : '영어 SRT 생성'}
-        </button>
-        {!canSubmit && submitDisabledReason ? (
-          <p className={SUBTITLE_SUBMIT_DISABLED_REASON_CLASS_NAME} id="subtitle-submit-disabled-reason">
-            {submitDisabledReason}
-          </p>
-        ) : null}
       </form>
     </section>;
   }
@@ -471,33 +414,17 @@ export function SubtitlesExtractPage() {
   if (viewPhase === 'processing') {
     return <section className={SUBTITLE_STATUS_PANEL_CLASS_NAME} aria-labelledby="subtitle-status-title">
       <PanelTitle icon="processing" id="subtitle-status-title">자막 추출</PanelTitle>
-      <RequestFlow current="extract" />
       {requestNotice ? <RequestNotice message={requestNotice} /> : null}
       <StatusHead icon={statusIconName} tone={statusTone} title={statusTitle} message={statusMessage} />
-      <div className={SUBTITLE_STEP_TABS_CLASS_NAME} aria-label="영어 SRT 처리 단계">
-        {SUBTITLE_STEPS.map((step) => (
-          <span
-            aria-current={currentStepKey === step.key ? 'step' : undefined}
-            className={
-              currentStepKey === step.key
-                ? `${SUBTITLE_STEP_TAB_BASE_CLASS_NAME} ${SUBTITLE_STEP_TAB_SELECTED_CLASS_NAME}`
-                : SUBTITLE_STEP_TAB_BASE_CLASS_NAME
-            }
-            key={step.key}
-          >
-            {step.label}
-          </span>
-        ))}
-      </div>
-      <ProgressMeter filledCells={filledProgressCells} value={statusJob.progress} />
+      <RequestProgress value={statusJob.progress} />
     </section>;
   }
 
   if (viewPhase === 'accepting') {
     return <section className={SUBTITLE_STATUS_PANEL_CLASS_NAME} aria-labelledby="subtitle-accepting-title">
       <PanelTitle icon="processing" id="subtitle-accepting-title">자막 추출</PanelTitle>
-      <RequestFlow current="extract" />
       <StatusHead icon={statusIconName} tone={statusTone} title={statusTitle} message={statusMessage} />
+      <RequestProgress value={uploadProgress ?? null} />
       <button className={SUBTITLE_CANCEL_BUTTON_CLASS_NAME} type="button" onClick={cancelRequest}>
         요청 취소
       </button>
@@ -508,9 +435,8 @@ export function SubtitlesExtractPage() {
   if (viewPhase === 'result') {
     return <section className={SUBTITLE_STATUS_PANEL_CLASS_NAME} aria-labelledby="subtitle-result-title">
       <PanelTitle icon="completed" id="subtitle-result-title">자막 추출</PanelTitle>
-      <RequestFlow current="receipt" />
       {requestNotice ? <RequestNotice message={requestNotice} /> : null}
-      <StatusHead icon="completed" tone="completed" title={statusTitle} message={statusMessage} />
+      <StatusHead icon={downloadHref ? 'completed' : 'failed'} tone={downloadHref ? 'completed' : 'failed'} title={downloadHref ? statusTitle : '다운로드 주소를 확인할 수 없습니다'} message={downloadHref ? statusMessage : '요청 내역에서 파일 상태를 다시 확인해 주세요.'} isAlert={!downloadHref} />
       <dl className={SUBTITLE_STATUS_DETAILS_CLASS_NAME}>
         <div className={SUBTITLE_STATUS_DETAIL_ROW_CLASS_NAME}><dt className={SUBTITLE_STATUS_DETAIL_LABEL_CLASS_NAME}>원본 파일</dt><dd className={SUBTITLE_STATUS_DETAIL_VALUE_CLASS_NAME}>{statusJob.fileName}</dd></div>
         <div className={SUBTITLE_STATUS_DETAIL_ROW_CLASS_NAME}><dt className={SUBTITLE_STATUS_DETAIL_LABEL_CLASS_NAME}>결과 형식</dt><dd className={SUBTITLE_STATUS_DETAIL_VALUE_CLASS_NAME}>영어 SRT</dd></div>
@@ -520,7 +446,7 @@ export function SubtitlesExtractPage() {
         완료 파일은 {statusJob.retentionDays}일 동안 보관되며, 요청 내역은 이 브라우저에만 남습니다.
       </p>
       <div className={SUBTITLE_RESULT_ACTIONS_CLASS_NAME}>
-        <a className={SUBTITLE_DOWNLOAD_BUTTON_CLASS_NAME} download href={downloadHref}><AppIcon name="download" />영어 SRT 다운로드</a>
+        {downloadHref ? <a className={SUBTITLE_DOWNLOAD_BUTTON_CLASS_NAME} download href={downloadHref}><AppIcon name="download" />영어 SRT 다운로드</a> : <Link className={SUBTITLE_DOWNLOAD_BUTTON_CLASS_NAME} to={`/history?kind=subtitle&jobId=${encodeURIComponent(statusJob.jobId)}`}>요청 내역에서 다시 확인</Link>}
         <button className={SUBTITLE_NEW_REQUEST_BUTTON_CLASS_NAME} type="button" onClick={returnToRequest}>새 요청</button>
       </div>
     </section>;
@@ -528,7 +454,6 @@ export function SubtitlesExtractPage() {
 
   return <section className={SUBTITLE_STATUS_PANEL_CLASS_NAME} aria-labelledby="subtitle-error-title">
     <PanelTitle icon={statusIconName} id="subtitle-error-title">자막 추출</PanelTitle>
-    <RequestFlow current="extract" />
     <StatusHead icon={statusIconName} tone={statusTone} title={statusTitle} message={statusMessage} isAlert />
     {workerHealthFailed ? <button className={SUBTITLE_SECONDARY_BUTTON_CLASS_NAME} disabled={workerHealthIsFetching} type="button" onClick={retryWorkerHealth}>다시 확인</button> : null}
     <ErrorDetailsDisclosure detail={statusErrorDetail} summary={SUBTITLE_ERROR_DETAIL_SUMMARY} />
@@ -542,14 +467,6 @@ function StatusHead(props: { /** 상태 아이콘. */ icon: AppIconName; /** 상
   const toneClassNames = SUBTITLE_STATUS_TONE_CLASS_NAMES[props.tone];
 
   return <div className={SUBTITLE_STATUS_HEAD_CLASS_NAME}><span className={`${SUBTITLE_STATUS_ICON_CLASS_NAME} ${toneClassNames.icon}`} aria-hidden="true"><AppIcon name={props.icon} /></span><div className={SUBTITLE_STATUS_COPY_CLASS_NAME}><h3 className={`${SUBTITLE_STATUS_TITLE_CLASS_NAME} ${toneClassNames.title}`}>{props.title}</h3><p className={SUBTITLE_STATUS_MESSAGE_CLASS_NAME} role={props.isAlert ? 'alert' : 'status'} aria-live="polite">{props.message}</p></div></div>;
-}
-
-/** 자막 job 진행률을 meter와 화면 표시 문구로 렌더링한다. */
-function ProgressMeter(props: { /** 채울 pixel cell 수. */ filledCells: number; /** API 진행률 값. */ value: number | null }) {
-  /** 시각 사용자와 보조 기술에 함께 제공할 진행률 문구. */
-  const progressLabel = props.value === null ? '처리 중' : `진행률 ${props.value}%`;
-
-  return <><div className={SUBTITLE_PROGRESS_METER_CLASS_NAME} aria-label="진행률" aria-valuemax={100} aria-valuemin={0} aria-valuenow={props.value ?? undefined} aria-valuetext={progressLabel} role="progressbar">{Array.from({ length: 10 }).map((_, index) => <span className={index < props.filledCells ? `${SUBTITLE_PROGRESS_CELL_CLASS_NAME} ${SUBTITLE_PROGRESS_FILLED_CELL_CLASS_NAME}` : SUBTITLE_PROGRESS_CELL_CLASS_NAME} key={index} />)}</div><p className={SUBTITLE_PROGRESS_LABEL_CLASS_NAME}>{progressLabel}</p></>;
 }
 
 /** 요청 중단·접수 경쟁 결과를 현재 화면에 알린다. */

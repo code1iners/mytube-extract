@@ -54,6 +54,7 @@ try {
   await run('video request cancellation restores input and navigation', verifyVideoRequestCancellation);
   await run('receipt storage failure keeps the accepted job history destination', verifyAcceptedJobStorageFallback);
   await run('subtitle in-place success and navigation lock', verifySubtitleRequestFlow);
+  await run('subtitle missing download recovers through its receipt', () => verifySubtitleRequestFlow(true));
   await run('subtitle lifecycle states stay distinct across themes and widths', verifySubtitleLifecycleStatusSurfaces);
   await run('subtitle accepting and cancellation surfaces restore focus', verifySubtitleAcceptanceAndCancellationSurfaces);
   await run('subtitle receipt storage failure keeps the accepted job history destination', verifySubtitleReceiptStorageFallback);
@@ -157,7 +158,7 @@ async function verifySubtitleRequestErrorRecovery() {
       .getByRole('button', { name: '요청 설정으로 돌아가기' })
       .click();
     const recoveredPicker = failurePage.getByRole('button', {
-      name: '영상 선택 또는 드래그 (로컬 영상 파일)',
+      name: /^(영상 선택 또는 드래그|파일 변경) \(로컬 영상 파일\)$/,
     });
     await waitForCondition(async () =>
       recoveredPicker.evaluate((element) => document.activeElement === element),
@@ -340,307 +341,65 @@ async function verifyVideoMinimalReadiness() {
 }
 
 async function verifyRequestReadinessStatus() {
-  /** readiness 상태를 확인할 요청 route. */
-  for (const routePath of ['/subtitles']) {
-    /** readiness의 반응형 viewport 폭. */
-    for (const width of [320, 390, 1280]) {
-      /** readiness의 light·dark 테마. */
-      for (const theme of ['light', 'dark']) {
-        /** route·viewport·theme 조합별 독립 browser context. */
-        const context = await createContext({
-          viewport: { height: width <= 820 ? 844 : 900, width },
-        });
-        /** route readiness를 확인할 browser page. */
-        const { page, assertNoRuntimeErrors } = await createPage(context, {
-          ignoreHttpErrors: true,
-        });
-        /** health endpoint가 호출된 횟수. */
-        let healthCalls = 0;
-        /** readiness가 차단된 동안 발생한 job 제출 요청 횟수. */
-        let submitCalls = 0;
-        /** 최초 health 응답을 해제하는 함수. */
-        let releaseInitialHealth;
-        /** 첫 번째 재확인 응답을 해제하는 함수. */
-        let releaseRefreshHealth;
-        /** 최초 확인을 대기시키는 gate. */
-        const initialHealthGate = new Promise((resolve) => {
-          releaseInitialHealth = resolve;
-        });
-        /** 첫 번째 재확인을 대기시키는 gate. */
-        const refreshHealthGate = new Promise((resolve) => {
-          releaseRefreshHealth = resolve;
-        });
-
-        try {
-          await page.addInitScript((preference) => {
-            localStorage.setItem('mytube-extract-theme-preference', preference);
-          }, theme);
-          await routeApi(page, async ({ request, route, url }) => {
-            if (
-              url.pathname ===
-                (routePath === '/video' ? '/downloads' : '/subtitles/uploads') &&
-              request.method() === 'POST'
-            ) {
-              submitCalls += 1;
-            }
-
-            if (url.pathname !== '/health') {
-              return fulfillJson(route, {}, 404);
-            }
-
+  for (const width of [320, 390, 820, 821, 1280]) {
+    for (const theme of ['light', 'dark']) {
+      /** 준비 장애와 입력 편집을 확인할 브라우저. */
+      const context = await createContext({ viewport: { width, height: 844 } });
+      const { page, assertNoRuntimeErrors } = await createPage(context, { ignoreHttpErrors: true });
+      /** 첫 준비 확인을 지연시키는 gate. */
+      let releaseHealth;
+      const gate = new Promise((resolve) => { releaseHealth = resolve; });
+      /** 확인 순서와 원치 않는 전송을 기록한다. */
+      let healthCalls = 0;
+      let submitCalls = 0;
+      try {
+        await page.addInitScript((preference) => localStorage.setItem('mytube-extract-theme-preference', preference), theme);
+        await routeApi(page, async ({ request, route, url }) => {
+          if (url.pathname === '/health') {
             healthCalls += 1;
-            if (healthCalls === 1) {
-              await initialHealthGate;
-              return fulfillJson(route, healthResponse());
-            }
-
-            if (healthCalls === 2) {
-              await refreshHealthGate;
-              return fulfillJson(route, healthResponse());
-            }
-
-            if (healthCalls === 3) {
-              return fulfillJson(route, healthResponse(false));
-            }
-
-            if (healthCalls === 4) {
-              return fulfillJson(route, {}, 503);
-            }
-
+            if (healthCalls === 1) await gate;
+            if (healthCalls === 2) return fulfillJson(route, {}, 503);
+            if (healthCalls === 3) return fulfillJson(route, healthResponse(false));
             return fulfillJson(route, healthResponse());
-          });
-
-          await page.goto(staticServer.origin + routePath);
-          await page.getByRole('heading', { name: '서비스 상태' }).waitFor();
-          await page.getByText('확인 중', { exact: true }).waitFor();
-
-          assert.equal(
-            await page.evaluate(() => document.documentElement.dataset.theme),
-            theme,
-          );
-          assert.equal(healthCalls, 1);
-          assert.equal(await page.locator('.readiness-panel').count(), 1);
-          assert.equal(
-            await page.locator(routePath === '/video' ? 'input[type="url"]' : 'form').count(),
-            0,
-          );
-          assert.equal(
-            await page.getByRole('button', { name: '서비스 상태 다시 확인' }).isDisabled(),
-            true,
-          );
-          assert.equal(await page.locator('.submit-disabled-reason').count(), 0);
-          assert.match(
-            await page.locator('.worker-health-status__message').textContent(),
-            /서비스 상태를 확인하고 있습니다/,
-          );
-          assert.equal(submitCalls, 0);
-          await assertRequestReadinessLayout(page, width);
-
-          releaseInitialHealth();
-          await page.getByText('준비됨', { exact: true }).waitFor();
-          await page.locator(routePath === '/video' ? 'input[type="url"]' : 'form').waitFor();
-          assert.equal(await page.locator('.readiness-panel').count(), 0);
-          assert.equal(
-            await page.locator('.worker-health-status__last-checked').count(),
-            1,
-          );
-          /** 정상 상태에서 저강조로 표시하는 재확인 control. */
-          const readyRefreshButton = page.getByRole('button', {
-            name: '서비스 상태 다시 확인',
-          });
-          /** 재확인 control의 실제 touch target. */
-          const readyRefreshBox = await readyRefreshButton.boundingBox();
-          assert.ok(readyRefreshBox && readyRefreshBox.width >= 44 && readyRefreshBox.height >= 44);
-          assert.match(
-            (await readyRefreshButton.getAttribute('class')) ?? '',
-            /worker-health-status__retry--quiet/,
-          );
-          await assertRequestReadinessLayout(page, width);
-
-          if (routePath === '/video') {
-            await page.getByLabel('YouTube URL').fill('https://youtu.be/abc123_DEF0');
-          } else {
-            await page.locator('input[type="file"]').setInputFiles({
-              buffer: Buffer.from('fake-video'),
-              mimeType: 'video/mp4',
-              name: 'sample.mp4',
-            });
           }
-
-          /** readiness 상태를 수동으로 다시 확인하는 button. */
-          const refreshButton = page.getByRole('button', {
-            name: '서비스 상태 다시 확인',
-          });
-          await refreshButton.focus();
-          assert.equal(
-            await refreshButton.evaluate((element) => document.activeElement === element),
-            true,
-          );
-          assert.equal(
-            await refreshButton.evaluate((element) => element.matches(':focus-visible')),
-            true,
-          );
-          await page.keyboard.press('Enter');
-          await waitForCondition(async () => healthCalls === 2);
-          await waitForCondition(async () => refreshButton.isDisabled());
-          assert.equal(await page.locator('.readiness-panel').count(), 0);
-          assert.equal(await page.locator('form').count(), 1);
-          assert.equal(await page.locator('.worker-health-status').getAttribute('aria-busy'), 'true');
-          assert.equal(await page.locator('.worker-health-status__message').getAttribute('aria-live'), 'off');
-          assert.equal(await page.locator('.panel-title__refresh').count(), 1);
-          if (routePath === '/video') {
-            assert.equal(await page.getByLabel('YouTube URL').inputValue(), 'https://youtu.be/abc123_DEF0');
-          } else {
-            assert.equal(await page.getByText('sample.mp4', { exact: true }).count(), 1);
-          }
-          assert.equal(submitCalls, 0);
-          await assertRequestReadinessLayout(page, width);
-          await refreshButton.dispatchEvent('click');
-          await refreshButton.dispatchEvent('click');
-          assert.equal(healthCalls, 2);
-          releaseRefreshHealth();
-          await page.getByText('준비됨', { exact: true }).waitFor();
-          if (routePath === '/video') {
-            assert.equal(await page.getByLabel('YouTube URL').inputValue(), 'https://youtu.be/abc123_DEF0');
-          } else {
-            assert.equal(await page.getByText('sample.mp4', { exact: true }).count(), 1);
-          }
-
-          await refreshButton.click();
-          await page.getByText('작업 준비 안 됨', { exact: true }).waitFor();
-          assert.equal(await page.locator('.readiness-panel').count(), 1);
-          assert.equal(await page.locator('form, input[type="url"]').count(), 0);
-          assert.equal(await page.locator('.error-details').count(), 1);
-          assert.equal(await page.getByText('입력한 내용은 그대로 보존됩니다. 다시 확인 후 이어서 요청할 수 있습니다.', { exact: true }).count(), 1);
-          /** 미가용 상태에서 먼저 제공하는 primary 재확인 동작. */
-          const unavailableRetryButton = page.getByRole('button', { name: '서비스 상태 다시 확인' });
-          assert.match((await unavailableRetryButton.getAttribute('class')) ?? '', /primary-button/);
-          /** 미가용 상태 action stack의 실제 너비. */
-          const unavailableRetryBox = await unavailableRetryButton.boundingBox();
-          const unavailableActionBox = await page.locator('.worker-health-status__actions').boundingBox();
-          assert.ok(unavailableRetryBox && unavailableActionBox && unavailableRetryBox.width >= unavailableActionBox.width - 1);
-          assert.ok(
-            await page.locator('.worker-health-status__retry').evaluate((button) =>
-              button.compareDocumentPosition(button.parentElement?.querySelector('.error-details') ?? button) & Node.DOCUMENT_POSITION_FOLLOWING,
-            ),
-          );
-          assert.match(
-            await page.locator('.worker-health-status__message').textContent(),
-            /서비스가 응답했지만 지금은 요청을 시작할 수 없습니다/,
-          );
-          assert.equal(submitCalls, 0);
-          await assertRequestReadinessLayout(page, width);
-
-          await page.getByRole('button', { name: '상세 원인 보기' }).focus();
-          await page.keyboard.press('Enter');
-          await page.getByText(/오류 코드: WORKER_UNAVAILABLE/, { exact: true }).waitFor();
-          assert.equal(
-            await page.getByRole('button', { name: '상세 원인 숨기기' }).count(),
-            1,
-          );
-          await page.getByRole('button', { name: '상세 원인 숨기기' }).press('Space');
-
-          await refreshButton.click();
-          await page.getByText('확인 실패', { exact: true }).waitFor();
-          assert.equal(await page.locator('.readiness-panel').count(), 1);
-          assert.equal(await page.locator('form, input[type="url"]').count(), 0);
-          assert.equal(await page.locator('.error-details').count(), 1);
-          assert.equal(await page.getByText('입력한 내용은 그대로 보존됩니다. 다시 확인 후 이어서 요청할 수 있습니다.', { exact: true }).count(), 1);
-          /** API 확인 실패 상태에서 먼저 제공하는 primary 재확인 동작. */
-          const failedRetryButton = page.getByRole('button', { name: '서비스 상태 다시 확인' });
-          assert.match((await failedRetryButton.getAttribute('class')) ?? '', /primary-button/);
-          assert.ok(
-            await page.locator('.worker-health-status__retry').evaluate((button) =>
-              button.compareDocumentPosition(button.parentElement?.querySelector('.error-details') ?? button) & Node.DOCUMENT_POSITION_FOLLOWING,
-            ),
-          );
-          assert.match(
-            await page.locator('.worker-health-status__message').textContent(),
-            /API 상태를 확인하지 못했습니다\. 다시 확인해 주세요\./,
-          );
-          await assertRequestReadinessLayout(page, width);
-
-          await page.getByRole('button', { name: '상세 원인 보기' }).press('Space');
-          await page.getByText(/오류 코드: SERVICE_STATUS_CHECK_FAILED/, { exact: true }).waitFor();
-          await refreshButton.click();
-          await page.getByText('준비됨', { exact: true }).waitFor();
-          if (routePath === '/video') {
-            assert.equal(await page.getByLabel('YouTube URL').inputValue(), 'https://youtu.be/abc123_DEF0');
-          } else {
-            assert.equal(await page.getByText('sample.mp4', { exact: true }).count(), 1);
-          }
-          assertNoRuntimeErrors();
-        } finally {
-          await context.close();
-        }
+          if (request.method() === 'POST') submitCalls += 1;
+          return fulfillJson(route, {}, 404);
+        });
+        await page.goto(`${staticServer.origin}/subtitles`);
+        /** 준비 확인 중에도 편집 가능한 실제 입력. */
+        const input = page.locator('input[type="file"]');
+        const submit = page.getByRole('button', { name: '영어 SRT 생성', exact: true });
+        await page.getByText('확인 중', { exact: true }).waitFor();
+        await input.setInputFiles({ buffer: Buffer.from('video'), mimeType: 'video/mp4', name: 'before-ready.mp4' });
+        await page.getByRole('radio', { name: /정확도 우선/ }).check();
+        assert.equal(await submit.isDisabled(), true);
+        assert.equal(submitCalls, 0);
+        releaseHealth();
+        await waitForEnabled(submit);
+        assert.equal(await page.getByText('준비됨', { exact: true }).count(), 0);
+        assert.equal(await page.getByRole('button', { name: '서비스 상태 다시 확인' }).count(), 0);
+        await submit.click();
+        await page.getByText('확인 실패', { exact: true }).waitFor();
+        assert.equal(submitCalls, 0);
+        await input.setInputFiles({ buffer: Buffer.from('video'), mimeType: 'video/mp4', name: 'changed.mp4' });
+        await page.getByRole('button', { name: '서비스 상태 다시 확인' }).click();
+        await page.getByText('작업 준비 안 됨', { exact: true }).waitFor();
+        assert.equal(await page.getByText('changed.mp4', { exact: true }).count(), 1);
+        await page.getByRole('radio', { name: /속도 우선/ }).check();
+        await page.getByRole('button', { name: '지우기', exact: true }).click();
+        await waitForCondition(async () => page.getByRole('button', { name: /^(영상 선택 또는 드래그|파일 변경) \(로컬 영상 파일\)$/ }).evaluate((element) => element === document.activeElement));
+        await input.setInputFiles({ buffer: Buffer.from('video'), mimeType: 'video/mp4', name: 'retry.mp4' });
+        await page.getByRole('button', { name: '서비스 상태 다시 확인' }).click();
+        await waitForEnabled(submit);
+        assert.equal(await page.getByRole('radio', { name: /속도 우선/ }).isChecked(), true);
+        assert.equal(await page.getByText('retry.mp4', { exact: true }).count(), 1);
+        assert.equal(submitCalls, 0);
+        assertNoRuntimeErrors();
+      } finally {
+        releaseHealth();
+        await context.close();
       }
     }
-  }
-}
-
-/** readiness 상태가 viewport와 fixed 내비게이션 경계를 지키는지 확인한다. */
-async function assertRequestReadinessLayout(page, width) {
-  /** readiness와 현재 주요 내비게이션의 viewport 측정값. */
-  const metrics = await page.evaluate(() => {
-    /** readiness 보조 영역. */
-    const readiness = document.querySelector('.worker-health-status');
-    /** 현재 viewport에서 보이는 주요 navigation. */
-    const navigation = [...document.querySelectorAll('nav[aria-label="주요 메뉴"]')]
-      .find((element) => element.getClientRects().length > 0);
-    /** 요소의 viewport 영역을 직렬화한다. */
-    const toBox = (element) => {
-      /** 요소의 viewport 사각형. */
-      const rect = element?.getBoundingClientRect();
-      return rect
-        ? {
-            bottom: rect.bottom,
-            left: rect.left,
-            right: rect.right,
-            top: rect.top,
-          }
-        : null;
-    };
-
-    return {
-      document: {
-        clientWidth: document.documentElement.clientWidth,
-        scrollWidth: document.documentElement.scrollWidth,
-      },
-      navigation: toBox(navigation),
-      readiness: toBox(readiness),
-    };
-  });
-
-  assert.deepEqual(metrics.document, {
-    clientWidth: width,
-    scrollWidth: width,
-  });
-  assert.ok(metrics.readiness);
-  assert.ok(metrics.readiness.left >= 0);
-  assert.ok(metrics.readiness.right <= width);
-  if (width <= 820) {
-    assert.ok(metrics.navigation);
-    /** 문서 끝까지 스크롤했을 때 fixed 내비게이션과 readiness 사이의 여유. */
-    const scrolledMetrics = await page.evaluate(() => {
-      window.scrollTo(0, document.documentElement.scrollHeight);
-
-      /** 스크롤된 readiness 보조 영역. */
-      const readiness = document
-        .querySelector('.worker-health-status')
-        ?.getBoundingClientRect();
-      /** 스크롤된 주요 navigation. */
-      const navigation = [...document.querySelectorAll('nav[aria-label="주요 메뉴"]')]
-        .find((element) => element.getClientRects().length > 0)
-        ?.getBoundingClientRect();
-
-      return {
-        navigationTop: navigation?.top,
-        readinessBottom: readiness?.bottom,
-      };
-    });
-    assert.ok(scrolledMetrics.navigationTop !== undefined);
-    assert.ok(scrolledMetrics.readinessBottom !== undefined);
-    assert.ok(scrolledMetrics.navigationTop - scrolledMetrics.readinessBottom >= 8);
   }
 }
 
@@ -1386,7 +1145,9 @@ async function verifyAcceptedJobStorageFallback() {
   }
 }
 
-async function verifySubtitleRequestFlow() {
+async function verifySubtitleRequestFlow(missingDownload = false) {
+  /** 내역 재조회에서 정상 다운로드 주소로 복구할지 여부. */
+  let hasDownload = !missingDownload;
   const context = await createContext({ viewport: { height: 844, width: 390 } });
   const { page, assertNoRuntimeErrors } = await createPage(context);
   let releaseUpload;
@@ -1428,7 +1189,7 @@ async function verifySubtitleRequestFlow() {
         return fulfillJson(route, subtitleJob(SUBTITLE_ID, 'queued'));
       }
       if (url.pathname === `/subtitles/jobs/${SUBTITLE_ID}`) {
-        return fulfillJson(route, subtitleJob(SUBTITLE_ID, 'completed'));
+        return fulfillJson(route, subtitleJob(SUBTITLE_ID, 'completed', hasDownload ? {} : { downloadUrl: null }));
       }
       return fulfillJson(route, {}, 404);
     });
@@ -1444,7 +1205,7 @@ async function verifySubtitleRequestFlow() {
     await submit.click();
     await uploadStartedPromise;
     await page.getByRole('heading', { name: '원본 영상을 업로드 중입니다' }).waitFor();
-    assert.equal(await page.locator('.request-flow[data-flow-stage="extract"]').count(), 1);
+    assert.equal(await page.locator('.request-flow[data-flow-stage="extract"]').count(), 0);
 
     const historyLink = page.getByRole('link', { name: '요청 내역' });
     const videoTab = page.getByRole('link', { name: '영상 추출' });
@@ -1462,12 +1223,25 @@ async function verifySubtitleRequestFlow() {
     assert.equal(new URL(page.url()).pathname, '/subtitles');
 
     releaseUpload();
+    if (missingDownload) {
+      await page.getByRole('heading', { name: '다운로드 주소를 확인할 수 없습니다', exact: true }).waitFor();
+      assert.equal(await page.getByRole('link', { name: '영어 SRT 다운로드', exact: true }).count(), 0);
+      assert.equal(await page.getByRole('progressbar').count(), 0);
+      hasDownload = true;
+      await page.getByRole('link', { name: '요청 내역에서 다시 확인', exact: true }).click();
+      await page.getByRole('link', { name: '다운로드', exact: true }).waitFor();
+      assert.equal(new URL(page.url()).searchParams.get('jobId'), SUBTITLE_ID);
+      assert.equal(await receiptCount(page), 1);
+      assertNoRuntimeErrors();
+      return;
+    }
     await page.getByRole('heading', { name: '영어 자막 파일이 준비되었습니다' }).waitFor();
-    assert.equal(await page.locator('.request-flow[data-flow-stage="receipt"]').count(), 1);
+    assert.equal(await page.locator('.request-flow[data-flow-stage="receipt"]').count(), 0);
     assert.equal(await page.getByRole('button', { name: '요청 취소' }).count(), 0);
     assert.equal(new URL(page.url()).pathname, '/subtitles');
     assert.equal(await page.locator('.worker-health-status').count(), 0);
     assert.equal(await receiptCount(page), 1);
+    assert.equal(await page.getByRole('progressbar').count(), 0);
     assert.equal(await page.getByText('원본 파일', { exact: true }).count(), 1);
     assert.equal(await page.getByText('sample.mp4', { exact: true }).count(), 1);
     assert.equal(await page.getByText('결과 형식', { exact: true }).count(), 1);
@@ -1593,6 +1367,7 @@ async function verifySubtitleLifecycleStatusSurfaces() {
                     : lifecycleState.apiStatus,
                   {
                     fileName: 'a-very-long-original-video-file-name-for-subtitle-result.mp4',
+                  progress: lifecycleState.apiStatus === 'queued' ? null : lifecycleState.apiStatus === 'completed' ? 100 : 60,
                     message:
                       lifecycleState.apiStatus === 'failed'
                         ? '자막 처리 중 긴 오류 안내가 표시되어도 조작 요소와 겹치지 않아야 합니다.'
@@ -1606,6 +1381,7 @@ async function verifySubtitleLifecycleStatusSurfaces() {
                 route,
                 subtitleJob(SUBTITLE_ID, lifecycleState.apiStatus, {
                   fileName: 'a-very-long-original-video-file-name-for-subtitle-result.mp4',
+                  progress: lifecycleState.apiStatus === 'queued' ? null : lifecycleState.apiStatus === 'completed' ? 100 : 60,
                   message:
                     lifecycleState.apiStatus === 'failed'
                       ? '자막 처리 중 긴 오류 안내가 표시되어도 조작 요소와 겹치지 않아야 합니다.'
@@ -1681,6 +1457,14 @@ async function verifySubtitleLifecycleStatusSurfaces() {
           assert.ok(layoutMetrics.message);
 
           if (lifecycleState.apiStatus === 'completed') {
+            /** 긴 결과 파일명이 왼쪽 항목명을 한 글자씩 밀어내지 않는다. */
+            const labelHeights = await page.locator('.subtitle-status-details dt').evaluateAll((labels) => labels.map((label) => {
+              /** grid 행 전체가 아닌 실제 라벨 글자의 줄바꿈을 측정한다. */
+              const range = document.createRange();
+              range.selectNodeContents(label);
+              return range.getBoundingClientRect().height;
+            }));
+            assert.ok(labelHeights.every((height) => height <= 24));
             assert.ok(layoutMetrics.actions);
             assert.ok(layoutMetrics.download);
             assert.ok(layoutMetrics.download.height >= 48);
@@ -1692,10 +1476,13 @@ async function verifySubtitleLifecycleStatusSurfaces() {
 
           if (['queued', 'extracting_audio', 'transcribing'].includes(lifecycleState.apiStatus)) {
             const stepTabs = page.locator('.subtitle-step-tabs .subtitle-step-tab');
-            assert.equal(await stepTabs.count(), 4);
-            assert.equal(await page.locator('.subtitle-progress-meter').count(), 1);
+            assert.equal(await stepTabs.count(), 0);
+            assert.equal(await page.getByRole('progressbar').count(), lifecycleState.apiStatus === 'queued' ? 0 : 1);
           }
 
+          if (process.env.WEB_SMOKE_SCREENSHOTS && width === 390) {
+            await page.screenshot({ path: `${process.env.WEB_SMOKE_SCREENSHOTS}/subtitle-${lifecycleState.apiStatus}-${theme}.png`, fullPage: true });
+          }
           assertNoRuntimeErrors();
         } finally {
           await context.close();
@@ -1789,7 +1576,7 @@ async function verifySubtitleAcceptanceAndCancellationSurfaces() {
             },
             icon: icon ? getComputedStyle(icon).borderTopColor : null,
             panel: panel ? panel.getBoundingClientRect().toJSON() : null,
-            progress: document.querySelector('.subtitle-progress-meter'),
+            progress: document.querySelector('progress'),
             steps: document.querySelector('.subtitle-step-tabs'),
           };
         });
@@ -1808,7 +1595,7 @@ async function verifySubtitleAcceptanceAndCancellationSurfaces() {
 
         await page.getByRole('button', { name: '요청 취소' }).click();
         const picker = page.getByRole('button', {
-          name: '영상 선택 또는 드래그 (로컬 영상 파일)',
+          name: /^(영상 선택 또는 드래그|파일 변경) \(로컬 영상 파일\)$/,
         });
         await picker.waitFor();
         await waitForCondition(async () =>
@@ -1989,7 +1776,7 @@ async function verifySubtitleRequestCancellation() {
     await page.getByRole('button', { name: '요청 취소' }).click();
     await page.getByRole('heading', { name: '자막 추출' }).waitFor();
     const picker = page.getByRole('button', {
-      name: '영상 선택 또는 드래그 (로컬 영상 파일)',
+      name: /^(영상 선택 또는 드래그|파일 변경) \(로컬 영상 파일\)$/,
     });
     await waitForCondition(async () =>
       picker.evaluate((element) => document.activeElement === element),
@@ -2054,7 +1841,7 @@ async function verifyRequestShortcuts() {
 
     await page.goto(`${staticServer.origin}/subtitles`);
     const picker = page.getByRole('button', {
-      name: '영상 선택 또는 드래그 (로컬 영상 파일)',
+      name: /^(영상 선택 또는 드래그|파일 변경) \(로컬 영상 파일\)$/,
     });
     await picker.waitFor();
     await page.evaluate(() => {
@@ -2079,10 +1866,24 @@ async function verifyRequestShortcuts() {
   }
 }
 
+/** 390×844 기본 화면에서 제출 조작 전체가 탭 위에 보이는지 확인한다. */
+async function assertSubtitleSubmitVisible(page) {
+  await documentFontsReady(page);
+  await page.evaluate(() => window.scrollTo(0, 0));
+  /** 최초 화면의 제출 버튼과 하단 탭 좌표. */
+  const metrics = await page.evaluate(() => ({
+    top: document.querySelector('.subtitle-submit-button').getBoundingClientRect().top,
+    bottom: document.querySelector('.subtitle-submit-button').getBoundingClientRect().bottom,
+    tabTop: document.querySelector('.bottom-tab-bar').getBoundingClientRect().top,
+    height: window.innerHeight,
+  }));
+  assert.ok(metrics.top >= 0 && metrics.bottom <= Math.min(metrics.tabTop, metrics.height), JSON.stringify(metrics));
+}
+
 /** 자막 처리 방식 설명과 처리 단계의 반응형 표시를 검증한다. */
 async function verifySubtitleProcessingChoice() {
   /** 선택 화면과 처리 화면을 확인할 모바일·데스크톱 viewport 폭. */
-  for (const width of [320, 390, 560, 1280]) {
+  for (const width of [320, 390, 820, 821, 1280]) {
     /** 각 viewport에서 확인할 theme preference. */
     for (const theme of ['light', 'dark']) {
       /** viewport·theme별 자막 처리 방식 검증 context. */
@@ -2158,7 +1959,7 @@ async function verifySubtitleProcessingChoice() {
 
         return {
           formContainsReadiness: Boolean(form && readiness && form.contains(readiness)),
-          indexes: [readiness, picker, processingMethod, submit].map(getDocumentIndex),
+          indexes: [picker, processingMethod, submit].map(getDocumentIndex),
         };
       });
       assert.equal(documentOrder.formContainsReadiness, false);
@@ -2419,15 +2220,14 @@ async function verifySubtitleProcessingChoice() {
       assert.equal(layoutMetrics.panel.boxShadow, 'none');
       assert.equal(layoutMetrics.panel.backgroundColor, 'rgba(0, 0, 0, 0)');
       assert.ok(layoutMetrics.dropzone);
-      assert.ok(layoutMetrics.dropzone.height >= 140);
+      assert.ok(layoutMetrics.dropzone.height >= 44);
       assert.ok(layoutMetrics.dropzone.height < 220);
       assert.ok(layoutMetrics.processingMethod);
       assert.ok(layoutMetrics.options.every((option) => option.width === layoutMetrics.processingMethod.width));
       assert.ok(layoutMetrics.options.every((option) => option.left >= 0 && option.right <= width));
-      assert.ok(layoutMetrics.readiness);
+      assert.equal(layoutMetrics.readiness, null);
       assert.ok(layoutMetrics.submit);
       assert.ok(layoutMetrics.submit.height >= 48);
-      assert.ok(layoutMetrics.readiness.bottom <= layoutMetrics.dropzone.top);
       assert.equal(await page.locator('.submit-disabled-reason').count(), 0);
       assert.equal(
         await page.locator('.subtitle-dropzone').getAttribute('aria-describedby'),
@@ -2452,12 +2252,11 @@ async function verifySubtitleProcessingChoice() {
           };
         });
         assert.ok(scrolledMetrics.navigationTop !== undefined);
-        assert.ok(scrolledMetrics.readinessBottom !== undefined);
         assert.ok(scrolledMetrics.submitBottom !== undefined);
         assert.ok(scrolledMetrics.submitBottom <= scrolledMetrics.navigationTop);
-        assert.ok(scrolledMetrics.navigationTop - scrolledMetrics.readinessBottom >= 8);
       }
 
+      if (width === 390) await assertSubtitleSubmitVisible(page);
       /** 처리 방식 선택 후 영어 SRT 생성 요청. */
       const submit = page.getByRole('button', { name: '영어 SRT 생성' });
       await page.locator('input[type="file"]').setInputFiles({
@@ -2466,6 +2265,14 @@ async function verifySubtitleProcessingChoice() {
         name: 'sample.mp4',
       });
       await waitForEnabled(submit);
+      /** 파일 변경의 접근성 이름과 선택 파일 설명을 확인한다. */
+      const change = page.getByRole('button', { name: '파일 변경 (로컬 영상 파일)', exact: true });
+      assert.equal(await change.getAttribute('aria-describedby'), 'subtitle-selected-file');
+      assert.match(await page.locator('#subtitle-selected-file').innerText(), /sample.mp4/);
+      if (width === 390) await assertSubtitleSubmitVisible(page);
+      if (process.env.WEB_SMOKE_SCREENSHOTS) {
+        await page.screenshot({ path: `${process.env.WEB_SMOKE_SCREENSHOTS}/subtitle-selected-${width}-${theme}.png`, fullPage: true });
+      }
       const enabledSubmitStyles = await submit.evaluate((element) => {
         /** 활성 제출 button style. */
         const style = getComputedStyle(element);
@@ -2479,24 +2286,15 @@ async function verifySubtitleProcessingChoice() {
       assert.match(enabledSubmitStyles.boxShadow, /2px 8px/);
       assert.equal(enabledSubmitStyles.color, expectedSubtitleInputTheme.onAction);
       /** 선택한 파일을 지우는 실제 조작 영역. */
-      const clearSelectedFileButton = page.locator('.selected-file-row button');
+      const clearSelectedFileButton = page.getByRole('button', { name: '지우기', exact: true });
       const clearSelectedFileBox = await clearSelectedFileButton.boundingBox();
       assert.ok(clearSelectedFileBox && clearSelectedFileBox.width >= 44 && clearSelectedFileBox.height >= 44);
       await waitForEnabled(submit);
       await submit.click();
-      await page.locator('.subtitle-step-tabs').waitFor();
-      assert.equal(await page.locator('.request-flow[data-flow-stage="extract"]').count(), 1);
-
-      /** 실제 자막 처리 단계 네 개. */
-      const stepTabs = page.locator('.subtitle-step-tabs .subtitle-step-tab');
-      assert.equal(await stepTabs.count(), 4);
-      assert.deepEqual(await stepTabs.allTextContents(), ['대기', '음성 추출', '영어 SRT 생성', '완료']);
-      assert.equal(await page.locator('.subtitle-step-tabs [aria-current="step"]').count(), 1);
-      /** 처리 단계의 실제 grid 열 위치. */
-      const stepLefts = await stepTabs.evaluateAll((steps) =>
-        steps.map((step) => Math.round(step.getBoundingClientRect().left)),
-      );
-      assert.deepEqual(new Set(stepLefts).size, width <= 820 ? 1 : 4);
+      await page.getByRole('heading', { name: '영어 SRT를 생성 중입니다', exact: true }).waitFor();
+      assert.equal(await page.locator('.request-flow').count(), 0);
+      assert.equal(await page.locator('.subtitle-step-tabs').count(), 0);
+      assert.equal(await page.getByRole('progressbar').getAttribute('value'), '0');
       assert.deepEqual(
         await page.evaluate(() => ({
           clientWidth: document.documentElement.clientWidth,
@@ -2524,7 +2322,7 @@ async function verifySubtitleFilePicker() {
         'Failed to load resource: the server responded with a status of 413 (Payload Too Large)',
   });
   /** 브라우저에서 선택할 파일의 accessible name. */
-  const pickerLabel = '영상 선택 또는 드래그 (로컬 영상 파일)';
+  const pickerLabel = /^(영상 선택 또는 드래그|파일 변경) \(로컬 영상 파일\)$/;
 
   try {
     await routeApi(page, async ({ route, url }) => {
@@ -2537,7 +2335,7 @@ async function verifySubtitleFilePicker() {
 
     await page.goto(`${staticServer.origin}/subtitles`);
     await page.getByRole('heading', { name: '자막 추출' }).waitFor();
-    await page.getByText('준비됨', { exact: true }).waitFor();
+    await page.locator('.subtitle-form').waitFor();
 
     /** 접근성 트리와 tab 순서에 남아야 하는 유일한 파일 선택 control. */
     const picker = page.getByRole('button', { name: pickerLabel });
@@ -2660,7 +2458,7 @@ async function verifySubtitleFilePicker() {
     assert.equal(await page.locator('.field.has-error').count(), 1);
     assert.equal(
       await page.getByRole('button', { name: pickerLabel }).getAttribute('aria-describedby'),
-      'subtitle-file-feedback',
+      'subtitle-selected-file subtitle-file-feedback',
     );
     assert.equal(
       await page.getByRole('button', { name: '영어 SRT 생성' }).isDisabled(),
@@ -2737,7 +2535,7 @@ async function verifySubtitleDragFeedback() {
         await page.getByRole('heading', { name: '자막 추출' }).waitFor();
         /** 파일 drag feedback를 표시할 button. */
         const picker = page.getByRole('button', {
-          name: '영상 선택 또는 드래그 (로컬 영상 파일)',
+          name: /^(영상 선택 또는 드래그|파일 변경) \(로컬 영상 파일\)$/,
         });
         /** 현재 theme에서 기대하는 위치 안내 semantic token. */
         const expectedTheme = theme === 'dark'
@@ -2859,7 +2657,7 @@ async function verifySubtitleDragFeedback() {
         });
         await page.getByText('dropped-after-feedback.mp4', { exact: true }).waitFor();
         assert.equal(await page.getByText('여기에 놓아 영상을 선택하세요', { exact: true }).count(), 0);
-        assert.equal(await page.getByText('영상 선택 또는 드래그', { exact: true }).count(), 1);
+        assert.equal(await page.getByText('파일 변경', { exact: true }).count(), 1);
 
         // 기존 오류는 drag 위치 안내 중에도 보존하고, 이탈 뒤 오류 표시로 복원한다.
         await dispatchSubtitleFileDrop(page, picker, {
@@ -2892,7 +2690,7 @@ async function verifySubtitleDragFeedback() {
           relatedTarget: 'outside',
         });
         const restoredErrorMetrics = await readSubtitleDropzoneMetrics(page);
-        assert.equal(restoredErrorMetrics.primaryCopy, '영상 선택 또는 드래그');
+        assert.equal(restoredErrorMetrics.primaryCopy, '파일 변경');
         assert.equal(restoredErrorMetrics.borderColor, expectedTheme.danger);
         assert.equal(
           await page.getByText(PRESERVED_SUBTITLE_DROP_MESSAGE, { exact: true }).count(),
@@ -2962,7 +2760,7 @@ async function verifyInvalidSubtitleDropPreservesSelection() {
     await page.goto(`${staticServer.origin}/subtitles`);
     /** 현재 선택을 조작할 자막 file picker. */
     const picker = page.getByRole('button', {
-      name: '영상 선택 또는 드래그 (로컬 영상 파일)',
+      name: /^(영상 선택 또는 드래그|파일 변경) \(로컬 영상 파일\)$/,
     });
     await picker.waitFor();
     await dispatchSubtitleFileDrop(page, picker, {
@@ -3041,7 +2839,7 @@ async function verifyInvalidSubtitleDropWithoutSelection() {
     await page.goto(`${staticServer.origin}/subtitles`);
     /** 선택·오류 상태를 확인할 자막 file picker. */
     const picker = page.getByRole('button', {
-      name: '영상 선택 또는 드래그 (로컬 영상 파일)',
+      name: /^(영상 선택 또는 드래그|파일 변경) \(로컬 영상 파일\)$/,
     });
     /** 현재 선택이 없을 때 비활성화되어야 하는 제출 button. */
     const submit = page.getByRole('button', { name: '영어 SRT 생성' });
@@ -4804,6 +4602,12 @@ async function verifyCommonLayoutTextResize() {
             brand: 'rgb(230, 0, 18)', glyph: 'rgb(255, 255, 255)',
             action: theme === 'dark' ? '#f2f0ee' : '#484848',
           });
+          if (routePath === '/subtitles') {
+            await page.locator('input[type="file"]').setInputFiles({
+              buffer: Buffer.from('video'), mimeType: 'video/mp4',
+              name: '매우긴영상파일명'.repeat(18) + '.mp4',
+            });
+          }
           // 각 요소의 원래 계산값을 먼저 읽어 부모와 자식의 중복 확대를 피한다.
           await page.evaluate(() => {
             /** 실제 글자를 가진 요소별 확대 전 글자 크기. */
@@ -4832,6 +4636,15 @@ async function verifyCommonLayoutTextResize() {
           }));
           assert.equal(metrics.scrollWidth, metrics.clientWidth, `${width} ${theme} ${routePath}`);
           assert.equal(metrics.brandOverflow, false);
+          if (routePath === '/subtitles') {
+            /** 긴 파일명과 200% 글자에서도 파일 조작을 가리지 않는다. */
+            const clear = page.getByRole('button', { name: '지우기', exact: true });
+            await clear.scrollIntoViewIfNeeded();
+            const box = await clear.boundingBox();
+            assert.ok(box && box.width >= 44 && box.height >= 44 && box.x >= 0 && box.x + box.width <= width);
+            await clear.click();
+            assert.equal(await page.locator('input[type="file"]').evaluate((element) => element.files.length), 0);
+          }
           if (width <= 820) assert.ok(metrics.workspaceBottom <= metrics.tabTop, JSON.stringify(metrics));
         }
         assertNoRuntimeErrors();
@@ -5332,12 +5145,12 @@ function subtitleJob(jobId, displayStatus, overrides = {}) {
     createdAt: '2026-08-11T00:00:00.000Z',
     displayStatus,
     downloadUrl:
-      displayStatus === 'completed' ? `/subtitles/jobs/${jobId}/file` : null,
+      'downloadUrl' in overrides ? overrides.downloadUrl : displayStatus === 'completed' ? `/subtitles/jobs/${jobId}/file` : null,
     errorCode: displayStatus === 'failed' ? 'TRANSCRIPTION_FAILED' : null,
     fileName: overrides.fileName ?? 'sample.mp4',
     jobId,
     message: overrides.message ?? `subtitle ${displayStatus}`,
-    progress: displayStatus === 'completed' ? 100 : 0,
+    progress: 'progress' in overrides ? overrides.progress : displayStatus === 'completed' ? 100 : 0,
     retentionDays: 3,
     stage: status,
     status,

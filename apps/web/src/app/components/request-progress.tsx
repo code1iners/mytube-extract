@@ -1,6 +1,6 @@
-/** 처리 중 서버가 제공한 진행률만 표시한다. 접수·완료 화면에서는 사용하지 않는다. */
+/** 확인된 업로드·처리 진행률을 표시한다. 완료 화면에서는 사용하지 않는다. */
 export function RequestProgress(props: {
-  /** 서버가 제공한 진행률. null이면 수치를 만들지 않는다. */
+  /** 실제 전송량 또는 서버가 제공한 진행률. null이면 수치를 만들지 않는다. */
   value: number | null;
 }) {
   if (props.value === null) return null;

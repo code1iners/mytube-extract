@@ -323,21 +323,21 @@ export function useSubtitlesExtractLogic() {
   }
 
   /** dropzone에 파일 drag가 진입했음을 표시한다. */
-  function handleDropzoneDragEnter(event: DragEvent<HTMLButtonElement>) {
+  function handleDropzoneDragEnter(event: DragEvent<HTMLElement>) {
     event.preventDefault();
 
     setDropzoneDragFeedback(getSubtitleDragFeedback(Array.from(event.dataTransfer.items)));
   }
 
   /** dropzone dragover 기본 동작을 막는다. */
-  function handleDropzoneDragOver(event: DragEvent<HTMLButtonElement>) {
+  function handleDropzoneDragOver(event: DragEvent<HTMLElement>) {
     event.preventDefault();
 
     setDropzoneDragFeedback(getSubtitleDragFeedback(Array.from(event.dataTransfer.items)));
   }
 
   /** dropzone 밖으로 나간 파일 drag의 위치 안내를 해제한다. */
-  function handleDropzoneDragLeave(event: DragEvent<HTMLButtonElement>) {
+  function handleDropzoneDragLeave(event: DragEvent<HTMLElement>) {
     if (isDragInsideCurrentTarget(event)) {
       return;
     }
@@ -351,7 +351,7 @@ export function useSubtitlesExtractLogic() {
   }
 
   /** dropzone 파일 drop 이벤트를 처리한다. */
-  function handleDropzoneDrop(event: DragEvent<HTMLButtonElement>) {
+  function handleDropzoneDrop(event: DragEvent<HTMLElement>) {
     event.preventDefault();
     resetDropzoneDragState();
 
@@ -418,6 +418,7 @@ export function useSubtitlesExtractLogic() {
   }
 
   return {
+    uploadProgress,
     canSubmit,
     canChangeWhisperModel,
     clearSelectedFile,
