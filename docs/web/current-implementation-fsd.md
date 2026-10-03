@@ -21,9 +21,12 @@
 
 - `/`와 unknown route는 `/video`로 redirect한다.
 - `/video`, `/subtitles`, `/history`, `/settings`를 제공한다.
-- `영상 추출`·`자막 추출`·`요청 내역`은 하나의 주요 navigation으로 공유한다. 데스크톱은 작업 영역 헤더 탭, 모바일은 하단 3탭이다.
+- `영상 추출`·`자막 추출`·`요청 내역`은 하나의 주요 navigation으로 공유한다. 821px 이상은 왼쪽 240px 로고·세로 메뉴, 820px 이하는 하단 고정 3탭이다. 반대 크기의 메뉴는 `display:none`으로 키보드와 접근성 트리에서 제외한다. 오른쪽 작업 영역은 최대 760px이다.
 - 주요 navigation의 현재 목적지는 `aria-current="page"`와 active 시각 상태로 함께 전달한다.
-- 상단 `더보기` disclosure 안의 `설정`은 보조 route 링크이며, 테마 radio 선택은 `/settings`에서 layout의 기존 테마 state와 storage 콜백을 사용한다. disclosure는 Enter·Space·Escape와 바깥 pointer 입력을 처리하고 요청 접수 중 설정 링크를 잠근다.
+- 헤더 오른쪽 `…`(접근성 이름 `더보기`) disclosure 안의 `설정`은 보조 route 링크이며, 테마 radio 선택은 `/settings`에서 layout의 기존 테마 state와 storage 콜백을 사용한다. disclosure는 Enter·Space·Escape와 바깥 pointer 입력을 처리하고 요청 접수 중 설정 링크를 잠근다.
+
+- Web의 버튼·선택 표시·탐색·포커스는 무채색이며 로고 아이콘만 빨강을 유지한다. Web 전용 토큰과 대비 값은 `docs/DESIGN.md`의 Web 전용 계약을 따른다.
+- 하단 탭의 실제 높이를 관찰해 본문 끝 여백에 반영한다. 글자 확대·줄바꿈 이후에도 마지막 조작이 탭과 안전 여백 위에 나타난다.
 
 ## 요청 접수
 
@@ -34,7 +37,7 @@
 - 접수 성공 뒤 현재 `/video` 또는 `/subtitles` route에 남아 생성 응답의 job을 상태 조회한다.
 - 접수증 storage 쓰기 실패는 job 생성이나 현재 route의 상태 조회를 막지 않는다.
 - `/video`, `/subtitles` mount는 과거 접수증을 복원하지 않으며, 현재 화면에서 새로 접수한 job만 query한다.
-- navigation lock은 영상 POST 또는 자막 upload/complete 요청 중에만 유지하며 데스크톱 헤더·모바일 하단의 주요 navigation과 `더보기` 안의 `설정` 링크에 함께 적용한다. 현재 목적지는 활성 상태로 남긴다. 사용자가 접수 전 `요청 취소`를 누르면 AbortController를 중단하고 입력·파일을 유지한 채 lock을 풀며, 응답 경쟁으로 job이 만들어졌으면 접수증을 보존하고 취소 완료로 가장하지 않는다.
+- navigation lock은 영상 POST 또는 자막 upload/complete 요청 중에만 유지하며 데스크톱 왼쪽·모바일 하단의 주요 navigation과 `더보기` 안의 `설정` 링크에 함께 적용한다. 현재 목적지는 활성 상태로 남긴다. 사용자가 접수 전 `요청 취소`를 누르면 AbortController를 중단하고 입력·파일을 유지한 채 lock을 풀며, 응답 경쟁으로 job이 만들어졌으면 접수증을 보존하고 취소 완료로 가장하지 않는다.
 
 ## Request route query
 

@@ -111,14 +111,15 @@ export function UsageGuideDisclosure() {
       onToggle={handleToggle}
     >
       <summary
+        aria-label="더보기"
         aria-controls={contentId}
         aria-expanded={isOpen}
-        className={`usage-guide__summary relative inline-flex min-h-[44px] min-w-[44px] items-center gap-[7px] rounded-mytube-md px-mytube-8 text-[14px] font-semibold leading-[1.4] text-mytube-text-secondary cursor-pointer list-none whitespace-nowrap outline-mytube-focus hover:bg-mytube-surface-alt hover:text-mytube-text-primary focus-visible:outline-2 focus-visible:[outline-offset:2px] ${isOpen ? 'bg-mytube-surface-alt text-mytube-text-primary' : ''}`}
+        className={`usage-guide__summary relative inline-flex min-h-[44px] min-w-[44px] items-center justify-center rounded-mytube-md px-mytube-8 text-[24px] font-semibold leading-[1.4] text-mytube-text-secondary cursor-pointer list-none whitespace-nowrap outline-mytube-focus hover:bg-mytube-surface-alt hover:text-mytube-text-primary focus-visible:outline-2 focus-visible:[outline-offset:2px] ${isOpen ? 'bg-mytube-surface-alt text-mytube-text-primary' : ''}`}
         id={summaryId}
         ref={summaryRef}
         onClick={handleSummaryClick}
       >
-        더보기
+        <span aria-hidden="true">…</span>
       </summary>
       <div
         aria-labelledby={summaryId}

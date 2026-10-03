@@ -66,13 +66,13 @@ export function AppMark() {
       viewBox="0 0 512 512"
     >
       <rect
-        className="fill-mytube-action-primary"
+        className="fill-[var(--color-brand)]"
         height="512"
         rx="112"
         width="512"
       />
       <g
-        className="fill-none stroke-mytube-on-primary"
+        className="fill-none stroke-[var(--color-on-brand)]"
         strokeWidth="34"
         strokeLinecap="round"
         strokeLinejoin="round"

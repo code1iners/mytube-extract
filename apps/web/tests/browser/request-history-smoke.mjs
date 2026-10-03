@@ -75,6 +75,7 @@ try {
   await run('history replaces the source link with an acquired title before failure', verifyHistoryTitleArrivalDuringProcessing);
   await run('populated history stays unclipped with long job details', verifyPopulatedHistoryResponsiveLayout);
   await run('responsive primary navigation stays aligned and unclipped', verifyResponsivePrimaryNavigation);
+  await run('common layout supports doubled text and neutral themes', verifyCommonLayoutTextResize);
 
   console.log(JSON.stringify({ origin: staticServer.origin, status: 'ok' }, null, 2));
 } finally {
@@ -411,7 +412,7 @@ async function assertRequestReadinessLayout(page, width) {
     const readiness = document.querySelector('.worker-health-status');
     /** 현재 viewport에서 보이는 주요 navigation. */
     const navigation = [...document.querySelectorAll('nav[aria-label="주요 메뉴"]')]
-      .find((element) => getComputedStyle(element).display !== 'none');
+      .find((element) => element.getClientRects().length > 0);
     /** 요소의 viewport 영역을 직렬화한다. */
     const toBox = (element) => {
       /** 요소의 viewport 사각형. */
@@ -455,7 +456,7 @@ async function assertRequestReadinessLayout(page, width) {
         ?.getBoundingClientRect();
       /** 스크롤된 주요 navigation. */
       const navigation = [...document.querySelectorAll('nav[aria-label="주요 메뉴"]')]
-        .find((element) => getComputedStyle(element).display !== 'none')
+        .find((element) => element.getClientRects().length > 0)
         ?.getBoundingClientRect();
 
       return {
@@ -505,10 +506,9 @@ async function verifyUsageGuideDisclosure() {
         assert.equal(await guide.getByText('U', { exact: true }).count(), 0);
         assert.equal(await guide.getByText('F', { exact: true }).count(), 0);
 
-        /** 닫힌 chevron transform. */
-        const closedChevron = await summary.evaluate((element) =>
-          getComputedStyle(element, '::after').transform,
-        );
+        assert.equal(await summary.getAttribute('aria-label'), '더보기');
+        assert.equal((await summary.textContent()).trim(), '…');
+        assert.equal(await summary.evaluate((element) => getComputedStyle(element, '::after').content), 'none');
         await summary.focus();
         assert.equal(await summary.evaluate((element) => document.activeElement === element), true);
         assert.equal(await summary.evaluate((element) => element.matches(':focus-visible')), true);
@@ -523,12 +523,6 @@ async function verifyUsageGuideDisclosure() {
         /** 설정 link의 실제 touch target. */
         const settingsBox = await settingsLink.boundingBox();
         assert.ok(settingsBox && settingsBox.width >= 44 && settingsBox.height >= 44);
-        await page.waitForTimeout(200);
-        /** 열린 chevron transform. */
-        const openChevron = await summary.evaluate((element) =>
-          getComputedStyle(element, '::after').transform,
-        );
-        assert.notEqual(openChevron, closedChevron);
         await page.keyboard.press('Escape');
         await waitForCondition(async () => (await guide.getAttribute('open')) === null);
         assert.equal(await summary.getAttribute('aria-expanded'), 'false');
@@ -538,7 +532,7 @@ async function verifyUsageGuideDisclosure() {
           /** 높이가 다른 로고와 더보기 영역의 수직 중심을 비교한다. */
           const headerMetrics = await page.evaluate(() => {
             /** 헤더 브랜드의 실제 경계. */
-            const brand = document.querySelector('.brand-lockup')?.getBoundingClientRect();
+            const brand = document.querySelector('.app-header .brand-lockup')?.getBoundingClientRect();
             /** 더보기 조작 영역을 포함한 유틸리티 경계. */
             const utilities = document.querySelector('.hero-utilities')?.getBoundingClientRect();
             return {
@@ -551,12 +545,12 @@ async function verifyUsageGuideDisclosure() {
           assert.ok(headerMetrics.utilitiesCenter !== undefined);
           assert.ok(Math.abs(headerMetrics.brandCenter - headerMetrics.utilitiesCenter) <= 1);
           assert.ok(headerMetrics.utilitiesRight !== undefined && headerMetrics.utilitiesRight <= width);
-          /** 숨겨진 desktop navigation의 grid row와 gap까지 포함한 기존 mobile header 높이. */
+          /** 모바일 헤더는 브랜드와 보조 메뉴 한 줄만 차지한다. */
           assert.equal(
             await page.locator('.app-header').evaluate((element) =>
               Math.round(element.getBoundingClientRect().height),
             ),
-            63,
+            55,
           );
         }
 
@@ -889,22 +883,22 @@ async function verifyVideoTaskFirstLayout() {
         /** 현재 테마가 입력 control에 적용해야 하는 semantic 색상. */
         const expectedVideoInputTheme = theme === 'dark'
           ? {
-              action: 'rgb(230, 0, 18)',
-              border: 'rgb(118, 118, 118)',
+              action: 'rgb(242, 240, 238)',
+              border: 'rgb(133, 133, 133)',
               danger: 'rgb(255, 138, 128)',
               disabled: 'rgb(92, 89, 85)',
-              focus: 'rgb(169, 180, 242)',
-              onAction: 'rgb(255, 255, 255)',
+              focus: 'rgb(242, 240, 238)',
+              onAction: 'rgb(24, 25, 27)',
               surface: 'rgb(32, 33, 36)',
               surfaceAlt: 'rgb(41, 42, 45)',
               textPrimary: 'rgb(242, 240, 238)',
             }
           : {
-              action: 'rgb(230, 0, 18)',
-              border: 'rgb(138, 138, 138)',
+              action: 'rgb(72, 72, 72)',
+              border: 'rgb(133, 133, 133)',
               danger: 'rgb(198, 40, 40)',
               disabled: 'rgb(200, 200, 200)',
-              focus: 'rgb(75, 92, 206)',
+              focus: 'rgb(72, 72, 72)',
               onAction: 'rgb(255, 255, 255)',
               surface: 'rgb(248, 248, 248)',
               surfaceAlt: 'rgb(239, 239, 239)',
@@ -1026,7 +1020,7 @@ async function verifyVideoTaskFirstLayout() {
           const readiness = document.querySelector('.worker-health-status');
             /** 현재 viewport에서 보이는 주요 navigation. */
             const visibleNavigation = [...document.querySelectorAll('nav[aria-label="주요 메뉴"]')]
-              .find((element) => getComputedStyle(element).display !== 'none');
+              .find((element) => element.getClientRects().length > 0);
             /** 데스크톱 수직 리듬의 기준이 되는 헤더. */
             const header = document.querySelector('.app-header');
           /** 주 작업 영역의 computed surface 값. */
@@ -1343,7 +1337,7 @@ async function verifySubtitleLifecycleStatusSurfaces() {
       expired: 'rgb(200, 200, 200)',
       failed: 'rgb(198, 40, 40)',
       processing: 'rgb(75, 92, 206)',
-      queued: 'rgb(114, 114, 114)',
+      queued: 'rgb(104, 104, 104)',
     },
   };
 
@@ -1987,26 +1981,26 @@ async function verifySubtitleProcessingChoice() {
       /** 현재 테마가 자막 입력 control에 적용해야 하는 semantic 색상. */
       const expectedSubtitleInputTheme = theme === 'dark'
         ? {
-            action: 'rgb(230, 0, 18)',
-            border: 'rgb(118, 118, 118)',
+            action: 'rgb(242, 240, 238)',
+            border: 'rgb(133, 133, 133)',
             danger: 'rgb(255, 138, 128)',
             disabled: 'rgb(92, 89, 85)',
-            onAction: 'rgb(255, 255, 255)',
+            onAction: 'rgb(24, 25, 27)',
             surface: 'rgb(32, 33, 36)',
             surfaceAlt: 'rgb(41, 42, 45)',
             textPrimary: 'rgb(242, 240, 238)',
             textSecondary: 'rgb(179, 176, 172)',
           }
         : {
-            action: 'rgb(230, 0, 18)',
-            border: 'rgb(138, 138, 138)',
+            action: 'rgb(72, 72, 72)',
+            border: 'rgb(133, 133, 133)',
             danger: 'rgb(198, 40, 40)',
             disabled: 'rgb(200, 200, 200)',
             onAction: 'rgb(255, 255, 255)',
             surface: 'rgb(248, 248, 248)',
             surfaceAlt: 'rgb(239, 239, 239)',
             textPrimary: 'rgb(72, 72, 72)',
-            textSecondary: 'rgb(114, 114, 114)',
+            textSecondary: 'rgb(104, 104, 104)',
           };
       /** 자막 입력 control의 초기 computed style을 읽는다. */
       const initialInputStyles = await page.evaluate(() => {
@@ -2188,7 +2182,7 @@ async function verifySubtitleProcessingChoice() {
         const processingMethod = document.querySelector('.subtitle-processing-method');
         /** 현재 viewport에서 보이는 주요 navigation. */
         const visibleNavigation = [...document.querySelectorAll('nav[aria-label="주요 메뉴"]')]
-          .find((element) => getComputedStyle(element).display !== 'none');
+          .find((element) => element.getClientRects().length > 0);
         /** 요소의 viewport 영역을 직렬화한다. */
         const toBox = (element) => {
           /** 요소의 viewport 사각형. */
@@ -2245,7 +2239,7 @@ async function verifySubtitleProcessingChoice() {
         const scrolledMetrics = await page.evaluate(() => {
           /** 현재 주요 navigation. */
           const navigation = [...document.querySelectorAll('nav[aria-label="주요 메뉴"]')]
-            .find((element) => getComputedStyle(element).display !== 'none');
+            .find((element) => element.getClientRects().length > 0);
           /** 제출 button. */
           const submit = document.querySelector('.subtitle-form .subtitle-submit-button');
           /** 마지막 서비스 상태 영역. */
@@ -2564,7 +2558,7 @@ async function verifySubtitleDragFeedback() {
         assert.equal(initialMetrics.backgroundColor, expectedTheme.surfaceAlt);
         assert.equal(
           initialMetrics.borderColor,
-          theme === 'dark' ? 'rgb(118, 118, 118)' : 'rgb(138, 138, 138)',
+          theme === 'dark' ? 'rgb(133, 133, 133)' : 'rgb(133, 133, 133)',
         );
         assert.equal(initialMetrics.primaryCopy, '영상 선택 또는 드래그');
 
@@ -4328,6 +4322,82 @@ async function verifyResponsivePrimaryNavigation() {
 }
 
 /** 설정 화면에서 테마 변경과 reload 복원을 검증한다. */
+/** 공통 탐색은 200% 글자 확대에서도 현재 목적지와 본문 끝 조작을 가리지 않는다. */
+async function verifyCommonLayoutTextResize() {
+  for (const width of [320, 390, 820, 821, 1280]) {
+    for (const theme of ['light', 'dark']) {
+      /** 시스템 설정과 무관하게 두 팔레트를 각각 검증한다. */
+      const context = await createContext({ viewport: { width, height: 900 } });
+      /** 기존 API fixture를 사용하는 실제 Web 화면. */
+      const { page, assertNoRuntimeErrors } = await createPage(context);
+      try {
+        await page.addInitScript((preference) => {
+          localStorage.setItem('mytube-extract-theme-preference', preference);
+        }, theme);
+        await routeApi(page, async ({ route, url }) => {
+          if (url.pathname === '/health') return fulfillJson(route, healthResponse());
+          return fulfillJson(route, {}, 404);
+        });
+        for (const routePath of RESPONSIVE_NAVIGATION_ROUTES) {
+          await page.goto(staticServer.origin + routePath);
+          await page.locator('.phase-panel h2').waitFor();
+          await documentFontsReady(page);
+          if (process.env.WEB_SMOKE_SCREENSHOTS) {
+            await page.screenshot({ path: `${process.env.WEB_SMOKE_SCREENSHOTS}/${theme}-${width}-${routePath.slice(1)}.png`, fullPage: true });
+          }
+          /** 브랜드는 항상 빨강이며 행동색만 테마에 맞춰 무채색으로 반전한다. */
+          const palette = await page.evaluate(() => ({
+            brand: getComputedStyle(document.querySelector('.app-mark rect')).fill,
+            glyph: getComputedStyle(document.querySelector('.app-mark g')).stroke,
+            action: getComputedStyle(document.documentElement).getPropertyValue('--color-action-primary').trim(),
+          }));
+          assert.deepEqual(palette, {
+            brand: 'rgb(230, 0, 18)', glyph: 'rgb(255, 255, 255)',
+            action: theme === 'dark' ? '#f2f0ee' : '#484848',
+          });
+          // 각 요소의 원래 계산값을 먼저 읽어 부모와 자식의 중복 확대를 피한다.
+          await page.evaluate(() => {
+            /** 실제 글자를 가진 요소별 확대 전 글자 크기. */
+            const sizes = [...document.querySelectorAll('body *')]
+              .filter((element) => [...element.childNodes].some((node) => node.nodeType === Node.TEXT_NODE && node.textContent.trim()))
+              .map((element) => [element, parseFloat(getComputedStyle(element).fontSize)]);
+            for (const [element, size] of sizes) element.style.fontSize = `${size * 2}px`;
+          });
+          await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+          /** 화면에 노출된 한 벌의 navigation과 늘어난 탭 크기. */
+          const navigation = page.getByRole('navigation', { name: '주요 메뉴' });
+          assert.equal(await navigation.count(), 1);
+          for (const link of await navigation.getByRole('link').all()) {
+            assert.equal(await link.evaluate((element) => element.scrollWidth <= element.clientWidth), true);
+            await link.focus();
+            assert.equal(await link.evaluate((element) => element === document.activeElement), true);
+          }
+          await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
+          /** 스크롤 끝에서 본문이 탭 위에 있고 공통 레이아웃에 수평 넘침이 없다. */
+          const metrics = await page.evaluate(() => ({
+            scrollWidth: document.documentElement.scrollWidth,
+            clientWidth: document.documentElement.clientWidth,
+            workspaceBottom: document.querySelector('.workspace').getBoundingClientRect().bottom,
+            tabTop: document.querySelector('.bottom-tab-bar').getBoundingClientRect().top,
+            brandOverflow: [...document.querySelectorAll('.brand-lockup')].some((element) => element.getClientRects().length && element.scrollWidth > element.clientWidth),
+          }));
+          assert.equal(metrics.scrollWidth, metrics.clientWidth, `${width} ${theme} ${routePath}`);
+          assert.equal(metrics.brandOverflow, false);
+          if (width <= 820) assert.ok(metrics.workspaceBottom <= metrics.tabTop, JSON.stringify(metrics));
+        }
+        assertNoRuntimeErrors();
+      } finally {
+        await context.close();
+      }
+    }
+  }
+}
+
+/** 로컬 폰트 로딩 뒤에만 배치와 스크린샷을 측정한다. */
+async function documentFontsReady(page) {
+  await page.evaluate(() => document.fonts.ready);
+}
+
 async function verifyThemePreference(page, theme) {
   assert.equal(
     await page.evaluate(() => document.documentElement.dataset.theme),
@@ -4539,6 +4609,7 @@ async function verifyResponsiveNavigationLayout(page, width, routePath) {
     'nav[aria-label="주요 메뉴"]:visible',
   );
   assert.equal(await visibleNavigation.count(), 1);
+  assert.equal(await page.getByRole('navigation', { name: '주요 메뉴' }).count(), 1);
   assert.equal(await visibleNavigation.locator('a').count(), 3);
   if (routePath === '/settings') {
     assert.equal(await visibleNavigation.locator('a[aria-current="page"]').count(), 0);
@@ -4586,7 +4657,7 @@ async function verifyResponsiveNavigationLayout(page, width, routePath) {
     /** route의 현재 목적지 link. */
     const link = isSettingsRoute
       ? document.querySelector('.settings-link[aria-current="page"]')
-      : document.querySelector('nav[aria-label="주요 메뉴"]:not([style*="display: none"]) a[aria-current="page"]');
+      : [...document.querySelectorAll('nav[aria-label="주요 메뉴"] a[aria-current="page"]')].find((element) => element.getClientRects().length > 0);
     if (!link) return null;
     const linkStyle = getComputedStyle(link);
     const rootStyle = getComputedStyle(document.documentElement);
@@ -4695,7 +4766,7 @@ async function verifyResponsiveNavigationLayout(page, width, routePath) {
     await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
     const scrolledMetrics = await page.evaluate(() => {
       const navigation = [...document.querySelectorAll('nav[aria-label="주요 메뉴"]')]
-        .find((element) => getComputedStyle(element).display !== 'none');
+        .find((element) => element.getClientRects().length > 0);
       const workspace = document.querySelector('.workspace');
       const navigationRect = navigation.getBoundingClientRect();
       const workspaceRect = workspace.getBoundingClientRect();
@@ -4716,6 +4787,13 @@ async function verifyResponsiveNavigationLayout(page, width, routePath) {
       true,
     );
     assert.equal(navigationMetrics.navigation.position, 'static');
+    /** 왼쪽 메뉴와 오른쪽 작업 영역의 분리 및 세로 목적지 순서. */
+    const workspace = await page.locator('.workspace').boundingBox();
+    assert.ok(workspace && navigationMetrics.navigation.right < workspace.x);
+    assert.ok(navigationMetrics.links.every((link, index, links) =>
+      index === 0 || link.top >= links[index - 1].bottom,
+    ));
+    assert.equal(await page.locator('.app-header nav').count(), 0);
   }
 }
 
@@ -4878,6 +4956,7 @@ async function fulfillJson(route, body, status = 200) {
 }
 
 async function run(name, callback) {
+  if (process.env.WEB_SMOKE_FILTER && !name.includes(process.env.WEB_SMOKE_FILTER)) return;
   await callback();
   console.error(`[request-history-smoke] ${name} ok`);
 }
