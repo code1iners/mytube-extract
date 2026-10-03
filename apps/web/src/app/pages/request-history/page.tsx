@@ -12,16 +12,20 @@ import { AppIcon, type AppIconName } from '../../components/app-icon';
 import { createHistoryRequestAdapter, type HistoryRequest } from '../../adapters/history-request.adapter';
 import { useNavigation } from '../../components/navigation-context';
 import { RequestReadinessNotice } from '../../components/request-readiness-notice';
-import { useHistoryAcceptance, getHistorySessionReceipts, forgetHistorySessionReceipt, isHistoryReceiptPruned } from './use-history-acceptance';
+import { useHistoryAcceptance } from './use-history-acceptance';
 import { PanelTitle } from '../../components/panel-title';
 import { ROUTE_PATHS } from '../../constants/route-paths.constant';
 import {
   type JobReceipt,
   type JobReceiptKind,
+  forgetSessionJobReceipt,
+  getSessionJobReceipts,
+  isJobReceiptPruned,
   listJobReceipts,
   parseJobReceiptStorageKey,
   removeJobReceipt,
   restoreJobReceipt,
+  subscribeToJobReceiptRetention,
 } from '../../utils/job-receipt.util';
 import {
   createJobStatusQueryOptions,
@@ -33,6 +37,8 @@ import {
 } from './request-history.logic';
 
 type JobStatus = DownloadResponse | SubtitleJobResponse;
+/** 목록 항목과 항목이 사라진 뒤의 안내가 공유하는 접수 제어. */
+type HistoryAcceptance = ReturnType<typeof useHistoryAcceptance<HistoryRequest, JobStatus, JobReceiptKind>>;
 
 /** 요청 내역 페이지의 flat layout·surface className. */
 const HISTORY_PANEL_CLASS_NAME =
@@ -205,6 +211,8 @@ export function RequestHistoryPage() {
   const [fileFeedback, setFileFeedback] = useState<{ receipt: JobReceipt; message: string } | null>(null);
   /** 기존 어댑터가 알려 준 실제 전송률. */
   const [uploadProgress, setUploadProgress] = useState<number | null>(null);
+  /** 새 항목이 실제 렌더된 뒤 포커스를 보낼 접수증. */
+  const acceptedReceiptToFocus = useRef<JobReceipt | null>(null);
   /** 두 종류의 통신과 접수 성공 기본값 저장을 기존 생명주기에 연결한다. */
   const retryAdapter = useMemo(() => createHistoryRequestAdapter({
     apiBaseUrl,
@@ -212,13 +220,24 @@ export function RequestHistoryPage() {
   }), [apiBaseUrl]);
   /** 영상·오디오·자막 전체가 공유하는 한 번의 접수 제어. */
   const acceptance = useHistoryAcceptance(retryAdapter, (receipt, storageFailed) => {
+    acceptedReceiptToFocus.current = receipt;
     setReceipts(readReceipts(deepReceipt).receipts);
     if (storageFailed) setStorageAvailable(false);
     announce(storageFailed
       ? '새 요청을 접수했습니다. 내역 저장에 실패했지만 현재 세션에서는 계속 확인할 수 있습니다.'
       : '새 요청을 접수했습니다. 기존 요청은 그대로입니다.');
-    window.requestAnimationFrame(() => document.getElementById(getHistoryTitleId(receipt))?.focus());
   });
+  useEffect(function focusAcceptedReceiptAfterRender() {
+    /** 같은 탭 알림은 렌더보다 먼저 도착하므로 목록 반영을 기다린다. */
+    const receipt = acceptedReceiptToFocus.current;
+    if (!receipt) return;
+    /** 상태 조회 중에도 안정적인 식별자를 유지하는 새 항목 제목. */
+    const title = document.getElementById(getHistoryTitleId(receipt));
+    if (title) {
+      title.focus();
+      acceptedReceiptToFocus.current = null;
+    }
+  }, [receipts]);
   /** 조회 실패와 별개로 현재 접수 조작만 잠근다. */
   const accepting = acceptance.lifecycle.phase === 'accepting';
   /** 파일 선택·검증 결과를 알리고 실제 보이는 제목으로 포커스를 복구한다. */
@@ -288,13 +307,24 @@ export function RequestHistoryPage() {
   const wasAccepting = useRef(false);
   useEffect(function focusFailedAcceptance() {
     if (wasAccepting.current && !accepting && acceptance.lifecycle.error && acceptance.source) {
-      document.getElementById(getHistoryTitleId(acceptance.source))?.focus();
+      focusHistorySource(acceptance.source);
     }
     wasAccepting.current = accepting;
   }, [accepting, acceptance.lifecycle.error, acceptance.source]);
   const visibleReceipts = receipts.filter(
     (receipt) => !dismissedKeys.has(getReceiptIdentity(receipt)),
   );
+  /** 다른 탭의 삭제나 보존 범위 정리로 접수 시작 행이 사라졌는지 확인한다. */
+  const hasRetrySource = visibleReceipts.some((receipt) =>
+    acceptance.source && getReceiptIdentity(receipt) === getReceiptIdentity(acceptance.source));
+  /** 접수 안내가 없으면 빈 대체 영역을 만들지 않는다. */
+  const hasDetachedAcceptance = !hasRetrySource && acceptance.source !== null &&
+    (accepting || acceptance.lifecycle.error !== null || Boolean(acceptance.lifecycle.requestNotice));
+  useEffect(function focusDetachedAcceptance() {
+    if (accepting && !hasRetrySource) {
+      document.getElementById('history-detached-acceptance')?.focus();
+    }
+  }, [accepting, hasRetrySource]);
   const queries = useQueries({
     queries: visibleReceipts.map((receipt) => ({
       ...createJobStatusQueryOptions({
@@ -324,7 +354,7 @@ export function RequestHistoryPage() {
   const storageFailed =
     (location.state as { storageFailed?: boolean } | null)?.storageFailed ===
       true ||
-    (!storageAvailable && deepReceipt !== null) || getHistorySessionReceipts().length > 0;
+    (!storageAvailable && deepReceipt !== null) || getSessionJobReceipts().length > 0;
 
   useEffect(
     function synchronizeOtherTabs() {
@@ -337,8 +367,8 @@ export function RequestHistoryPage() {
           /** 다른 탭에서 변경된 접수증의 storage identity. */
           const changedReceipt = parseJobReceiptStorageKey(event.key);
 
-          if (changedReceipt) forgetHistorySessionReceipt(changedReceipt);
-          if (event.key === null) getHistorySessionReceipts().forEach(forgetHistorySessionReceipt);
+          if (changedReceipt) forgetSessionJobReceipt(changedReceipt);
+          if (event.key === null) getSessionJobReceipts().forEach(forgetSessionJobReceipt);
 
           if (
             changedReceipt &&
@@ -355,8 +385,13 @@ export function RequestHistoryPage() {
       }
 
       handleStorageChange();
+      /** 메뉴가 열려 있을 때는 다른 탭의 보존 범위 정리도 바로 표시한다. */
+      const unsubscribeRetention = subscribeToJobReceiptRetention(handleStorageChange);
       window.addEventListener('storage', handleStorageChange);
-      return () => window.removeEventListener('storage', handleStorageChange);
+      return () => {
+        unsubscribeRetention();
+        window.removeEventListener('storage', handleStorageChange);
+      };
     },
     [deepReceipt, undoReceipt],
   );
@@ -393,7 +428,7 @@ export function RequestHistoryPage() {
       for (const receipt of visibleReceipts) {
         if (keys.has(getReceiptIdentity(receipt))) {
           removeJobReceipt(receipt.kind, receipt.jobId);
-          forgetHistorySessionReceipt(receipt);
+          forgetSessionJobReceipt(receipt);
         }
       }
       setDismissedKeys((current) => new Set([...current, ...keys]));
@@ -448,7 +483,7 @@ export function RequestHistoryPage() {
       return;
     }
 
-    forgetHistorySessionReceipt(receipt);
+    forgetSessionJobReceipt(receipt);
     /** 마지막 접수증이 삭제되면 내역 메뉴도 일반 목록으로 복귀한다. */
     const linkedReceipt = parseHistoryDeepLink(historyDestination.split('?')[1] ?? '', receipt.acceptedAt);
     if (linkedReceipt && getReceiptIdentity(linkedReceipt) === getReceiptIdentity(receipt)) {
@@ -564,7 +599,9 @@ export function RequestHistoryPage() {
         요청 내역
       </PanelTitle>
       <p className={HISTORY_DESCRIPTION_CLASS_NAME}>
-        이 브라우저에서 접수한 최근 요청 20건입니다.
+        {visibleReceipts.length > 20
+          ? '이 브라우저에서 접수한 최근 요청과 되돌린 내역입니다.'
+          : '이 브라우저에서 접수한 최근 요청 20건입니다.'}
       </p>
       {storageFailed ? (
         <div className={HISTORY_STORAGE_NOTICE_CLASS_NAME} role="status">
@@ -579,7 +616,17 @@ export function RequestHistoryPage() {
           </p>
         </div>
       ) : null}
-      {!visibleReceipts.some((receipt) => acceptance.source && getReceiptIdentity(receipt) === getReceiptIdentity(acceptance.source)) ? (
+      {hasDetachedAcceptance ? (
+        <div
+          aria-label="재요청 접수"
+          className={`grid min-w-0 gap-mytube-8 ${HISTORY_FOCUSABLE_TITLE_CLASS_NAME}`}
+          id="history-detached-acceptance"
+          role="group"
+          tabIndex={-1}
+        >
+          <HistoryAcceptanceStatus acceptance={acceptance} uploadProgress={uploadProgress} />
+        </div>
+      ) : !hasRetrySource ? (
         <RequestReadinessNotice
           id="history-readiness"
           status={acceptance.lifecycle.readiness.status}
@@ -615,7 +662,7 @@ export function RequestHistoryPage() {
         {announcement.message}
       </p>
       {visibleReceipts.length === 0 ? (
-        <HistoryEmptyState />
+        accepting ? null : <HistoryEmptyState />
       ) : (
         <ul className={HISTORY_LIST_CLASS_NAME}>
           {visibleReceipts.map((receipt, index) => (
@@ -689,7 +736,7 @@ function HistoryItem(props: {
   /** 브라우저에 저장된 접수증. */
   receipt: JobReceipt;
   /** 목록 공통 접수 상태와 조작. */
-  acceptance: ReturnType<typeof useHistoryAcceptance<HistoryRequest, JobStatus, JobReceiptKind>>;
+  acceptance: HistoryAcceptance;
   /** 접수 중에는 다른 재요청과 원래 항목 삭제를 막는다. */
   accepting: boolean;
   /** 네이티브 파일 선택이 끝날 때까지 실행을 잠근다. */
@@ -874,46 +921,7 @@ function HistoryItem(props: {
         </div>
         {props.fileFeedback ? <p className={HISTORY_MESSAGE_CLASS_NAME} role="status">{props.fileFeedback}</p> : null}
         {isRetrySource ? (
-          <div id={`${titleId}-acceptance`} className="grid min-w-0 gap-mytube-8">
-            {props.accepting ? (
-              <>
-                <p className={HISTORY_MESSAGE_CLASS_NAME} role="status">새 요청을 접수하고 있습니다. 접수 전에는 취소할 수 있습니다.</p>
-                {receipt.kind === 'subtitle' && props.uploadProgress !== null ? (
-                  <div className={HISTORY_PROGRESS_CLASS_NAME}>
-                    <progress aria-label="원본 업로드 진행률" className={HISTORY_PROGRESS_BAR_CLASS_NAME} max={100} value={props.uploadProgress} />
-                    <span>{props.uploadProgress}%</span>
-                  </div>
-                ) : null}
-                <button
-                  className={`${HISTORY_SECONDARY_ACTION_CLASS_NAME} justify-self-start`}
-                  type="button"
-                  onClick={() => {
-                    lifecycle.actions.cancel?.();
-                    window.requestAnimationFrame(() => document.getElementById(titleId)?.focus());
-                  }}
-                >접수 취소</button>
-              </>
-            ) : (
-              <>
-                <RequestReadinessNotice
-                  id="history-readiness"
-                  status={lifecycle.readiness.status}
-                  isFetching={lifecycle.readiness.isFetching}
-                  onRetry={() => {
-                    document.getElementById(titleId)?.focus();
-                    lifecycle.actions.retryReadiness?.();
-                  }}
-                />
-                {lifecycle.error?.source === 'request' ? (
-                  <p className={`${HISTORY_MESSAGE_CLASS_NAME} ${HISTORY_ERROR_MESSAGE_CLASS_NAME}`} role="alert">
-                    {lifecycle.error.cause instanceof SubtitleUploadTooLargeError ? '파일이 너무 큽니다. 더 작은 영상 파일을 선택해 주세요.' : '요청을 접수하지 못했습니다. 기존 내역과 입력은 그대로입니다. 다시 요청해 주세요.'}
-                  </p>
-                ) : lifecycle.requestNotice ? (
-                  <p className={HISTORY_MESSAGE_CLASS_NAME} role="status">{lifecycle.requestNotice}</p>
-                ) : null}
-              </>
-            )}
-          </div>
+          <HistoryAcceptanceStatus acceptance={props.acceptance} uploadProgress={props.uploadProgress} />
         ) : null}
         {needsRetryConditions && !isConnectionError ? (
           <p className={HISTORY_MESSAGE_CLASS_NAME} role="alert">재요청 조건을 확인할 수 없습니다. 상태를 다시 확인해 주세요.</p>
@@ -991,26 +999,86 @@ function HistoryItem(props: {
   );
 }
 
+/** 시작 행이 없어져도 같은 접수 상태·취소·실패 안내를 목록 위에서 제공한다. */
+function HistoryAcceptanceStatus(props: {
+  /** 목록 전체의 단일 접수 제어. */
+  acceptance: HistoryAcceptance;
+  /** 현재 자막 업로드의 실제 진행률. */
+  uploadProgress: number | null;
+}) {
+  /** 접수의 원래 항목과 현재 상태. */
+  const { source, lifecycle } = props.acceptance;
+  if (!source) return null;
+
+  return (
+    <div id={`${getHistoryTitleId(source)}-acceptance`} className="grid min-w-0 gap-mytube-8">
+      {lifecycle.phase === 'accepting' ? (
+        <>
+          <p className={HISTORY_MESSAGE_CLASS_NAME} role="status">새 요청을 접수하고 있습니다. 접수 전에는 취소할 수 있습니다.</p>
+          {source.kind === 'subtitle' && props.uploadProgress !== null ? (
+            <div className={HISTORY_PROGRESS_CLASS_NAME}>
+              <progress aria-label="원본 업로드 진행률" className={HISTORY_PROGRESS_BAR_CLASS_NAME} max={100} value={props.uploadProgress} />
+              <span>{props.uploadProgress}%</span>
+            </div>
+          ) : null}
+          <button
+            className={`${HISTORY_SECONDARY_ACTION_CLASS_NAME} justify-self-start`}
+            type="button"
+            onClick={() => {
+              lifecycle.actions.cancel?.();
+              window.requestAnimationFrame(() => focusHistorySource(source));
+            }}
+          >접수 취소</button>
+        </>
+      ) : (
+        <>
+          <RequestReadinessNotice
+            id="history-readiness"
+            status={lifecycle.readiness.status}
+            isFetching={lifecycle.readiness.isFetching}
+            onRetry={() => {
+              focusHistorySource(source);
+              lifecycle.actions.retryReadiness?.();
+            }}
+          />
+          {lifecycle.error?.source === 'request' ? (
+            <p className={`${HISTORY_MESSAGE_CLASS_NAME} ${HISTORY_ERROR_MESSAGE_CLASS_NAME}`} role="alert">
+              {lifecycle.error.cause instanceof SubtitleUploadTooLargeError ? '파일이 너무 큽니다. 더 작은 영상 파일을 선택해 주세요.' : '요청을 접수하지 못했습니다. 기존 내역과 입력은 그대로입니다. 다시 요청해 주세요.'}
+            </p>
+          ) : lifecycle.requestNotice ? (
+            <p className={HISTORY_MESSAGE_CLASS_NAME} role="status">{lifecycle.requestNotice}</p>
+          ) : null}
+        </>
+      )}
+    </div>
+  );
+}
+
+/** 원래 행이 없어졌으면 항상 보이는 목록 제목으로 포커스를 돌린다. */
+function focusHistorySource(receipt: JobReceipt) {
+  (document.getElementById(getHistoryTitleId(receipt)) ?? document.getElementById('history-title'))?.focus();
+}
+
 function readReceipts(deepReceipt: JobReceipt | null) {
   const stored = listJobReceipts();
   /** 저장 실패 접수증은 메뉴 복귀에도 보존하며 영속 저장을 주장하지 않는다. */
-  const session = getHistorySessionReceipts();
-  /** 중복을 제거하고 기존 최신 20건 보존 규칙을 적용한다. */
+  const session = getSessionJobReceipts();
+  /** 보존 범위는 새 접수 때 정리한다. 명시적 되돌리기는 다른 내역을 숨기지 않는다. */
   const merged = new Map([...stored.receipts, ...session].map((receipt) => [getReceiptIdentity(receipt), receipt]));
   const result = {
     storageAvailable: stored.storageAvailable,
-    receipts: [...merged.values()].filter((receipt) => !isHistoryReceiptPruned(receipt)).sort((left, right) => right.acceptedAt.localeCompare(left.acceptedAt)).slice(0, 20),
+    receipts: [...merged.values()].filter((receipt) => !isJobReceiptPruned(receipt)).sort((left, right) => right.acceptedAt.localeCompare(left.acceptedAt)),
   };
 
   return {
     ...result,
     receipts:
       deepReceipt &&
-      !isHistoryReceiptPruned(deepReceipt) &&
+      !isJobReceiptPruned(deepReceipt) &&
       !result.receipts.some(
         (receipt) => getReceiptIdentity(receipt) === getReceiptIdentity(deepReceipt),
       )
-        ? [deepReceipt, ...result.receipts].slice(0, 20)
+        ? [deepReceipt, ...result.receipts]
         : result.receipts,
   };
 }

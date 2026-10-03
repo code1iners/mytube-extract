@@ -41,6 +41,10 @@ const staticServer = await createStaticServer(outputRoot);
 const browser = await chromium.launch();
 
 try {
+  await run('history review late acceptance updates the reopened list', verifyHistoryLateAcceptanceAfterNavigation);
+  await run('history review source removal preserves acceptance controls', verifyHistoryAcceptanceAfterSourceRemoval);
+  await run('history review undo at capacity matches stored receipts', verifyHistoryUndoAtCapacity);
+  await run('history review regular requests retain twenty with session receipts', verifyHistoryRetentionAfterRegularAcceptance);
   await run('subtitle history retry preserves files, modes, drafts and defaults', verifyHistorySubtitleRetry);
   await run('subtitle history retry handles selection, upload and cancellation boundaries', verifyHistorySubtitleBoundaries);
   await run('history retry prunes the oldest deep link after successful storage', verifyHistoryDeepLinkRetention);
@@ -102,6 +106,297 @@ try {
 } finally {
   await browser.close();
   await staticServer.close();
+}
+
+/** 취소 뒤 화면을 다시 연 경우에도 늦은 성공과 저장 실패 접수증을 즉시 표시한다. */
+async function verifyHistoryLateAcceptanceAfterNavigation() {
+  for (const storageBlocked of [false, true]) {
+    /** 이전 화면의 complete 응답을 새 내역 화면에서 해제한다. */
+    let release;
+    const gate = new Promise((resolve) => { release = resolve; });
+    /** 실제 complete 요청이 시작된 뒤 취소한다. */
+    let completeStarted = false;
+    /** 메뉴 이동 중 같은 저장소와 탭 메모리를 사용하는 브라우저. */
+    const context = await createContext();
+    const { page, assertNoRuntimeErrors } = await createPage(context);
+    try {
+      await seedReceipts(page, [['subtitle', SUBTITLE_ID, '2026-08-11T00:00:00.000Z']]);
+      await page.route('https://upload.example/**', (route) => route.fulfill({ status: 200, body: '', headers: {
+        'Access-Control-Allow-Origin': '*', 'Access-Control-Expose-Headers': 'ETag', ETag: '"part"',
+      } }));
+      await routeApi(page, async ({ route, url }) => {
+        if (url.pathname === '/health') return fulfillJson(route, healthResponse());
+        if (url.pathname === `/subtitles/jobs/${SUBTITLE_ID}`) return fulfillJson(route, subtitleJob(SUBTITLE_ID, 'failed'));
+        if (url.pathname === '/subtitles/uploads') return fulfillJson(route, {
+          expiresAt: '2026-10-05T12:00:00.000Z', objectKey: 'source/late.mp4', partSizeBytes: 1024,
+          parts: [{ partNumber: 1, uploadUrl: 'https://upload.example/late' }], uploadId: 'late-upload', uploadToken: 'late-token',
+        });
+        if (url.pathname === '/subtitles/uploads/complete') {
+          completeStarted = true;
+          await gate;
+          return fulfillJson(route, subtitleJob(SUBTITLE_OTHER_ID, 'queued'));
+        }
+        if (url.pathname === `/subtitles/jobs/${SUBTITLE_OTHER_ID}`) return fulfillJson(route, subtitleJob(SUBTITLE_OTHER_ID, 'completed', { fileName: '늦게 접수한 자막.mp4' }));
+        return fulfillJson(route, {}, 404);
+      });
+      await page.goto(`${staticServer.origin}/history`);
+      /** 실제 파일 선택 이후 기존 완료 통신을 보류한다. */
+      const retry = page.getByRole('button', { name: '다시 요청', exact: true });
+      await waitForEnabled(retry);
+      const chooserPromise = page.waitForEvent('filechooser');
+      await retry.click();
+      const chooser = await chooserPromise;
+      await chooser.setFiles({ name: 'late.mp4', mimeType: 'video/mp4', buffer: Buffer.from('late subtitle') });
+      await waitForCondition(async () => completeStarted);
+      await page.getByRole('button', { name: '접수 취소', exact: true }).click();
+      await page.getByRole('link', { name: '영상 추출', exact: true }).click();
+      await page.getByLabel('YouTube URL').waitFor();
+      await page.getByRole('link', { name: '요청 내역', exact: true }).click();
+      await page.getByRole('heading', { name: 'sample.mp4', exact: true }).waitFor();
+      if (storageBlocked) await page.evaluate(() => {
+        Storage.prototype.setItem = () => { throw new DOMException('blocked', 'QuotaExceededError'); };
+      });
+      release();
+      /** 새 화면이 추가 이동 없이 성공을 반영하고 새 항목을 식별한다. */
+      const acceptedTitle = page.getByRole('heading', { name: '늦게 접수한 자막.mp4', exact: true });
+      await acceptedTitle.waitFor();
+      assert.equal(await page.locator('.history-item').count(), 2);
+      assert.equal(await receiptCount(page), storageBlocked ? 1 : 2);
+      await waitForCondition(async () => acceptedTitle.evaluate((element) => document.activeElement === element));
+      if (storageBlocked) await page.getByText(/이 브라우저에 내역을 저장하지 못했습니다/).waitFor();
+      assertNoRuntimeErrors();
+    } finally { release(); await context.close(); }
+  }
+}
+
+/** 다른 탭에서 원래 행이 사라져도 접수 안내·취소·실패·성공을 계속 확인한다. */
+async function verifyHistoryAcceptanceAfterSourceRemoval() {
+  for (const outcome of ['cancel', 'failure', 'success']) {
+    /** 원본 삭제 뒤 완료·실패·취소를 확인할 응답 경계. */
+    let release;
+    const gate = new Promise((resolve) => { release = resolve; });
+    /** 서버 접수 경계 도달 여부. */
+    let completeStarted = false;
+    /** 모바일·데스크톱에서 원본 행 제거 후 조작을 검증한다. */
+    const width = outcome === 'failure' ? 1280 : outcome === 'success' ? 320 : 390;
+    const context = await createContext({ viewport: { width, height: 844 } });
+    const { page, assertNoRuntimeErrors } = await createPage(context, { ignoreHttpErrors: true });
+    const writerPage = await context.newPage();
+    try {
+      await page.emulateMedia({ colorScheme: outcome === 'cancel' ? 'dark' : 'light' });
+      await seedReceipts(page, [['subtitle', SUBTITLE_ID, '2026-08-11T00:00:00.000Z']]);
+      await page.route('https://upload.example/**', (route) => route.fulfill({ status: 200, body: '', headers: {
+        'Access-Control-Allow-Origin': '*', 'Access-Control-Expose-Headers': 'ETag', ETag: '"part"',
+      } }));
+      await routeApi(page, async ({ route, url }) => {
+        if (url.pathname === '/health') return fulfillJson(route, healthResponse());
+        if (url.pathname === `/subtitles/jobs/${SUBTITLE_ID}`) return fulfillJson(route, subtitleJob(SUBTITLE_ID, 'failed'));
+        if (url.pathname === '/subtitles/uploads') return fulfillJson(route, {
+          expiresAt: '2026-10-05T12:00:00.000Z', objectKey: 'source/detached.mp4', partSizeBytes: 1024,
+          parts: [{ partNumber: 1, uploadUrl: 'https://upload.example/detached' }], uploadId: 'detached-upload', uploadToken: 'detached-token',
+        });
+        if (url.pathname === '/subtitles/uploads/complete') {
+          completeStarted = true;
+          await gate;
+          return fulfillJson(route, outcome === 'failure' ? {} : subtitleJob(SUBTITLE_OTHER_ID, 'queued'), outcome === 'failure' ? 500 : 200);
+        }
+        if (url.pathname === '/subtitles/uploads/abort') return fulfillJson(route, {});
+        if (url.pathname === `/subtitles/jobs/${SUBTITLE_OTHER_ID}`) return fulfillJson(route, subtitleJob(SUBTITLE_OTHER_ID, 'completed', { fileName: '원본 삭제 후 새 자막.mp4' }));
+        return fulfillJson(route, {}, 404);
+      });
+      await page.goto(`${staticServer.origin}/history`);
+      await writerPage.goto(`${staticServer.origin}/settings`);
+      /** 원본 항목에서 자막 재요청을 시작한다. */
+      const retry = page.getByRole('button', { name: '다시 요청', exact: true });
+      await waitForEnabled(retry);
+      const chooserPromise = page.waitForEvent('filechooser');
+      await retry.click();
+      const chooser = await chooserPromise;
+      await chooser.setFiles({ name: 'detached.mp4', mimeType: 'video/mp4', buffer: Buffer.from('detached subtitle') });
+      await waitForCondition(async () => completeStarted);
+      await writerPage.evaluate((key) => localStorage.removeItem(key), receiptKey('subtitle', SUBTITLE_ID));
+      await waitForHistoryCount(page, 0);
+      /** 삭제된 행 대신 목록 위에서 계속 제공하는 접수 조작. */
+      const acceptance = page.getByRole('group', { name: '재요청 접수', exact: true });
+      const cancel = acceptance.getByRole('button', { name: '접수 취소', exact: true });
+      await cancel.waitFor();
+      await acceptance.getByText('새 요청을 접수하고 있습니다. 접수 전에는 취소할 수 있습니다.', { exact: true }).waitFor();
+      assert.equal(await page.getByRole('button', { name: '접수 취소', exact: true }).count(), 1);
+      assert.equal(await page.getByRole('link', { name: '영상 추출', exact: true }).getAttribute('aria-disabled'), 'true');
+      assert.equal(await page.getByText('시작할 작업을 선택하세요.', { exact: true }).count(), 0);
+      await waitForCondition(async () => acceptance.evaluate((element) => document.activeElement === element));
+      await cancel.scrollIntoViewIfNeeded();
+      /** 새 위치에서도 클릭 영역·수평 넘침·하단 탭 가림을 확인한다. */
+      const bounds = await cancel.evaluate((element) => {
+        const rect = element.getBoundingClientRect();
+        return { width: rect.width, height: rect.height,
+          hit: element.contains(document.elementFromPoint(rect.x + rect.width / 2, rect.y + rect.height / 2)),
+          overflow: document.documentElement.scrollWidth > document.documentElement.clientWidth };
+      });
+      assert.ok(bounds.width >= 44 && bounds.height >= 44 && bounds.hit && !bounds.overflow, JSON.stringify(bounds));
+      if (process.env.WEB_SMOKE_SCREENSHOTS) await page.screenshot({ path: `${process.env.WEB_SMOKE_SCREENSHOTS}/history-detached-${outcome}.png`, fullPage: true });
+      if (outcome === 'cancel') {
+        await cancel.focus();
+        await page.keyboard.press('Enter');
+        await page.getByText(/접수를 중단했습니다/).waitFor();
+        await waitForCondition(async () => page.locator('#history-title').evaluate((element) => document.activeElement === element));
+        assert.notEqual(await page.getByRole('link', { name: '영상 추출', exact: true }).getAttribute('aria-disabled'), 'true');
+      }
+      release();
+      if (outcome === 'failure') {
+        await acceptance.getByRole('alert').filter({ hasText: '요청을 접수하지 못했습니다.' }).waitFor();
+        await waitForCondition(async () => page.locator('#history-title').evaluate((element) => document.activeElement === element));
+        assert.equal(await receiptCount(page), 0);
+      } else {
+        await page.getByRole('heading', { name: '원본 삭제 후 새 자막.mp4', exact: true }).waitFor();
+        assert.equal(await page.locator('.history-item').count(), 1);
+      }
+      assert.equal(await page.evaluate((key) => localStorage.getItem(key), receiptKey('subtitle', SUBTITLE_ID)), null);
+      assert.notEqual(await page.getByRole('link', { name: '영상 추출', exact: true }).getAttribute('aria-disabled'), 'true');
+      assertNoRuntimeErrors();
+    } finally { release(); await context.close(); }
+  }
+}
+
+/** 되돌리기는 다른 내역을 보존하고 다음 새 접수에서만 최신 20건을 정리한다. */
+async function verifyHistoryUndoAtCapacity() {
+  /** 같은 화면의 삭제·새 접수·복원을 검증하는 브라우저. */
+  const context = await createContext();
+  const { page, assertNoRuntimeErrors } = await createPage(context);
+  /** 복원 직전·직후에 접수할 서로 다른 작업 식별자. */
+  const acceptedIds = [VIDEO_OTHER_ID, LONG_VIDEO_ID];
+  let creates = 0;
+  try {
+    await seedReceipts(page, [
+      ['video', VIDEO_ID, '2026-08-01T00:00:00.000Z'],
+      ...Array.from({ length: 19 }, (_, index) => ['video', `88888888-8888-4888-8888-${String(index).padStart(12, '0')}`, `2026-08-${String(index + 2).padStart(2, '0')}T00:00:00.000Z`]),
+    ]);
+    await routeApi(page, async ({ request, route, url }) => {
+      if (url.pathname === '/health') return fulfillJson(route, healthResponse());
+      if (url.pathname === '/downloads' && request.method() === 'POST') return fulfillJson(route, videoJob(acceptedIds[creates++], 'completed'));
+      if (url.pathname.startsWith('/downloads/')) {
+        /** 요청 시점과 무관하게 유지하는 원래 상태·제목. */
+        const id = url.pathname.split('/').at(-1);
+        return fulfillJson(route, videoJob(id, acceptedIds.includes(id) ? 'completed' : 'failed', { title: id, sourceUrl: 'https://youtu.be/dQw4w9WgXcQ' }));
+      }
+      return fulfillJson(route, {}, 404);
+    });
+    await page.goto(`${staticServer.origin}/history`);
+    await page.getByRole('heading', { name: VIDEO_ID, exact: true }).waitFor();
+    /** 가장 오래된 요청을 삭제하고 8초 이내 새 접수와 되돌리기를 수행한다. */
+    const oldest = page.locator('article').filter({ has: page.getByRole('heading', { name: VIDEO_ID, exact: true }) });
+    await oldest.getByRole('button', { name: /상세/ }).click();
+    await oldest.getByRole('button', { name: /내역에서 삭제/ }).click();
+    const retry = page.getByRole('button', { name: '다시 요청', exact: true }).first();
+    await waitForEnabled(retry);
+    await retry.click();
+    await page.getByRole('heading', { name: VIDEO_OTHER_ID, exact: true }).waitFor();
+    await page.getByRole('button', { name: '삭제한 영상 요청 되돌리기' }).click();
+    await page.getByText('영상 요청 내역을 복원했습니다.', { exact: true }).waitFor();
+    assert.equal(await page.getByRole('alert').count(), 0);
+    assert.equal(await page.locator('.history-item').count(), 21);
+    assert.equal(await receiptCount(page), 21);
+    await waitForCondition(async () => page.getByRole('heading', { name: VIDEO_ID, exact: true }).evaluate((element) => document.activeElement === element));
+    await page.getByRole('link', { name: '영상 추출', exact: true }).click();
+    await page.getByLabel('YouTube URL').waitFor();
+    await page.getByRole('link', { name: '요청 내역', exact: true }).click();
+    await waitForHistoryCount(page, 21);
+    // 명시적 복원을 유지한 뒤 다음 새 접수에서는 원래 20건 보존 규칙을 적용한다.
+    await waitForEnabled(retry);
+    await retry.click();
+    await page.getByRole('heading', { name: LONG_VIDEO_ID, exact: true }).waitFor();
+    assert.equal(await page.locator('.history-item').count(), 20);
+    assert.equal(await receiptCount(page), 20);
+    assert.equal(await page.getByRole('heading', { name: VIDEO_ID, exact: true }).count(), 0);
+    assertNoRuntimeErrors();
+  } finally { await context.close(); }
+}
+
+/** 저장 실패 재요청과 일반 추출을 섞어도 같은 최신 20건 보존 규칙을 적용한다. */
+async function verifyHistoryRetentionAfterRegularAcceptance() {
+  for (const [kind, requestLocation] of [
+    ['video', 'same-tab'], ['subtitle', 'same-tab'],
+    ['video', 'other-tab'], ['video', 'other-tab-away'],
+  ]) {
+    const context = await createContext();
+    const { page, assertNoRuntimeErrors } = await createPage(context);
+    /** 재요청 성공과 일반 추출 성공을 서로 다른 접수증으로 구분한다. */
+    let videoCreates = 0;
+    const newId = kind === 'video' ? LONG_VIDEO_ID : SUBTITLE_OTHER_ID;
+    const secondOldestId = '88888888-8888-4888-8888-000000000000';
+    try {
+      await seedReceipts(page, [
+        ['video', VIDEO_ID, '2026-08-01T00:00:00.000Z'],
+        ...Array.from({ length: 19 }, (_, index) => ['video', `88888888-8888-4888-8888-${String(index).padStart(12, '0')}`, `2026-08-${String(index + 2).padStart(2, '0')}T00:00:00.000Z`]),
+      ]);
+      await context.route('https://upload.example/**', (route) => route.fulfill({ status: 200, body: '', headers: {
+        'Access-Control-Allow-Origin': '*', 'Access-Control-Expose-Headers': 'ETag', ETag: '"part"',
+      } }));
+      await routeApi(context, async ({ request, route, url }) => {
+        if (url.pathname === '/health') return fulfillJson(route, healthResponse());
+        if (url.pathname === '/downloads' && request.method() === 'POST') {
+          return fulfillJson(route, videoJob(videoCreates++ === 0 ? VIDEO_OTHER_ID : LONG_VIDEO_ID, 'completed'));
+        }
+        if (url.pathname.startsWith('/downloads/')) {
+          const id = url.pathname.split('/').at(-1);
+          return fulfillJson(route, videoJob(id, [VIDEO_OTHER_ID, LONG_VIDEO_ID].includes(id) ? 'completed' : 'failed', { title: id, sourceUrl: 'https://youtu.be/dQw4w9WgXcQ' }));
+        }
+        if (url.pathname === '/subtitles/uploads') return fulfillJson(route, {
+          expiresAt: '2026-10-05T12:00:00.000Z', objectKey: 'source/retention.mp4', partSizeBytes: 1024,
+          parts: [{ partNumber: 1, uploadUrl: 'https://upload.example/retention' }], uploadId: 'retention-upload', uploadToken: 'retention-token',
+        });
+        if (url.pathname === '/subtitles/uploads/complete' || url.pathname === `/subtitles/jobs/${SUBTITLE_OTHER_ID}`) {
+          return fulfillJson(route, subtitleJob(SUBTITLE_OTHER_ID, 'completed', { fileName: SUBTITLE_OTHER_ID }));
+        }
+        return fulfillJson(route, {}, 404);
+      });
+      await page.goto(`${staticServer.origin}/history`);
+      await page.evaluate((prefix) => {
+        window.originalSetItem = Storage.prototype.setItem;
+        Storage.prototype.setItem = function blockReceiptWrite(key, value) {
+          if (key.startsWith(prefix)) throw new DOMException('blocked', 'QuotaExceededError');
+          return window.originalSetItem.call(this, key, value);
+        };
+      }, RECEIPT_PREFIX);
+      const retry = page.getByRole('button', { name: '다시 요청', exact: true }).first();
+      await waitForEnabled(retry);
+      await retry.click();
+      await page.getByRole('heading', { name: VIDEO_OTHER_ID, exact: true }).waitFor();
+      assert.equal(await page.locator('.history-item').count(), 20);
+      assert.equal(await receiptCount(page), 19);
+      await page.evaluate(() => { Storage.prototype.setItem = window.originalSetItem; });
+      /** 다른 탭의 접수는 내역이 열린 경우와 메뉴를 떠난 경우를 모두 검증한다. */
+      const requester = requestLocation === 'same-tab' ? { page, assertNoRuntimeErrors } : await createPage(context);
+      if (requestLocation === 'same-tab') {
+        await page.getByRole('link', { name: kind === 'video' ? '영상 추출' : '자막 추출', exact: true }).click();
+      } else {
+        if (requestLocation === 'other-tab-away') {
+          await page.getByRole('link', { name: '영상 추출', exact: true }).click();
+          await page.getByLabel('YouTube URL').waitFor();
+        }
+        await requester.page.goto(`${staticServer.origin}/video`);
+      }
+      if (kind === 'video') {
+        await requester.page.getByLabel('YouTube URL').fill('https://youtu.be/dQw4w9WgXcQ');
+      } else {
+        await requester.page.locator('.subtitle-form').waitFor();
+        await requester.page.locator('input[type="file"]').setInputFiles({ name: 'retention.mp4', mimeType: 'video/mp4', buffer: Buffer.from('regular subtitle') });
+      }
+      const submit = requester.page.getByRole('button', { name: kind === 'video' ? '추출 요청' : '영어 SRT 생성', exact: true });
+      await waitForEnabled(submit);
+      await submit.click();
+      await requester.page.getByRole('heading', { name: kind === 'video' ? '파일이 준비되었습니다' : '영어 자막 파일이 준비되었습니다', exact: true }).waitFor();
+      if (requestLocation !== 'other-tab') await page.getByRole('link', { name: '요청 내역', exact: true }).click();
+      await page.getByRole('heading', { name: newId, exact: true }).waitFor();
+      await page.getByRole('heading', { name: VIDEO_OTHER_ID, exact: true }).waitFor();
+      await waitForHistoryCount(page, 20);
+      assert.equal(await receiptCount(page), 19);
+      assert.equal(await page.getByRole('heading', { name: secondOldestId, exact: true }).count(), 0);
+      assert.equal(await page.getByText(/최근 요청과 되돌린 내역/).count(), 0);
+      assertNoRuntimeErrors();
+      requester.assertNoRuntimeErrors();
+    } finally { await context.close(); }
+  }
 }
 
 /** 정상 저장으로 정리한 가장 오래된 접수증도 딥링크가 되살리지 않는다. */
