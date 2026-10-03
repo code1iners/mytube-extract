@@ -41,6 +41,10 @@ const staticServer = await createStaticServer(outputRoot);
 const browser = await chromium.launch();
 
 try {
+  await run('history retry prunes the oldest deep link after successful storage', verifyHistoryDeepLinkRetention);
+  await run('history retry trims session receipts permanently at twenty', verifyHistorySessionRetention);
+  await run('history retry failure cancellation and storage boundaries', verifyHistoryRetryBoundaries);
+  await run('history video retry preserves drafts and accepts original conditions', verifyHistoryVideoRetry);
   await run('history missing download recovers without restarting the job', verifyHistoryMissingDownload);
   await run('history minimal list exposes actions and keyboard details', verifyHistoryMinimalList);
   await run('subtitle draft keeps the real file independently of video input', verifySubtitleDraftNavigation);
@@ -83,7 +87,7 @@ try {
   await run('blocked storage reports undo restoration failure', verifyHistoryUndoStorageFailure);
   await run('cross-tab delete and re-add stay synchronized', verifyCrossTabStorage);
   await run('blocked localStorage keeps the deep-link item', verifyBlockedStorageFallback);
-  await run('failed and expired jobs expose matching retry routes', verifyRetryRoutes);
+  await run('failed video uses direct retry and subtitle keeps its route', verifyRetryRoutes);
   await run('empty history explains both request paths and retention', verifyEmptyHistoryProductModel);
   await run('history keeps video titles and identifies untitled requests', verifyHistoryTitles);
   await run('history replaces the source link with an acquired title before failure', verifyHistoryTitleArrivalDuringProcessing);
@@ -98,6 +102,249 @@ try {
   await staticServer.close();
 }
 
+/** 정상 저장으로 정리한 가장 오래된 접수증도 딥링크가 되살리지 않는다. */
+async function verifyHistoryDeepLinkRetention() {
+  const context = await createContext();
+  const { page, assertNoRuntimeErrors } = await createPage(context);
+  try {
+    await seedReceipts(page, [
+      ['video', VIDEO_ID, '2026-08-01T00:00:00.000Z'],
+      ...Array.from({ length: 19 }, (_, index) => ['video', `88888888-8888-4888-8888-${String(index).padStart(12, '0')}`, `2026-08-${String(index + 2).padStart(2, '0')}T00:00:00.000Z`]),
+    ]);
+    await routeApi(page, async ({ request, route, url }) => {
+      if (url.pathname === '/health') return fulfillJson(route, healthResponse());
+      if (url.pathname === '/downloads' && request.method() === 'POST') return fulfillJson(route, videoJob(VIDEO_OTHER_ID, 'completed'));
+      if (url.pathname.startsWith('/downloads/')) {
+        const id = url.pathname.split('/').at(-1);
+        return fulfillJson(route, videoJob(id, id === VIDEO_OTHER_ID ? 'completed' : 'failed', { title: id, sourceUrl: 'https://youtu.be/dQw4w9WgXcQ' }));
+      }
+      return fulfillJson(route, {}, 404);
+    });
+    await page.goto(`${staticServer.origin}/history?kind=video&jobId=${VIDEO_ID}`);
+    const retry = page.getByRole('button', { name: '다시 요청', exact: true }).first();
+    await waitForEnabled(retry);
+    await retry.click();
+    await page.getByRole('heading', { name: VIDEO_OTHER_ID, exact: true }).waitFor();
+    assert.equal(await page.locator('.history-item').count(), 20);
+    assert.equal(await page.getByRole('heading', { name: VIDEO_ID, exact: true }).count(), 0);
+    assertNoRuntimeErrors();
+  } finally {
+    await context.close();
+  }
+}
+
+/** 저장 실패를 반복해도 보존 범위 밖 접수증은 삭제·메뉴 복귀 뒤 되살아나지 않는다. */
+async function verifyHistorySessionRetention() {
+  const context = await createContext();
+  const { page, assertNoRuntimeErrors } = await createPage(context);
+  let creates = 0;
+  const ids = [];
+  try {
+    await seedReceipts(page, [['video', VIDEO_ID, '2026-08-11T00:00:00.000Z']]);
+    await routeApi(page, async ({ request, route, url }) => {
+      if (url.pathname === '/health') return fulfillJson(route, healthResponse());
+      if (url.pathname === '/downloads' && request.method() === 'POST') {
+        creates += 1;
+        const id = `99999999-9999-4999-8999-${String(creates).padStart(12, '0')}`;
+        ids.push(id);
+        return fulfillJson(route, videoJob(id, 'failed', { sourceUrl: 'https://youtu.be/dQw4w9WgXcQ' }));
+      }
+      if (url.pathname.startsWith('/downloads/')) return fulfillJson(route, videoJob(url.pathname.split('/').at(-1), 'failed', {
+        title: url.pathname.split('/').at(-1), sourceUrl: 'https://youtu.be/dQw4w9WgXcQ',
+      }));
+      return fulfillJson(route, {}, 404);
+    });
+    await page.goto(`${staticServer.origin}/history`);
+    await page.evaluate(() => {
+      window.originalSetItem = Storage.prototype.setItem;
+      Storage.prototype.setItem = function () { throw new DOMException('blocked', 'QuotaExceededError'); };
+    });
+    for (let count = 1; count <= 21; count += 1) {
+      const retry = page.getByRole('button', { name: '다시 요청', exact: true }).first();
+      await waitForEnabled(retry);
+      await retry.click();
+      await waitForCondition(async () => creates === count && (await page.getByRole('heading', { name: ids.at(-1), exact: true }).count()) === 1);
+    }
+    assert.equal(await page.locator('.history-item').count(), 20);
+    assert.equal(await page.getByRole('heading', { name: ids[0], exact: true }).count(), 0);
+    await page.evaluate(() => { Storage.prototype.setItem = window.originalSetItem; });
+    const newest = page.locator('article').filter({ has: page.getByRole('heading', { name: ids.at(-1), exact: true }) });
+    await newest.getByRole('button', { name: /상세/ }).click();
+    await newest.getByRole('button', { name: /내역에서 삭제/ }).click();
+    await page.getByRole('link', { name: '영상 추출', exact: true }).click();
+    await page.getByLabel('YouTube URL').waitFor();
+    await page.getByRole('link', { name: '요청 내역', exact: true }).click();
+    await page.getByRole('heading', { name: ids[1], exact: true }).waitFor();
+    assert.equal(await page.locator('.history-item').count(), 19);
+    assert.equal(await page.getByRole('heading', { name: ids[0], exact: true }).count(), 0);
+    assertNoRuntimeErrors();
+  } finally {
+    await context.close();
+  }
+}
+
+/** 접수 실패·준비 실패·취소는 기본값을 바꾸지 않고 저장 실패는 성공을 보존한다. */
+async function verifyHistoryRetryBoundaries() {
+  for (const outcome of ['request-error', 'readiness-error', 'cancel', 'storage']) {
+    /** 실제 브라우저에서 지연시킬 준비 확인 응답. */
+    let release;
+    const gate = new Promise((resolve) => { release = resolve; });
+    let healthCalls = 0;
+    let creates = 0;
+    const context = await createContext({ viewport: { width: 390, height: 844 } });
+    const { page, assertNoRuntimeErrors } = await createPage(context, { ignoreHttpErrors: true });
+    try {
+      await seedReceipts(page, [
+        ['video', VIDEO_ID, '2026-08-11T00:00:00.000Z'],
+        ['video', LONG_VIDEO_ID, '2026-08-11T00:01:00.000Z'],
+      ]);
+      await routeApi(page, async ({ request, route, url }) => {
+        if (url.pathname === '/health') {
+          healthCalls += 1;
+          if (healthCalls === 2) {
+            await gate;
+            if (outcome === 'readiness-error') return fulfillJson(route, {}, 503);
+          }
+          return fulfillJson(route, healthResponse());
+        }
+        if (url.pathname === `/downloads/${VIDEO_ID}` || url.pathname === `/downloads/${LONG_VIDEO_ID}`) {
+          return fulfillJson(route, videoJob(url.pathname.split('/').at(-1), 'failed', { type: 'video', quality: '720', sourceUrl: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ' }));
+        }
+        if (url.pathname === '/downloads' && request.method() === 'POST') {
+          creates += 1;
+          if (outcome === 'request-error') return fulfillJson(route, { message: '접수 서버 오류' }, 500);
+          return fulfillJson(route, videoJob(VIDEO_OTHER_ID, 'queued', { type: 'video', quality: '720' }));
+        }
+        if (url.pathname === `/downloads/${VIDEO_OTHER_ID}`) return fulfillJson(route, videoJob(VIDEO_OTHER_ID, 'completed', { title: '보존한 새 요청' }));
+        return fulfillJson(route, {}, 404);
+      });
+      await page.emulateMedia({ colorScheme: outcome === 'storage' ? 'dark' : 'light' });
+      await page.goto(`${staticServer.origin}/history`);
+      await page.evaluate(() => localStorage.setItem('mytube-extract-request-preferences', JSON.stringify({ download: { mode: 'audio', quality: '192' }, whisperModel: 'small_en' })));
+      if (outcome === 'storage') await page.evaluate(() => {
+        window.originalSetItem = Storage.prototype.setItem;
+        Storage.prototype.setItem = function () { throw new DOMException('blocked', 'QuotaExceededError'); };
+      });
+      const retries = page.getByRole('button', { name: '다시 요청', exact: true });
+      await waitForEnabled(retries.first());
+      // 렌더 사이 틈 없이 두 항목을 연달아 눌러도 한 건만 접수한다.
+      await retries.evaluateAll((buttons) => { buttons[0].click(); buttons[0].click(); buttons[1].click(); });
+      await page.getByRole('button', { name: '접수 취소', exact: true }).waitFor();
+      /** 새 재요청·취소 조작도 최소 44px의 실제 클릭 영역을 가진다. */
+      const actionSizes = await page.locator('.history-actions button, button').filter({ hasText: /접수 중|접수 취소|다시 요청/ }).evaluateAll((buttons) => buttons.map((button) => {
+        const rect = button.getBoundingClientRect();
+        return { width: rect.width, height: rect.height };
+      }));
+      assert.ok(actionSizes.every((size) => size.width >= 44 && size.height >= 44));
+      if (process.env.WEB_SMOKE_SCREENSHOTS) await page.screenshot({ path: `${process.env.WEB_SMOKE_SCREENSHOTS}/history-accepting-${outcome}.png`, fullPage: true });
+      assert.equal(await retries.isDisabled(), true);
+      assert.equal(await page.getByRole('link', { name: '영상 추출', exact: true }).getAttribute('aria-disabled'), 'true');
+      await page.getByRole('link', { name: '영상 추출', exact: true }).click({ force: true });
+      assert.equal(new URL(page.url()).pathname, '/history');
+      assert.equal(creates, 0);
+      if (outcome === 'cancel') {
+        await page.getByRole('button', { name: '접수 취소', exact: true }).click();
+        await page.getByText('접수를 중단했습니다. 기존 내역과 작성 중인 입력은 그대로입니다.', { exact: true }).waitFor();
+      }
+      release();
+      if (outcome === 'storage') {
+        await page.getByRole('heading', { name: '보존한 새 요청', exact: true }).waitFor();
+        assert.equal(creates, 1);
+        await page.getByText(/내역을 저장하지 못했습니다/).waitFor();
+        await page.getByRole('link', { name: '영상 추출', exact: true }).click();
+        assert.equal(await page.locator('input[name="quality"][value="720"]').isChecked(), true);
+        await page.getByRole('link', { name: '요청 내역', exact: true }).click();
+        await page.getByRole('heading', { name: '보존한 새 요청', exact: true }).waitFor();
+        assert.equal(await page.locator('.history-item').count(), 3);
+        // 저장소가 회복되면 다른 항목의 삭제와 되돌리기도 정상 복구돼야 한다.
+        await page.evaluate(() => { Storage.prototype.setItem = window.originalSetItem; });
+        const oldRow = page.locator('article').filter({ has: page.locator(`#history-item-video-${VIDEO_ID}`) });
+        await oldRow.getByRole('button', { name: /상세/ }).click();
+        await oldRow.getByRole('button', { name: /내역에서 삭제/ }).click();
+        await page.getByRole('button', { name: /되돌리기/ }).click();
+        await waitForCondition(async () => (await page.locator('.history-item').count()) === 3);
+        assert.equal(await page.getByText(/복원하지 못했습니다/).count(), 0);
+      } else {
+        if (outcome === 'request-error') await page.getByRole('alert').filter({ hasText: '요청을 접수하지 못했습니다.' }).waitFor();
+        if (outcome === 'readiness-error') {
+          await page.getByRole('button', { name: '서비스 상태 다시 확인', exact: true }).waitFor();
+          await page.getByRole('button', { name: '서비스 상태 다시 확인', exact: true }).click();
+        }
+        await waitForEnabled(page.getByRole('button', { name: '다시 요청', exact: true }).first());
+        assert.equal(creates, outcome === 'request-error' ? 1 : 0);
+        assert.equal(await page.locator('.history-item').count(), 2);
+        assert.deepEqual(await page.evaluate(() => JSON.parse(localStorage.getItem('mytube-extract-request-preferences')).download), { mode: 'audio', quality: '192' });
+        if (outcome === 'cancel') await waitForCondition(async () => page.getByRole('heading', { level: 3 }).evaluateAll((headings) => headings.some((heading) => document.activeElement === heading)));
+      }
+      assertNoRuntimeErrors();
+    } finally {
+      release();
+      await context.close();
+    }
+  }
+}
+
+/** 실패·만료의 두 형식은 한 번의 실행으로 새 접수증을 만들고 독립 초안을 보존한다. */
+async function verifyHistoryVideoRetry() {
+  for (const type of ['video', 'audio']) {
+    for (const status of ['failed', 'expired']) {
+      /** 재요청마다 격리한 브라우저와 생성 요청 기록. */
+      const context = await createContext({ viewport: { width: 390, height: 844 } });
+      const { page, assertNoRuntimeErrors } = await createPage(context);
+      const requests = [];
+      const quality = type === 'video' ? '720' : '128';
+      const sourceUrl = 'https://www.youtube.com/watch?v=dQw4w9WgXcQ';
+      try {
+        await seedReceipts(page, [['video', VIDEO_ID, '2026-08-11T00:00:00.000Z']]);
+        await routeApi(page, async ({ request, route, url }) => {
+          if (url.pathname === '/health') return fulfillJson(route, healthResponse());
+          if (url.pathname === `/downloads/${VIDEO_ID}`) return fulfillJson(route, videoJob(VIDEO_ID, status, { type, quality, sourceUrl }));
+          if (url.pathname === '/downloads' && request.method() === 'POST') {
+            requests.push(request.postDataJSON());
+            return fulfillJson(route, videoJob(VIDEO_OTHER_ID, 'queued', { type, quality, sourceUrl }));
+          }
+          if (url.pathname === `/downloads/${VIDEO_OTHER_ID}`) return fulfillJson(route, videoJob(VIDEO_OTHER_ID, 'completed', { title: '새 재요청', type, quality, sourceUrl }));
+          return fulfillJson(route, {}, 404);
+        });
+        await page.goto(`${staticServer.origin}/video`);
+        await page.getByLabel('YouTube URL').fill('https://youtu.be/abc123_DEF0');
+        await page.locator('input[name="quality"][value="192"]').check();
+        await page.getByRole('link', { name: '자막 추출', exact: true }).click();
+        await page.locator('input[type="file"]').setInputFiles({ name: 'draft.mp4', mimeType: 'video/mp4', buffer: Buffer.from('preserved bytes') });
+        await page.getByRole('radio', { name: /정확도 우선/ }).check();
+        await page.getByRole('link', { name: '요청 내역', exact: true }).click();
+        /** 현재 구현이 입력 화면 링크로 남아 있으면 여기서 실패한다. */
+        const retry = page.getByRole('button', { name: '다시 요청', exact: true });
+        await retry.waitFor({ timeout: 3000 });
+        await waitForEnabled(retry);
+        await retry.focus();
+        await page.keyboard.press('Enter');
+        await page.getByRole('heading', { name: '새 재요청', exact: true }).waitFor();
+        await waitForCondition(async () => page.getByRole('heading', { name: '새 재요청', exact: true }).evaluate((heading) => document.activeElement === heading));
+        assert.equal(new URL(page.url()).pathname, '/history');
+        assert.deepEqual(requests, [{ url: sourceUrl, type, quality }]);
+        assert.equal(await page.locator('.history-item').count(), 2);
+        assert.ok(await page.evaluate((key) => localStorage.getItem(key), receiptKey('video', VIDEO_ID)));
+        await page.getByRole('link', { name: '영상 추출', exact: true }).click();
+        assert.equal(await page.getByLabel('YouTube URL').inputValue(), 'https://youtu.be/abc123_DEF0');
+        assert.equal(await page.locator('input[name="quality"][value="192"]').isChecked(), true);
+        await page.getByRole('link', { name: '자막 추출', exact: true }).click();
+        await page.getByText('draft.mp4', { exact: true }).waitFor();
+        assert.equal(await page.getByText('draft.mp4', { exact: true }).count(), 1);
+        assert.equal(await page.getByRole('radio', { name: /정확도 우선/ }).isChecked(), true);
+        assert.deepEqual(await page.evaluate(() => JSON.parse(localStorage.getItem('mytube-extract-request-preferences'))), { download: { mode: type, quality }, whisperModel: 'small_en' });
+        await page.reload();
+        await page.getByRole('link', { name: '영상 추출', exact: true }).click();
+        assert.equal(await page.getByLabel('YouTube URL').inputValue(), '');
+        assert.equal(await page.locator(`input[name="quality"][value="${quality}"]`).isChecked(), true);
+        assertNoRuntimeErrors();
+      } finally {
+        await context.close();
+      }
+    }
+  }
+}
+
 /** 주요 행동은 접힌 상태에서, 삭제와 부가 정보는 키보드로 펼쳐 사용한다. */
 async function verifyHistoryMinimalList() {
   /** 실제 목록을 확인할 독립 브라우저. */
@@ -110,6 +357,7 @@ async function verifyHistoryMinimalList() {
       ['subtitle', SUBTITLE_ID, '2026-08-11T00:02:00.000Z'],
     ]);
     await routeApi(page, async ({ route, url }) => {
+      if (url.pathname === '/health') return fulfillJson(route, healthResponse());
       if (url.pathname === `/downloads/${VIDEO_ID}`) {
         return fulfillJson(route, videoJob(VIDEO_ID, 'completed', { title: '완료된 영상' }));
       }
@@ -162,6 +410,7 @@ async function verifyHistoryMissingDownload() {
         ['video', VIDEO_OTHER_ID, '2026-08-11T00:00:00.000Z'],
       ]);
       await routeApi(page, async ({ route, url }) => {
+        if (url.pathname === '/health') return fulfillJson(route, healthResponse());
         if (url.pathname === `/downloads/${VIDEO_OTHER_ID}`) {
           return fulfillJson(route, videoJob(VIDEO_OTHER_ID, 'processing', { title: '진행률 없는 작업', progress: null }));
         }
@@ -3739,6 +3988,7 @@ async function verifyReceiptErrorHandling() {
       ['subtitle', SUBTITLE_OTHER_ID, '2026-08-11T00:03:00.000Z'],
     ]);
     await routeApi(page, async ({ route, url }) => {
+      if (url.pathname === '/health') return fulfillJson(route, healthResponse());
       if (url.pathname === `/downloads/${VIDEO_ID}`) {
         transientCalls += 1;
         return fulfillJson(route, {}, 500);
@@ -3997,6 +4247,7 @@ async function verifyHistoryDeleteUndoResponsiveLayout() {
           ['video', VIDEO_ID, '2026-08-11T00:00:00.000Z'],
         ]);
         await routeApi(page, async ({ route, url }) => {
+          if (url.pathname === '/health') return fulfillJson(route, healthResponse());
           if (url.pathname === `/downloads/${VIDEO_ID}`) {
             return fulfillJson(route, videoJob(VIDEO_ID, 'completed'));
           }
@@ -4106,6 +4357,7 @@ async function verifyHistoryDeleteStorageFailure() {
       };
     }, { key: receiptKey('video', VIDEO_ID), prefix: RECEIPT_PREFIX });
     await routeApi(page, async ({ route, url }) => {
+      if (url.pathname === '/health') return fulfillJson(route, healthResponse());
       if (url.pathname === `/downloads/${VIDEO_ID}`) {
         return fulfillJson(
           route,
@@ -4166,6 +4418,7 @@ async function verifyHistoryUndoStorageFailure() {
       };
     }, { key: receiptKey('video', VIDEO_ID), prefix: RECEIPT_PREFIX });
     await routeApi(page, async ({ route, url }) => {
+      if (url.pathname === '/health') return fulfillJson(route, healthResponse());
       if (url.pathname === `/downloads/${VIDEO_ID}`) {
         return fulfillJson(route, videoJob(VIDEO_ID, 'completed'));
       }
@@ -4292,6 +4545,7 @@ async function verifyBlockedStorageFallback() {
       Storage.prototype.removeItem = fail;
     });
     await routeApi(page, async ({ route, url }) => {
+      if (url.pathname === '/health') return fulfillJson(route, healthResponse());
       if (url.pathname === `/downloads/${VIDEO_ID}`) {
         return fulfillJson(
           route,
@@ -4320,6 +4574,7 @@ async function verifyRetryRoutes() {
       ['subtitle', SUBTITLE_OTHER_ID, '2026-08-11T00:01:00.000Z'],
     ]);
     await routeApi(page, async ({ route, url }) => {
+      if (url.pathname === '/health') return fulfillJson(route, healthResponse());
       if (url.pathname === `/downloads/${VIDEO_ID}`) {
         return fulfillJson(route, videoJob(VIDEO_ID, 'failed'));
       }
@@ -4331,10 +4586,11 @@ async function verifyRetryRoutes() {
     await page.goto(`${staticServer.origin}/history`);
 
     const retryLinks = page.getByRole('link', { name: '다시 요청' });
-    await waitForCondition(async () => (await retryLinks.count()) === 2);
+    await waitForCondition(async () => (await retryLinks.count()) === 1);
+    assert.equal(await page.getByRole('button', { name: '다시 요청' }).count(), 1);
     assert.deepEqual(
       (await retryLinks.evaluateAll((links) => links.map((link) => link.getAttribute('href')))).sort(),
-      ['/subtitles', '/video'],
+      ['/subtitles'],
     );
     assertNoRuntimeErrors();
   } finally {
@@ -4356,6 +4612,10 @@ async function verifyEmptyHistoryProductModel() {
       const { page, assertNoRuntimeErrors } = await createPage(context);
 
       try {
+        await routeApi(page, async ({ route, url }) => {
+          if (url.pathname === '/health') return fulfillJson(route, healthResponse());
+          return fulfillJson(route, {}, 404);
+        });
         await page.addInitScript((preference) => {
           localStorage.setItem(
             'mytube-extract-theme-preference',
@@ -4523,6 +4783,7 @@ async function verifyHistoryTitles() {
       ['video', VIDEO_OTHER_ID, '2026-08-11T00:02:00.000Z'],
     ]);
     await routeApi(page, async ({ route, url }) => {
+      if (url.pathname === '/health') return fulfillJson(route, healthResponse());
       if (url.pathname === `/downloads/${VIDEO_ID}`) {
         return fulfillJson(
           route,
@@ -4659,6 +4920,7 @@ async function verifyHistoryTitleArrivalDuringProcessing() {
       ['video', VIDEO_ID, '2026-08-11T00:04:00.000Z'],
     ]);
     await routeApi(page, async ({ route, url }) => {
+      if (url.pathname === '/health') return fulfillJson(route, healthResponse());
       if (url.pathname === `/downloads/${VIDEO_ID}`) {
         statusCalls += 1;
         return fulfillJson(
@@ -4690,7 +4952,7 @@ async function verifyHistoryTitleArrivalDuringProcessing() {
       await page.locator('.history-status').getByText('실패', { exact: true }).count(),
       1,
     );
-    assert.equal(await page.getByRole('link', { name: '다시 요청' }).count(), 1);
+    assert.equal(await page.getByRole('button', { name: '다시 요청' }).count(), 1);
     assert.ok(statusCalls >= 2);
     assertNoRuntimeErrors();
   } finally {
@@ -4724,6 +4986,7 @@ async function verifyHistoryTitleInteractions() {
         ['video', LONG_VIDEO_ID, '2026-08-11T00:01:00.000Z'],
       ]);
       await routeApi(page, async ({ route, url }) => {
+        if (url.pathname === '/health') return fulfillJson(route, healthResponse());
         if (url.pathname === `/downloads/${VIDEO_ID}`) {
           return fulfillJson(
             route,
@@ -4839,6 +5102,7 @@ async function verifyHistoryTitleInteractions() {
   try {
     await seedReceipts(linkPage, [['video', LONG_VIDEO_ID, '2026-08-11T00:01:00.000Z']]);
     await routeApi(linkPage, async ({ route, url }) => {
+      if (url.pathname === '/health') return fulfillJson(route, healthResponse());
       if (url.pathname === `/downloads/${LONG_VIDEO_ID}`) {
         return fulfillJson(
           route,
@@ -4877,6 +5141,7 @@ async function verifyHistoryTitleInteractions() {
   try {
     await seedReceipts(updatePage, [['video', VIDEO_ID, '2026-08-11T00:04:00.000Z']]);
     await routeApi(updatePage, async ({ route, url }) => {
+      if (url.pathname === '/health') return fulfillJson(route, healthResponse());
       if (url.pathname === `/downloads/${VIDEO_ID}`) {
         updateStatusCalls += 1;
         return fulfillJson(
@@ -4917,7 +5182,7 @@ async function verifyPopulatedHistoryResponsiveLayout() {
       const { page, assertNoRuntimeErrors } = await createPage(context);
       /** 확대에서도 잘리지 않아야 하는 원본 제목과 주소. */
       const longTitle = '긴영상제목'.repeat(20);
-      const longSource = `https://www.youtube.com/watch?v=${VIDEO_OTHER_ID}&list=${'x'.repeat(120)}`;
+      const longSource = `https://www.youtube.com/watch?v=dQw4w9WgXcQ&list=${'x'.repeat(120)}`;
       const longFileName = `${'long-file-name-'.repeat(12)}.mp4`;
       const longStatusMessage = `${'긴 상태 안내 문구 '.repeat(12)}확인해 주세요.`;
 
@@ -4935,6 +5200,7 @@ async function verifyPopulatedHistoryResponsiveLayout() {
           ['subtitle', SUBTITLE_OTHER_ID, '2026-08-11T00:00:00.000Z'],
         ]);
         await routeApi(page, async ({ route, url }) => {
+          if (url.pathname === '/health') return fulfillJson(route, healthResponse());
           if (url.pathname === `/downloads/${VIDEO_ID}`) {
             return fulfillJson(route, videoJob(VIDEO_ID, 'processing', { title: longTitle }));
           }
@@ -4986,7 +5252,8 @@ async function verifyPopulatedHistoryResponsiveLayout() {
         assert.equal(await page.locator('.history-status--failed').count(), 1);
         assert.equal(await page.locator('.history-status--expired').count(), 1);
         assert.equal(await page.getByRole('link', { name: '다운로드' }).count(), 1);
-        assert.equal(await page.getByRole('link', { name: '다시 요청' }).count(), 2);
+        assert.equal(await page.getByRole('link', { name: '다시 요청' }).count(), 1);
+        assert.equal(await page.getByRole('button', { name: '다시 요청' }).count(), 1);
         assert.equal(await page.locator('.request-flow').count(), 0);
 
         const layoutMetrics = await page.evaluate(() => {

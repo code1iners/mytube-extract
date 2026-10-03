@@ -135,6 +135,8 @@ export type UseExtractionRequestLifecycleOptions<
   navigation: RequestLifecycleNavigation;
   /** 운영 browser receipt 대신 사용할 저장 adapter. */
   receiptStore?: RequestReceiptStore;
+  /** 내역 목록이 상태 조회를 맡으면 접수 후 다음 요청을 허용한다. */
+  trackAcceptedJob?: boolean;
   /** 정상 저장 시 사용할 history route. */
   historyPath?: string;
   /** route별 readiness·cancel 안내. */
@@ -296,6 +298,8 @@ export function useExtractionRequestLifecycle<
 ): RequestLifecycleResult<TRequest, TJob, TPresentation> {
   /** 통신을 담당하는 route adapter. */
   const adapter = options.adapter;
+  /** 기본 추출 화면은 접수된 작업을 계속 추적한다. */
+  const trackAcceptedJob = options.trackAcceptedJob ?? true;
   /** navigation lock 갱신 함수. */
   const setNavigationLocked = options.navigation.setLocked;
   /** history 목적지 갱신 함수. */
@@ -653,7 +657,7 @@ export function useExtractionRequestLifecycle<
         updateState((previous) => ({
           ...previous,
           isSubmitting: false,
-          job,
+          job: trackAcceptedJob ? job : null,
           receipt,
           receiptStorageFailed: storageResult.storageFailed,
           requestError: null,
@@ -701,6 +705,7 @@ export function useExtractionRequestLifecycle<
       historyPath,
       now,
       receiptStore,
+      trackAcceptedJob,
       runReadinessCheck,
       setHistoryDestination,
       setNavigationLocked,
@@ -951,7 +956,7 @@ export function useExtractionRequestLifecycle<
   ) as RequestLifecycleError<TJob> | null;
   /** 요청 phase에서 현재 접수를 시작할 수 있는지 여부. */
   const canSubmit =
-    phase === 'request' &&
+    (phase === 'request' || (!trackAcceptedJob && phase === 'error')) &&
     state.job === null &&
     !state.isSubmitting &&
     state.readiness.status.kind === 'ready';
