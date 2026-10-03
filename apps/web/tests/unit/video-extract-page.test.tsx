@@ -11,7 +11,7 @@ vi.mock('../../src/app/pages/video-extract/_hooks/use-video-extract-logic', () =
 import { VideoExtractPage } from '../../src/app/pages/video-extract/page';
 
 describe('video extract page', () => {
-  it('keeps the request fields in task order and places readiness near the title', () => {
+  it('keeps task order and hides healthy readiness', () => {
     videoExtractLogic.mockReturnValue({
       canSubmit: false,
       draft: { mode: 'audio', quality: '320', sourceUrl: '' },
@@ -37,12 +37,10 @@ describe('video extract page', () => {
     /** 요청 화면의 readiness 상태와 제출 안내 마크업. */
     const markup = renderToStaticMarkup(<VideoExtractPage />);
 
-    expect(markup).toContain('data-health-status="ready"');
-    expect(markup).toContain('data-health-presentation="compact"');
+    expect(markup).not.toContain('준비됨');
     expect(markup).toContain('>영상 추출</h2>');
-    expect(markup).toContain('role="status"');
-    expect(markup).toContain('마지막 확인');
-    expect(markup).toContain('다시 확인');
+    expect(markup).not.toContain('마지막 확인');
+    expect(markup).not.toContain('다시 확인');
     expect(markup).toContain('aria-describedby="video-source-url-feedback"');
     expect(markup).not.toContain('video-submit-disabled-reason');
     expect(markup).toContain('YouTube URL을 입력해 주세요.');
@@ -55,9 +53,7 @@ describe('video extract page', () => {
     expect(markup.indexOf('>품질</legend>')).toBeLessThan(
       markup.indexOf('추출 요청</button>'),
     );
-    expect(markup.indexOf('data-health-status="ready"')).toBeLessThan(
-      markup.indexOf('YouTube URL'),
-    );
+    expect(markup).toContain('for="video-source-url"');
     expect(markup.indexOf('YouTube URL')).toBeLessThan(
       markup.indexOf('</form>'),
     );
@@ -90,8 +86,10 @@ describe('video extract page', () => {
     /** API 확인 실패 요청 화면의 정적 HTML. */
     const markup = renderToStaticMarkup(<VideoExtractPage />);
 
-    expect(markup).toContain('data-health-presentation="expanded"');
-    expect(markup).not.toContain('class="download-form"');
+    expect(markup).toContain('<form');
+    expect(markup).toContain('aria-describedby="video-worker-health-title"');
+    expect(markup.indexOf('>품질</legend>')).toBeLessThan(markup.indexOf('확인 실패'));
+    expect(markup.indexOf('확인 실패')).toBeLessThan(markup.indexOf('추출 요청</button>'));
     expect(markup).toContain('aria-label="서비스 상태 다시 확인"');
     expect(markup).toContain('API 상태를 확인하지 못했습니다. 다시 확인해 주세요.');
     expect(
@@ -193,7 +191,7 @@ describe('video extract page', () => {
     expect(resultMarkup).not.toMatch(/(?:class="| )download-button(?: |")/);
   });
 
-  it('marks the selected processing step as the current step', () => {
+  it('shows actual progress without a decorative step trail', () => {
     videoExtractLogic.mockReturnValue({
       createdTime: '오전 10:00',
       draft: { mode: 'audio', quality: '320', sourceUrl: '' },
@@ -228,8 +226,9 @@ describe('video extract page', () => {
     /** 처리 상태 화면을 정적 HTML로 렌더링한 결과. */
     const markup = renderToStaticMarkup(<VideoExtractPage />);
 
-    expect(markup).toContain('aria-current="step"');
-    expect(markup).toContain('처리');
+    expect(markup).not.toContain('aria-current="step"');
+    expect(markup).toContain('<progress aria-label="진행률" max="100" value="50"');
+    expect(markup).toContain('50%');
   });
 
   it('renders the completed job download URL in the in-place result panel', () => {
@@ -253,6 +252,8 @@ describe('video extract page', () => {
       'href="https://api.example.test/downloads/job-1/file"',
     );
     expect(markup).toContain('다운로드');
+    expect(markup).not.toContain('<progress');
+    expect(markup).not.toContain('100%');
   });
 
   it('shows a plain error summary before technical details are opened', () => {

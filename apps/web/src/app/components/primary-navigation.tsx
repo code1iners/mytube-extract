@@ -1,4 +1,4 @@
-import { type MouseEvent, useId } from 'react';
+import { type MouseEvent, type Ref, useId } from 'react';
 import { matchPath, NavLink, useLocation } from 'react-router';
 import { ROUTE_PATHS } from '../constants/route-paths.constant';
 import { useNavigation } from './navigation-context';
@@ -32,6 +32,8 @@ const PRIMARY_NAVIGATION_ITEMS = [
 
 /** 주요 navigation 속성. */
 type PrimaryNavigationProps = {
+  /** 실제 모바일 탭 높이를 관찰할 navigation 요소. */
+  ref?: Ref<HTMLElement>;
   /** 반응형 표시 surface를 구분하는 추가 className. */
   className?: string;
   /** 기존 surface별 link selector와 호환되는 추가 className. */
@@ -40,6 +42,7 @@ type PrimaryNavigationProps = {
 
 /** 영상·자막·요청 내역을 동일한 수준으로 노출하는 주요 navigation. */
 export function PrimaryNavigation({
+  ref,
   className = '',
   linkClassName = '',
 }: PrimaryNavigationProps) {
@@ -66,7 +69,7 @@ export function PrimaryNavigation({
     .join(' ');
 
   return (
-    <nav aria-label="주요 메뉴" className={navigationClassName}>
+    <nav ref={ref} aria-label="주요 메뉴" className={navigationClassName}>
       {navigationLocked ? (
         <p className="visually-hidden" id={lockDescriptionId}>
           요청 접수 중에는 현재 작업을 마칠 때까지 다른 주요 메뉴로 이동할 수
@@ -95,7 +98,7 @@ export function PrimaryNavigation({
         /** 목적지의 active·disabled 상태를 하나의 판정 결과로 공유한다. */
         const navigationLinkClassName = [
           'primary-navigation__link',
-          'inline-flex min-w-0 min-h-[48px] items-center justify-center gap-mytube-8 border-b border-transparent text-[14px] font-semibold leading-[1] no-underline whitespace-nowrap focus-visible:outline-2 focus-visible:outline-mytube-focus focus-visible:[outline-offset:-2px]',
+          'inline-flex min-w-0 min-h-[48px] items-center justify-center gap-mytube-8 border-b border-transparent text-[14px] font-semibold leading-[1.4] no-underline whitespace-normal focus-visible:outline-2 focus-visible:outline-mytube-focus focus-visible:[outline-offset:-2px]',
           linkClassName,
           isActive ? 'is-active' : '',
           isActive
@@ -125,7 +128,7 @@ export function PrimaryNavigation({
               className={isActive ? 'text-mytube-action-primary' : undefined}
               name={item.icon}
             />
-            <span>{item.label}</span>
+            <span className="min-w-0 [overflow-wrap:anywhere]">{item.label}</span>
           </NavLink>
         );
       })}

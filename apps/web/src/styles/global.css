@@ -60,7 +60,7 @@
   --red-700: #e60012;
   --ink-light: #484848;
   --ink-dark: #f2f0ee;
-  --muted-light: #727272;
+  --muted-light: #686868;
   --muted-dark: #b3b0ac;
   --disabled-light: #c8c8c8;
   --disabled-dark: #5c5955;
@@ -70,8 +70,8 @@
   --surface-dark: #202124;
   --surface-alt-light: #efefef;
   --surface-alt-dark: #292a2d;
-  --hairline-light: #8a8a8a;
-  --hairline-dark: #767676;
+  --hairline-light: #858585;
+  --hairline-dark: #858585;
   --green-700: #356b43;
   --green-300: #8fd6a0;
   --blue-700: #4b5cce;
@@ -87,9 +87,11 @@
   --color-text-secondary: var(--muted-light);
   --color-text-disabled: var(--disabled-light);
   --color-border: var(--hairline-light);
-  --color-action-primary: var(--red-700);
+  --color-brand: var(--red-700);
+  --color-on-brand: #ffffff;
+  --color-action-primary: var(--ink-light);
   --color-on-primary: #ffffff;
-  --color-focus: var(--blue-700);
+  --color-focus: var(--ink-light);
   --color-status-queued: var(--muted-light);
   --color-status-processing: var(--blue-700);
   --color-status-completed: var(--green-700);
@@ -126,7 +128,9 @@
 }
 
 :root[data-theme='dark'] {
-  /* Nintendo red는 테마와 무관하게 불변 — 브랜드 불변성 원칙. */
+  /* Web의 조작은 무채색으로 반전하고 로고만 브랜드 빨강을 유지한다. */
+  --color-action-primary: var(--ink-dark);
+  --color-on-primary: var(--canvas-dark);
   --color-canvas: var(--canvas-dark);
   --color-surface: var(--surface-dark);
   --color-surface-alt: var(--surface-alt-dark);
@@ -134,7 +138,7 @@
   --color-text-secondary: var(--muted-dark);
   --color-text-disabled: var(--disabled-dark);
   --color-border: var(--hairline-dark);
-  --color-focus: var(--blue-300);
+  --color-focus: var(--ink-dark);
   --color-status-queued: var(--muted-dark);
   --color-status-processing: var(--blue-300);
   --color-status-completed: var(--green-300);
@@ -152,7 +156,7 @@ html {
 }
 
 body {
-  min-width: 320px;
+  min-width: 0;
   margin: 0;
   overflow-x: hidden;
   background: var(--color-canvas);
@@ -193,22 +197,6 @@ a {
 /* Native details 표식은 유틸리티로 대체할 수 없는 브라우저 특수 효과다. */
 .usage-guide__summary::-webkit-details-marker {
   display: none;
-}
-
-.usage-guide__summary::after {
-  width: 7px;
-  height: 7px;
-  margin-top: -4px;
-  border-right: 1px solid currentColor;
-  border-bottom: 1px solid currentColor;
-  content: '';
-  transform: rotate(45deg);
-  transition: transform 150ms ease;
-}
-
-.usage-guide[open] .usage-guide__summary::after {
-  margin-top: 4px;
-  transform: rotate(225deg);
 }
 
 .subtitle-processing-method__details summary::-webkit-details-marker {
@@ -252,8 +240,60 @@ a {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .usage-guide__summary::after,
   .subtitle-processing-method__details summary::after {
     transition: none;
   }
+}
+
+/* 영상 입력의 읽기 순서를 유지하며 가용 폭과 글자 크기에 따라 그룹을 감싼다. */
+.video-request-options {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 16rem), 1fr));
+  gap: 16px;
+  min-width: 0;
+}
+
+.video-technical-details {
+  min-width: 0;
+  font-size: 14px;
+  color: var(--color-text-secondary);
+}
+
+.video-technical-details summary {
+  min-height: 44px;
+  align-content: center;
+  cursor: pointer;
+}
+
+.video-technical-details p {
+  margin: 8px 0 0;
+  overflow-wrap: anywhere;
+}
+
+.request-readiness-notice {
+  display: grid;
+  min-width: 0;
+  gap: 8px;
+}
+
+.request-readiness-notice p {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.request-progress {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+
+.request-progress progress {
+  width: 100%;
+  height: 8px;
+  accent-color: var(--color-status-processing);
+}
+
+.request-progress p {
+  margin: 0;
+  color: var(--color-text-primary);
 }

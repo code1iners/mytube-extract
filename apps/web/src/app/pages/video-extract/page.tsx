@@ -1,3 +1,4 @@
+import { Link } from 'react-router';
 import {
   PRIMARY_BUTTON_UTILITY_CLASS_NAME,
   SECONDARY_BUTTON_UTILITY_CLASS_NAME,
@@ -6,24 +7,9 @@ import { type DownloadDisplayStatus } from '../../../domain/download-request/dow
 import { ErrorDetailsDisclosure } from '../../components/error-details-disclosure';
 import { AppIcon, type AppIconName } from '../../components/app-icon';
 import { PanelTitle } from '../../components/panel-title';
-import { RequestFlow } from '../../components/request-flow';
-import { RequestReadinessPanel } from '../../components/request-readiness-panel';
-import { WorkerHealthStatusNotice } from '../../components/worker-health-status';
+import { RequestReadinessNotice } from '../../components/request-readiness-notice';
+import { RequestProgress } from '../../components/request-progress';
 import { useVideoExtractLogic } from './_hooks/use-video-extract-logic';
-
-/** 처리 화면에서 표시할 영상 추출 단계. */
-const STATUS_ITEMS = [
-  { icon: 'queued', key: 'queued', label: '대기' },
-  { icon: 'processing', key: 'processing', label: '처리' },
-  { icon: 'completed', key: 'completed', label: '완료' },
-] as const satisfies Array<{
-  /** 상태 아이콘 이름. */
-  icon: AppIconName;
-  /** 표시 상태 key. */
-  key: DownloadDisplayStatus;
-  /** 화면 라벨. */
-  label: string;
-}>;
 
 /** 영상 오류 상세 위에 표시할 평이한 요약. */
 const VIDEO_ERROR_DETAIL_SUMMARY =
@@ -34,7 +20,7 @@ const VIDEO_WORKER_HEALTH_TITLE_ID = 'video-worker-health-title';
 const VIDEO_REQUEST_PANEL_CLASS_NAME =
   'phase-panel video-request-panel grid min-w-0 w-full max-w-none gap-mytube-24 m-0 p-0 min-[821px]:self-start max-[560px]:gap-mytube-16';
 /** 영상 요청 form의 Tailwind layout className. */
-const VIDEO_REQUEST_FORM_CLASS_NAME = 'download-form grid gap-mytube-24';
+const VIDEO_REQUEST_FORM_CLASS_NAME = 'download-form grid gap-mytube-16';
 /** 영상 URL field의 Tailwind layout className. */
 const VIDEO_URL_FIELD_CLASS_NAME = 'field field--wide grid gap-mytube-8';
 /** 영상 URL field label의 Tailwind typography className. */
@@ -66,7 +52,7 @@ const VIDEO_OPTION_LEGEND_CLASS_NAME =
   'col-span-full m-0 mb-mytube-12 p-0 text-mytube-text-primary text-[16px] font-semibold leading-[1.4]';
 /** 영상 option label의 공통 Tailwind layout·state className. */
 const VIDEO_OPTION_BASE_CLASS_NAME =
-  'flex min-h-[48px] items-center justify-center gap-mytube-8 border border-mytube-border rounded-mytube-md bg-mytube-surface text-mytube-text-secondary cursor-pointer font-semibold focus-within:outline-2 focus-within:outline-mytube-focus focus-within:outline-offset-2 hover:bg-mytube-surface-alt hover:text-mytube-text-primary';
+  'flex min-h-[48px] items-center justify-center gap-mytube-8 px-mytube-8 py-mytube-8 text-center flex-wrap border border-mytube-border rounded-mytube-md bg-mytube-surface text-mytube-text-secondary cursor-pointer font-semibold focus-within:outline-2 focus-within:outline-mytube-focus focus-within:outline-offset-2 hover:bg-mytube-surface-alt hover:text-mytube-text-primary';
 /** 선택된 영상 option의 Tailwind state className. */
 const VIDEO_OPTION_SELECTED_CLASS_NAME =
   'is-selected !border-mytube-action-primary bg-mytube-surface !text-mytube-text-primary underline decoration-mytube-text-primary decoration-2 underline-offset-4';
@@ -76,9 +62,6 @@ const VIDEO_OPTION_INPUT_CLASS_NAME =
 /** 영상 제출 button의 Tailwind state className. */
 const VIDEO_SUBMIT_BUTTON_CLASS_NAME =
   'video-submit-button inline-flex w-full min-h-[48px] items-center justify-center gap-mytube-8 border border-mytube-action-primary rounded-mytube-md bg-mytube-action-primary text-mytube-on-primary cursor-pointer text-[18px] font-semibold leading-[1] shadow-mytube-soft focus-visible:outline-2 focus-visible:outline-mytube-focus focus-visible:outline-offset-2 enabled:hover:brightness-[0.92] enabled:active:brightness-[0.84] disabled:border-mytube-border disabled:bg-mytube-surface-alt disabled:text-mytube-text-disabled disabled:cursor-not-allowed disabled:!shadow-none';
-/** 영상 제출 불가 사유의 Tailwind typography className. */
-const VIDEO_SUBMIT_DISABLED_REASON_CLASS_NAME =
-  'video-submit-disabled-reason m-[-12px_0_0] text-mytube-text-secondary text-[14px] leading-[1.4] break-keep';
 /** 영상 생명주기 panel의 Tailwind surface·layout className. */
 const VIDEO_STATUS_PANEL_CLASS_NAME =
   'video-status-panel grid min-w-0 w-full max-w-none m-0 gap-[18px] border border-mytube-border rounded-mytube-lg bg-mytube-surface p-[20px] shadow-mytube-soft max-[821px]:p-mytube-16';
@@ -126,30 +109,9 @@ const VIDEO_STATUS_TONE_CLASS_NAMES: Record<
   },
   expired: {
     icon: 'border-mytube-status-expired text-mytube-status-expired',
-    title: 'text-mytube-status-expired',
+    title: 'text-mytube-text-primary',
   },
 };
-/** 영상 작업 단계 목록의 Tailwind layout className. */
-const VIDEO_STEP_TABS_CLASS_NAME =
-  'video-step-tabs grid min-w-0 grid-cols-4 gap-mytube-8';
-/** 영상 작업 단계 항목의 Tailwind surface·typography className. */
-const VIDEO_STEP_TAB_BASE_CLASS_NAME =
-  'video-step-tab inline-flex min-w-0 min-h-[44px] items-center justify-center gap-[6px] border border-mytube-border rounded-mytube-md bg-mytube-surface text-mytube-text-secondary font-semibold max-[821px]:min-h-[40px] max-[821px]:text-[13px]';
-/** 현재 영상 작업 단계의 Tailwind state className. */
-const VIDEO_STEP_TAB_SELECTED_CLASS_NAME =
-  'border-mytube-status-processing bg-mytube-surface-alt text-mytube-status-processing';
-/** 영상 진행률 meter의 Tailwind layout className. */
-const VIDEO_PROGRESS_METER_CLASS_NAME =
-  'video-progress-meter grid min-w-0 grid-cols-10 gap-mytube-4';
-/** 영상 진행률 cell의 기본 Tailwind surface className. */
-const VIDEO_PROGRESS_CELL_CLASS_NAME =
-  'h-[8px] rounded-mytube-full bg-mytube-surface-alt';
-/** 채워진 영상 진행률 cell의 Tailwind status className. */
-const VIDEO_PROGRESS_FILLED_CELL_CLASS_NAME =
-  'bg-mytube-status-processing';
-/** 영상 진행률 보조 문구의 Tailwind typography className. */
-const VIDEO_PROGRESS_LABEL_CLASS_NAME =
-  'video-progress-label m-0 text-mytube-status-processing text-[16px] font-semibold text-center';
 /** 영상 상태 상세 목록의 Tailwind layout className. */
 const VIDEO_STATUS_DETAILS_CLASS_NAME =
   'video-status-details grid min-w-0 gap-0 m-0 border-t border-mytube-border';
@@ -202,17 +164,17 @@ export function VideoExtractPage() {
     createdTime,
     downloadHref,
     draft,
-    filledProgressCells,
     handleDownloadFormSubmit,
     handleModeChange,
+    handleQualityChange,
     handleSourceUrlReset,
     isDownloadPending,
-    progressLabel,
     qualityOptions,
     register,
     requestNotice,
     retryWorkerHealth,
     returnToRequest,
+    startNewRequest,
     statusErrorDetail,
     statusIconName,
     statusJob,
@@ -221,35 +183,13 @@ export function VideoExtractPage() {
     statusTitle,
     statusTone,
     statusTypeLabel,
-    submitDisabledReason,
     validation,
     viewPhase,
     workerHealthFailed,
-    workerHealthCheckedAt,
     workerHealthDetail,
     workerHealthIsFetching,
-    workerHealthIsRefreshing,
     workerHealthStatus,
   } = useVideoExtractLogic();
-
-  if (
-    viewPhase === 'request' &&
-    workerHealthStatus.kind !== 'ready'
-  ) {
-    return (
-      <RequestReadinessPanel
-        healthId={VIDEO_WORKER_HEALTH_TITLE_ID}
-        icon="download"
-        id="request-title"
-        isFetching={workerHealthIsFetching}
-        lastCheckedAt={workerHealthCheckedAt}
-        status={workerHealthStatus}
-        technicalDetail={workerHealthDetail}
-        title="영상 추출"
-        onRetry={retryWorkerHealth}
-      />
-    );
-  }
 
   if (viewPhase === 'request') {
     return (
@@ -257,27 +197,18 @@ export function VideoExtractPage() {
         <PanelTitle
           icon="download"
           id="request-title"
-          isRefreshing={workerHealthIsRefreshing}
         >
           영상 추출
         </PanelTitle>
-        <WorkerHealthStatusNotice
-          id={VIDEO_WORKER_HEALTH_TITLE_ID}
-          isFetching={workerHealthIsFetching}
-          lastCheckedAt={workerHealthCheckedAt}
-          status={workerHealthStatus}
-          technicalDetail={workerHealthDetail}
-          onRetry={retryWorkerHealth}
-        />
-        <RequestFlow current="source" />
         {requestNotice ? <RequestNotice message={requestNotice} /> : null}
 
         <form className={VIDEO_REQUEST_FORM_CLASS_NAME} onSubmit={handleDownloadFormSubmit}>
-          <label className={`${VIDEO_URL_FIELD_CLASS_NAME}${validation.kind === 'invalid' ? ' has-error' : ''}`}>
-            <span className={VIDEO_URL_FIELD_LABEL_CLASS_NAME}>YouTube URL</span>
+          <div className={`${VIDEO_URL_FIELD_CLASS_NAME}${validation.kind === 'invalid' ? ' has-error' : ''}`}>
+            <label htmlFor="video-source-url" className={VIDEO_URL_FIELD_LABEL_CLASS_NAME}>YouTube URL</label>
             <span className={`${VIDEO_URL_INPUT_FRAME_CLASS_NAME}${validation.kind === 'invalid' ? ' !border-mytube-status-failed' : ''}`}>
               <AppIcon className="input-icon justify-self-center text-mytube-text-secondary" name="link" />
               <input
+                id="video-source-url"
                 autoComplete="off"
                 aria-describedby={validation.kind === 'ready' ? undefined : 'video-source-url-feedback'}
                 aria-invalid={validation.kind === 'invalid' || undefined}
@@ -297,8 +228,9 @@ export function VideoExtractPage() {
               ) : null}
             </span>
             {validation.kind !== 'ready' ? <p className={`${VIDEO_FIELD_FEEDBACK_CLASS_NAME}${validation.kind === 'invalid' ? ' text-mytube-status-failed' : ''}`} id="video-source-url-feedback" role={validation.kind === 'invalid' ? 'alert' : undefined}>{validation.message}</p> : null}
-          </label>
+          </div>
 
+          <div className="video-request-options">
           <fieldset className={VIDEO_FORMAT_FIELDSET_CLASS_NAME}>
             <legend className={VIDEO_OPTION_LEGEND_CLASS_NAME}>추출 형식</legend>
             <label className={`${VIDEO_OPTION_BASE_CLASS_NAME}${draft.mode === 'audio' ? ` ${VIDEO_OPTION_SELECTED_CLASS_NAME}` : ''} segment`}>
@@ -317,18 +249,22 @@ export function VideoExtractPage() {
             <legend className={VIDEO_OPTION_LEGEND_CLASS_NAME}>품질</legend>
             {qualityOptions.map((option) => (
               <label className={`${VIDEO_OPTION_BASE_CLASS_NAME}${draft.quality === option.value ? ` ${VIDEO_OPTION_SELECTED_CLASS_NAME}` : ''} quality-chip`} key={option.value}>
-                <input className={VIDEO_OPTION_INPUT_CLASS_NAME} type="radio" value={option.value} {...register('quality', { onChange: clearRequestError })} />
+                <input className={VIDEO_OPTION_INPUT_CLASS_NAME} type="radio" value={option.value} {...register('quality', { onChange: handleQualityChange })} />
                 {option.label}
               </label>
             ))}
           </fieldset>
 
+          </div>
+          <RequestReadinessNotice
+            id={VIDEO_WORKER_HEALTH_TITLE_ID}
+            isFetching={workerHealthIsFetching}
+            status={workerHealthStatus}
+            technicalDetail={workerHealthDetail}
+            onRetry={retryWorkerHealth}
+          />
           <button
-            aria-describedby={
-              !canSubmit && submitDisabledReason
-                ? 'video-submit-disabled-reason'
-                : undefined
-            }
+            aria-describedby={workerHealthStatus.kind !== 'ready' ? VIDEO_WORKER_HEALTH_TITLE_ID : undefined}
             className={VIDEO_SUBMIT_BUTTON_CLASS_NAME}
             disabled={!canSubmit}
             type="submit"
@@ -336,11 +272,10 @@ export function VideoExtractPage() {
             <AppIcon name="download" />
             {isDownloadPending ? '요청 중' : '추출 요청'}
           </button>
-          {!canSubmit && submitDisabledReason ? (
-            <p className={VIDEO_SUBMIT_DISABLED_REASON_CLASS_NAME} id="video-submit-disabled-reason">
-              {submitDisabledReason}
-            </p>
-          ) : null}
+          <details className="video-technical-details">
+            <summary>형식과 품질 안내</summary>
+            <p>오디오는 MP3, 비디오는 MP4 파일로 받습니다. 높은 품질은 파일 크기와 처리 시간이 늘어날 수 있습니다. 실제 품질은 원본 영상에 따라 달라집니다.</p>
+          </details>
         </form>
       </section>
     );
@@ -350,26 +285,9 @@ export function VideoExtractPage() {
     return (
       <section className={VIDEO_STATUS_PANEL_CLASS_NAME} aria-labelledby="status-title">
         <PanelTitle icon="processing" id="status-title">영상 추출</PanelTitle>
-        <RequestFlow current="extract" />
         {requestNotice ? <RequestNotice message={requestNotice} /> : null}
         <StatusHead icon={statusIconName} tone={statusTone} title={statusTitle} message={statusMessage} />
-        <div className={VIDEO_STEP_TABS_CLASS_NAME} aria-label="작업 단계">
-          {STATUS_ITEMS.map((item) => (
-            <span
-              aria-current={statusJob.displayStatus === item.key ? 'step' : undefined}
-              className={
-                statusJob.displayStatus === item.key
-                  ? `${VIDEO_STEP_TAB_BASE_CLASS_NAME} ${VIDEO_STEP_TAB_SELECTED_CLASS_NAME}`
-                  : VIDEO_STEP_TAB_BASE_CLASS_NAME
-              }
-              key={item.key}
-            >
-              <AppIcon name={item.icon} />
-              {item.label}
-            </span>
-          ))}
-        </div>
-        <ProgressMeter filledCells={filledProgressCells} label={progressLabel} value={statusJob.progress} />
+        <RequestProgress value={statusJob.progress} />
         <dl className={VIDEO_STATUS_DETAILS_CLASS_NAME}>
           <div className={VIDEO_STATUS_DETAIL_ROW_CLASS_NAME}><dt className={VIDEO_STATUS_DETAIL_LABEL_CLASS_NAME}>형식</dt><dd className={VIDEO_STATUS_DETAIL_VALUE_CLASS_NAME}>{statusTypeLabel}</dd></div>
           <div className={VIDEO_STATUS_DETAIL_ROW_CLASS_NAME}><dt className={VIDEO_STATUS_DETAIL_LABEL_CLASS_NAME}>품질</dt><dd className={VIDEO_STATUS_DETAIL_VALUE_CLASS_NAME}>{statusQualityLabel}</dd></div>
@@ -384,7 +302,6 @@ export function VideoExtractPage() {
     return (
       <section className={VIDEO_STATUS_PANEL_CLASS_NAME} aria-labelledby="accepting-title">
         <PanelTitle icon="processing" id="accepting-title">영상 추출</PanelTitle>
-        <RequestFlow current="extract" />
         <StatusHead icon={statusIconName} tone={statusTone} title={statusTitle} message={statusMessage} />
         <button className={VIDEO_CANCEL_BUTTON_CLASS_NAME} type="button" onClick={cancelRequest}>
           요청 취소
@@ -398,9 +315,14 @@ export function VideoExtractPage() {
     return (
       <section className={VIDEO_STATUS_PANEL_CLASS_NAME} aria-labelledby="result-title">
         <PanelTitle icon="completed" id="result-title">영상 추출</PanelTitle>
-        <RequestFlow current="receipt" />
         {requestNotice ? <RequestNotice message={requestNotice} /> : null}
-        <StatusHead icon="completed" tone="completed" title={statusTitle} message={statusMessage} />
+        <StatusHead
+          icon={downloadHref ? 'completed' : 'failed'}
+          tone={downloadHref ? 'completed' : 'failed'}
+          title={downloadHref ? statusTitle : '다운로드 주소를 확인할 수 없습니다'}
+          message={downloadHref ? statusMessage : '요청 내역에서 파일 상태를 다시 확인해 주세요.'}
+          isAlert={!downloadHref}
+        />
         <dl className={VIDEO_STATUS_DETAILS_CLASS_NAME}>
           <div className={VIDEO_STATUS_DETAIL_ROW_CLASS_NAME}><dt className={VIDEO_STATUS_DETAIL_LABEL_CLASS_NAME}>결과 형식</dt><dd className={VIDEO_STATUS_DETAIL_VALUE_CLASS_NAME}>{statusTypeLabel}</dd></div>
           <div className={VIDEO_STATUS_DETAIL_ROW_CLASS_NAME}><dt className={VIDEO_STATUS_DETAIL_LABEL_CLASS_NAME}>품질</dt><dd className={VIDEO_STATUS_DETAIL_VALUE_CLASS_NAME}>{statusQualityLabel}</dd></div>
@@ -410,8 +332,14 @@ export function VideoExtractPage() {
           완료 파일은 {statusJob.retentionDays}일 동안 보관되며, 요청 내역은 이 브라우저에만 남습니다.
         </p>
         <div className={VIDEO_RESULT_ACTIONS_CLASS_NAME}>
-          <a className={VIDEO_DOWNLOAD_BUTTON_CLASS_NAME} download href={downloadHref}><AppIcon name="download" />다운로드</a>
-          <button className={VIDEO_NEW_REQUEST_BUTTON_CLASS_NAME} type="button" onClick={returnToRequest}><AppIcon name="newRequest" />새 요청</button>
+          {downloadHref ? (
+            <a className={VIDEO_DOWNLOAD_BUTTON_CLASS_NAME} download href={downloadHref}><AppIcon name="download" />다운로드</a>
+          ) : (
+            <Link className={VIDEO_DOWNLOAD_BUTTON_CLASS_NAME} to={`/history?kind=video&jobId=${encodeURIComponent(statusJob.jobId)}`}>
+              요청 내역에서 다시 확인
+            </Link>
+          )}
+          <button className={VIDEO_NEW_REQUEST_BUTTON_CLASS_NAME} type="button" onClick={startNewRequest}><AppIcon name="newRequest" />새 요청</button>
         </div>
       </section>
     );
@@ -420,7 +348,6 @@ export function VideoExtractPage() {
   return (
     <section className={VIDEO_STATUS_PANEL_CLASS_NAME} aria-labelledby="error-title">
       <PanelTitle icon={statusIconName} id="error-title">영상 추출</PanelTitle>
-      <RequestFlow current="extract" />
       <StatusHead icon={statusIconName} tone={statusTone} title={statusTitle} message={statusMessage} isAlert />
       {workerHealthFailed ? (
         <button className={VIDEO_SECONDARY_BUTTON_CLASS_NAME} disabled={workerHealthIsFetching} type="button" onClick={retryWorkerHealth}>다시 확인</button>
@@ -440,11 +367,6 @@ function StatusHead(props: { /** 상태 아이콘. */ icon: AppIconName; /** 상
   const toneClassNames = VIDEO_STATUS_TONE_CLASS_NAMES[props.tone];
 
   return <div className={VIDEO_STATUS_HEAD_CLASS_NAME}><span className={`${VIDEO_STATUS_ICON_CLASS_NAME} ${toneClassNames.icon}`} aria-hidden="true"><AppIcon name={props.icon} /></span><div className={VIDEO_STATUS_COPY_CLASS_NAME}><h3 className={`${VIDEO_STATUS_TITLE_CLASS_NAME} ${toneClassNames.title}`}>{props.title}</h3><p className={VIDEO_STATUS_MESSAGE_CLASS_NAME} role={props.isAlert ? 'alert' : 'status'} aria-live="polite">{props.message}</p></div></div>;
-}
-
-/** 10칸 진행률과 보조 텍스트를 렌더링한다. */
-function ProgressMeter(props: { /** 채울 pixel cell 수. */ filledCells: number; /** 진행률 라벨. */ label: string; /** API 진행률 값. */ value: number | null }) {
-  return <><div className={VIDEO_PROGRESS_METER_CLASS_NAME} aria-label="진행률" aria-valuemax={100} aria-valuemin={0} aria-valuenow={props.value ?? undefined} role="progressbar">{Array.from({ length: 10 }).map((_, index) => <span className={index < props.filledCells ? `${VIDEO_PROGRESS_CELL_CLASS_NAME} ${VIDEO_PROGRESS_FILLED_CELL_CLASS_NAME}` : VIDEO_PROGRESS_CELL_CLASS_NAME} key={index} />)}</div><p className={VIDEO_PROGRESS_LABEL_CLASS_NAME}>{props.label}</p></>;
 }
 
 /** 요청 중단·접수 경쟁 결과를 현재 화면에 알린다. */

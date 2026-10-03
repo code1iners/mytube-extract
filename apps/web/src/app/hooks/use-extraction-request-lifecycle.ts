@@ -75,8 +75,8 @@ export type RequestLifecycleAdapter<
   TJob extends RequestLifecycleJob,
   TKind extends JobReceiptKind,
 > = {
-  /** adapter가 보존할 접수증 종류. */
-  readonly kind: TKind;
+  /** 고정 종류 또는 각 요청 입력으로 결정하는 접수증 종류. */
+  readonly kind: TKind | ((request: TRequest) => TKind);
   /** API와 worker readiness를 확인한다. */
   checkReadiness: (signal: AbortSignal) => Promise<RequestReadinessResponse>;
   /** 검증된 route 입력으로 서버 job 접수를 시작한다. */
@@ -135,6 +135,8 @@ export type UseExtractionRequestLifecycleOptions<
   navigation: RequestLifecycleNavigation;
   /** 운영 browser receipt 대신 사용할 저장 adapter. */
   receiptStore?: RequestReceiptStore;
+  /** 내역 목록이 상태 조회를 맡으면 접수 후 다음 요청을 허용한다. */
+  trackAcceptedJob?: boolean;
   /** 정상 저장 시 사용할 history route. */
   historyPath?: string;
   /** route별 readiness·cancel 안내. */
@@ -296,6 +298,8 @@ export function useExtractionRequestLifecycle<
 ): RequestLifecycleResult<TRequest, TJob, TPresentation> {
   /** 통신을 담당하는 route adapter. */
   const adapter = options.adapter;
+  /** 기본 추출 화면은 접수된 작업을 계속 추적한다. */
+  const trackAcceptedJob = options.trackAcceptedJob ?? true;
   /** navigation lock 갱신 함수. */
   const setNavigationLocked = options.navigation.setLocked;
   /** history 목적지 갱신 함수. */
@@ -577,6 +581,10 @@ export function useExtractionRequestLifecycle<
   /** 실제 readiness 재확인과 job 접수를 수행한다. */
   const acceptRequest = useCallback(
     async function acceptRequest(request: TRequest, attempt: RequestAttempt) {
+      /** 준비 확인 실패와 실제 접수 실패를 구분한다. */
+      let isCreatingRequest = false;
+      /** 늦은 성공이 다른 종류의 새 요청과 겹쳐도 원래 종류를 보존한다. */
+      const kind = typeof adapter.kind === 'function' ? adapter.kind(request) : adapter.kind;
       try {
         /** submit 직전 최신 readiness. */
         const readiness = await runReadinessCheck({
@@ -593,6 +601,7 @@ export function useExtractionRequestLifecycle<
         }
 
         assertWorkerAvailable(readiness);
+        isCreatingRequest = true;
 
         /** adapter가 생성한 서버 job. */
         const job = await adapter.createRequest(
@@ -619,14 +628,14 @@ export function useExtractionRequestLifecycle<
 
         try {
           storageResult = receiptStore.save(
-            adapter.kind,
+            kind,
             job.jobId,
             acceptedAt,
           );
         } catch {
           storageResult = {
             storageFailed: true,
-            to: createHistoryDeepLink(adapter.kind, job.jobId),
+            to: createHistoryDeepLink(kind, job.jobId),
           };
         }
 
@@ -638,7 +647,7 @@ export function useExtractionRequestLifecycle<
         const receipt: JobReceipt = {
           acceptedAt,
           jobId: job.jobId,
-          kind: adapter.kind,
+          kind,
         };
         /** 저장 실패 시에도 현재 job을 가리킬 history fallback. */
         const historyDestination = storageResult.storageFailed
@@ -650,7 +659,7 @@ export function useExtractionRequestLifecycle<
         updateState((previous) => ({
           ...previous,
           isSubmitting: false,
-          job,
+          job: trackAcceptedJob ? job : null,
           receipt,
           receiptStorageFailed: storageResult.storageFailed,
           requestError: null,
@@ -675,7 +684,7 @@ export function useExtractionRequestLifecycle<
         updateState((previous) => ({
           ...previous,
           isSubmitting: false,
-          requestError: error,
+          requestError: isCreatingRequest ? error : null,
           requestNotice: '',
         }));
       } finally {
@@ -698,6 +707,7 @@ export function useExtractionRequestLifecycle<
       historyPath,
       now,
       receiptStore,
+      trackAcceptedJob,
       runReadinessCheck,
       setHistoryDestination,
       setNavigationLocked,
@@ -827,7 +837,7 @@ export function useExtractionRequestLifecycle<
       /** 현재 polling할 receipt. */
       const receipt = stateRef.current.receipt;
 
-      if (!job || !receipt || receipt.kind !== adapter.kind) {
+      if (!job || !receipt || (typeof adapter.kind !== 'function' && receipt.kind !== adapter.kind)) {
         return;
       }
 
@@ -948,7 +958,7 @@ export function useExtractionRequestLifecycle<
   ) as RequestLifecycleError<TJob> | null;
   /** 요청 phase에서 현재 접수를 시작할 수 있는지 여부. */
   const canSubmit =
-    phase === 'request' &&
+    (phase === 'request' || (!trackAcceptedJob && phase === 'error')) &&
     state.job === null &&
     !state.isSubmitting &&
     state.readiness.status.kind === 'ready';

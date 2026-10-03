@@ -33,8 +33,15 @@ const DEFAULT_REQUEST_PREFERENCES: RequestPreferences = {
   whisperModel: 'base_en',
 };
 
+/** 저장에 실패한 선택은 새로고침 전까지 탭 메모리에서 사용한다. */
+let unsavedPreferences: RequestPreferences | null = null;
+
 /** 같은 browser에서 마지막으로 선택한 요청 선호를 복원한다. */
 export function getRequestPreferences(): RequestPreferences {
+  if (unsavedPreferences) {
+    return unsavedPreferences;
+  }
+
   /** browser storage에 보관된 원본 JSON. */
   const storedValue = readStoredValue();
 
@@ -101,8 +108,10 @@ function writeRequestPreferences(preferences: RequestPreferences) {
 
   try {
     window.localStorage.setItem(REQUEST_PREFERENCES_KEY, JSON.stringify(preferences));
+    unsavedPreferences = null;
   } catch {
-    // 영속화만 생략하고 현재 화면의 선택은 계속 반영한다.
+    // 읽기는 가능해도 쓰기만 차단될 수 있으므로 이전 저장값보다 현재 선택을 우선한다.
+    unsavedPreferences = preferences;
   }
 }
 

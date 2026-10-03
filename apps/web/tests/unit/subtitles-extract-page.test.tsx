@@ -14,7 +14,7 @@ vi.mock(
 import { SubtitlesExtractPage } from '../../src/app/pages/subtitles-extract/page';
 
 describe('subtitles extract page', () => {
-  it('keeps the subtitle task order and places readiness near the title', () => {
+  it('keeps task order and hides healthy readiness', () => {
     subtitlesExtractLogic.mockReturnValue({
       canChangeWhisperModel: true,
       canSubmit: false,
@@ -49,8 +49,7 @@ describe('subtitles extract page', () => {
     /** 요청 화면의 readiness 상태와 제출 안내 마크업. */
     const markup = renderToStaticMarkup(<SubtitlesExtractPage />);
 
-    expect(markup).toContain('data-health-status="ready"');
-    expect(markup).toContain('data-health-presentation="compact"');
+    expect(markup).not.toContain('준비됨');
     expect(markup).toContain('>자막 추출</h2>');
     expect(markup).toMatch(
       /class="phase-panel subtitle-request-panel(?:\s|\")/,
@@ -59,7 +58,7 @@ describe('subtitles extract page', () => {
     expect(markup).toMatch(/class="[^\"]*\bsubtitle-submit-button\b[^\"]*"/);
     expect(markup).not.toMatch(/class="[^\"]*\bprimary-button\b[^\"]*"/);
     expect(markup).toContain('type="submit"');
-    expect(markup).toContain('다시 확인');
+    expect(markup).not.toContain('다시 확인');
     expect(markup).not.toContain('subtitle-submit-disabled-reason');
     expect(markup.indexOf('로컬 영상 파일')).toBeLessThan(
       markup.indexOf('>처리 방식</legend>'),
@@ -67,12 +66,10 @@ describe('subtitles extract page', () => {
     expect(markup.indexOf('>처리 방식</legend>')).toBeLessThan(
       markup.indexOf('영어 SRT 생성</button>'),
     );
-    expect(markup.indexOf('data-health-status="ready"')).toBeLessThan(
-      markup.indexOf('로컬 영상 파일'),
-    );
+
   });
 
-  it('shows readiness before the form when the service is unavailable', () => {
+  it('keeps inputs available and readiness beside submission when unavailable', () => {
     subtitlesExtractLogic.mockReturnValue({
       canSubmit: false,
       retryWorkerHealth: () => undefined,
@@ -89,9 +86,9 @@ describe('subtitles extract page', () => {
 
     const markup = renderToStaticMarkup(<SubtitlesExtractPage />);
 
-    expect(markup).toMatch(/class="phase-panel readiness-panel(?:\s|\")/);
-    expect(markup).not.toContain('class="subtitle-form"');
-    expect(markup).toContain('data-flow-stage="source"');
+    expect(markup).toContain('request-readiness-notice');
+    expect(markup).toContain('subtitle-form');
+    expect(markup).not.toContain('data-flow-stage');
     expect(markup).toContain('작업 준비 안 됨');
     expect(markup).toContain('서비스가 응답했지만 지금은 요청을 시작할 수 없습니다. 다시 확인해 주세요.');
   });
@@ -131,8 +128,8 @@ describe('subtitles extract page', () => {
     /** API 확인 실패 자막 요청 화면의 정적 HTML. */
     const markup = renderToStaticMarkup(<SubtitlesExtractPage />);
 
-    expect(markup).toContain('data-health-presentation="expanded"');
-    expect(markup).not.toContain('class="subtitle-form"');
+    expect(markup).toContain('aria-describedby="subtitle-worker-health-title"');
+    expect(markup).toContain('subtitle-form');
     expect(markup).toContain('aria-label="서비스 상태 다시 확인"');
     expect(markup).not.toContain('class="submit-disabled-reason"');
     expect(
@@ -179,9 +176,9 @@ describe('subtitles extract page', () => {
     const markup = renderToStaticMarkup(<SubtitlesExtractPage />);
 
     expect(markup).toContain(
-      'aria-label="영상 선택 또는 드래그 (로컬 영상 파일)"',
+      'aria-label="파일 변경 (로컬 영상 파일)"',
     );
-    expect(markup).toContain('aria-describedby="subtitle-file-feedback"');
+    expect(markup).toContain('aria-describedby="subtitle-selected-file subtitle-file-feedback"');
     expect(markup).not.toContain('subtitle-submit-disabled-reason');
     expect(markup).toMatch(/class="[^\"]*\bfield\b[^\"]*\bhas-error\b[^\"]*"/);
     expect(markup).not.toContain('aria-invalid="true"');
@@ -385,7 +382,7 @@ describe('subtitles extract page', () => {
     expect(expiredMarkup).not.toContain('text-mytube-status-failed');
   });
 
-  it('marks the selected processing step as the current step', () => {
+  it('shows actual processing progress without a step trail', () => {
     subtitlesExtractLogic.mockReturnValue({
       currentStepKey: 'transcribing',
       filledProgressCells: 6,
@@ -400,13 +397,10 @@ describe('subtitles extract page', () => {
     /** 처리 상태 화면을 정적 HTML로 렌더링한 결과. */
     const markup = renderToStaticMarkup(<SubtitlesExtractPage />);
 
-    expect(markup).toContain('aria-current="step"');
-    expect(markup).toContain('aria-valuetext="진행률 60%"');
-    expect(markup).toMatch(
-      /class="[^"]*\bsubtitle-progress-label\b[^"]*">진행률 60%/,
-    );
-    expect(markup).toContain('영어 SRT 생성');
-    expect(markup.match(/class="[^"]*\bsubtitle-step-tab\b[^"]*"/g)).toHaveLength(4);
+    expect(markup).toContain('<progress');
+    expect(markup).toContain('value="60"');
+    expect(markup).toContain('>60%</p>');
+    expect(markup).not.toContain('subtitle-step-tab');
   });
 
   it('renders the completed job download URL in the in-place result panel', () => {

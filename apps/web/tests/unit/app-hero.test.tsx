@@ -19,7 +19,8 @@ describe('app hero theme control', () => {
     expect(markup).toContain('href="/settings"');
     expect(markup).toContain('설정');
     expect(markup).toMatch(/class="usage-guide(?:\s|[\"])/);
-    expect(markup).toContain('더보기');
+    expect(markup).toContain('aria-label="더보기"');
+    expect(markup).toContain('…');
     expect(markup).not.toContain('aria-haspopup="menu"');
     expect(markup).not.toContain('role="menu"');
     expect(markup).not.toContain('role="menuitem"');
@@ -30,17 +31,4 @@ describe('app hero theme control', () => {
     expect(markup).not.toContain('<kbd>');
   });
 
-  it('always exposes the request history link', () => {
-    const markup = renderToStaticMarkup(
-      <MemoryRouter initialEntries={['/history']}>
-        <NavigationProvider>
-          <AppHero />
-        </NavigationProvider>
-      </MemoryRouter>,
-    );
-
-    expect(markup).toContain('href="/history"');
-    expect(markup).toContain('aria-current="page"');
-    expect(markup).toContain('요청 내역');
-  });
 });

@@ -4,6 +4,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { MemoryRouter } from 'react-router';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { JobStatusRequestError } from '../../src/api/mytube-extract.api';
+import { NavigationProvider } from '../../src/app/components/navigation-context';
 import { RequestHistoryPage } from '../../src/app/pages/request-history/page';
 import {
   createJobStatusRequestErrorDetail,
@@ -35,7 +36,7 @@ describe('request history query contract', () => {
         createElement(
           MemoryRouter,
           { initialEntries: ['/history'] },
-          createElement(RequestHistoryPage),
+          createElement(NavigationProvider, null, createElement(RequestHistoryPage)),
         ),
       ),
     );

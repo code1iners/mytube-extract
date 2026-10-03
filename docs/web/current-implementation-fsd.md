@@ -7,6 +7,7 @@
 - shared layout/header/primary navigation/bottom tabs: `apps/web/src/app/components/*`
 - API client: `apps/web/src/api/mytube-extract.api.ts`
 - receipt storage: `apps/web/src/app/utils/job-receipt.util.ts`
+- request draft memory: `apps/web/src/app/utils/request-draft.util.ts` (영상 전용 공간, 주소 영속화 없음)
 - request preference storage: `apps/web/src/app/utils/request-preference.util.ts`
 - shared job polling: `apps/web/src/app/utils/job-status-polling.util.ts`
 - extraction request lifecycle: `apps/web/src/app/hooks/use-extraction-request-lifecycle.ts`, `apps/web/src/app/adapters/*-request.adapter.ts`
@@ -21,26 +22,29 @@
 
 - `/`와 unknown route는 `/video`로 redirect한다.
 - `/video`, `/subtitles`, `/history`, `/settings`를 제공한다.
-- `영상 추출`·`자막 추출`·`요청 내역`은 하나의 주요 navigation으로 공유한다. 데스크톱은 작업 영역 헤더 탭, 모바일은 하단 3탭이다.
+- `영상 추출`·`자막 추출`·`요청 내역`은 하나의 주요 navigation으로 공유한다. 821px 이상은 왼쪽 240px 로고·세로 메뉴, 820px 이하는 하단 고정 3탭이다. 반대 크기의 메뉴는 `display:none`으로 키보드와 접근성 트리에서 제외한다. 오른쪽 작업 영역은 최대 760px이다.
 - 주요 navigation의 현재 목적지는 `aria-current="page"`와 active 시각 상태로 함께 전달한다.
-- 상단 `더보기` disclosure 안의 `설정`은 보조 route 링크이며, 테마 radio 선택은 `/settings`에서 layout의 기존 테마 state와 storage 콜백을 사용한다. disclosure는 Enter·Space·Escape와 바깥 pointer 입력을 처리하고 요청 접수 중 설정 링크를 잠근다.
+- 헤더 오른쪽 `…`(접근성 이름 `더보기`) disclosure 안의 `설정`은 보조 route 링크이며, 테마 radio 선택은 `/settings`에서 layout의 기존 테마 state와 storage 콜백을 사용한다. disclosure는 Enter·Space·Escape와 바깥 pointer 입력을 처리하고 요청 접수 중 설정 링크를 잠근다.
+
+- Web의 버튼·선택 표시·탐색·포커스는 무채색이며 로고 아이콘만 빨강을 유지한다. Web 전용 토큰과 대비 값은 `docs/DESIGN.md`의 Web 전용 계약을 따른다.
+- 하단 탭의 실제 높이를 관찰해 본문 끝 여백에 반영한다. 글자 확대·줄바꿈 이후에도 마지막 조작이 탭과 안전 여백 위에 나타난다.
 
 ## 요청 접수
 
-- 영상은 worker 확인 후 `POST /downloads` 성공 시 접수증을 추가한다. 최초 health 응답이 없을 때만 status-first readiness 화면에서 form을 대체하며, 기존 `ready` form은 백그라운드 refetch 중 유지한다. 완료된 health 응답이 API 실패 또는 worker 미가용이면 form을 대체한다.
+- 영상·자막은 준비 상태와 무관하게 입력을 표시한다. 제출 위치의 `RequestReadinessNotice`는 정상일 때 숨긴다. 제출 직전 준비 확인 실패는 생명주기의 request phase에서 처리하고, 실제 생성 요청 실패만 접수 오류로 처리한다. 영상 adapter가 `POST /downloads`를 수행한다.
 - 자막은 upload session, R2 part PUT, complete 전체가 성공한 뒤 접수증을 추가한다.
 - 접수증 key는 `mytube-extract:job-receipt:v2:<kind>:<jobId>`다.
 - value는 JSON `{ "acceptedAt": "<ISO timestamp>" }`만 저장한다.
 - 접수 성공 뒤 현재 `/video` 또는 `/subtitles` route에 남아 생성 응답의 job을 상태 조회한다.
 - 접수증 storage 쓰기 실패는 job 생성이나 현재 route의 상태 조회를 막지 않는다.
 - `/video`, `/subtitles` mount는 과거 접수증을 복원하지 않으며, 현재 화면에서 새로 접수한 job만 query한다.
-- navigation lock은 영상 POST 또는 자막 upload/complete 요청 중에만 유지하며 데스크톱 헤더·모바일 하단의 주요 navigation과 `더보기` 안의 `설정` 링크에 함께 적용한다. 현재 목적지는 활성 상태로 남긴다. 사용자가 접수 전 `요청 취소`를 누르면 AbortController를 중단하고 입력·파일을 유지한 채 lock을 풀며, 응답 경쟁으로 job이 만들어졌으면 접수증을 보존하고 취소 완료로 가장하지 않는다.
+- navigation lock은 영상 POST 또는 자막 upload/complete 요청 중에만 유지하며 데스크톱 왼쪽·모바일 하단의 주요 navigation과 `더보기` 안의 `설정` 링크에 함께 적용한다. 현재 목적지는 활성 상태로 남긴다. 사용자가 접수 전 `요청 취소`를 누르면 AbortController를 중단하고 입력·파일을 유지한 채 lock을 풀며, 응답 경쟁으로 job이 만들어졌으면 접수증을 보존하고 취소 완료로 가장하지 않는다.
 
 ## Request route query
 
 - job 생성 응답을 받기 전에는 처리 단계나 가짜 진행률 대신 경량 `accepting` 상태를 표시한다.
-- `RequestFlow`는 request/processing/error에서 `extract`, completed와 history의 완료 항목에서 `receipt`를 표시하며 API 상태 외의 진행률을 추정하지 않는다.
-- `/video`의 `U`, `/subtitles`의 `F` 단축키는 수정키·반복·text editing target을 제외하고 첫 입력 동작에 focus한다.
+- 영상·자막은 `RequestProgress`로 확인된 수치가 있을 때만 진행률을 표시한다. 자막 업로드 수치는 기존 어댑터를 통해 받는다. 완료에는 막대를 표시하지 않는다. 요청 내역의 `RequestFlow`는 해당 내역 티켓에서 변경한다.
+- U/F 입력 이동 단축키는 제공하지 않는다.
 - 생성 응답의 `jobId`로 `/video`는 download job, `/subtitles`는 subtitle job 상태를 조회한다.
 - query key·재시도·2500ms polling·terminal 중단 정책은 history와 같은 공유 모듈을 사용한다.
 - completed는 현재 route에서 실제 `downloadUrl`을 제공하고, failed/expired는 오류 요약·접이식 기술 상세·기존 입력을 유지한 재요청 경로를 제공한다.
@@ -53,7 +57,10 @@
 
 - key는 `mytube-extract-request-preferences`다.
 - 다운로드 형식·형식에 맞는 품질·Whisper 모델만 저장한다.
-- 서버 지원 선택지 밖의 값, 손상된 JSON, 차단된 localStorage는 제품 기본값으로 안전하게 폴백한다.
+- 서버 지원 선택지 밖의 값과 손상된 JSON은 제품 기본값으로 안전하게 폴백한다. 저장 실패 이후의 선택은 현재 탭 메모리에서 유지하며 새로고침 복원은 보장하지 않는다.
+- 영상의 형식·품질과 자막 처리 방식은 직접 바꿀 때 저장한다. 내역의 영상·오디오 재요청은 실제 서버 접수가 확인된 뒤 재사용한 형식·품질을 저장한다. 초안 복원·화면 재진입은 저장하지 않는다. 이후 기본값은 각 미제출 초안과 별개이며 다른 종류의 선택 저장 시에도 보존한다.
+- 영상 미제출 주소·선택은 같은 탭 메뉴 이동 중 유지한다. 접수된 원본은 현재 화면의 오류 복구에만 사용하고 메뉴 재진입에서는 비운다. 완료 후 새 요청은 주소만 비우고 현재 선택을 유지한다. 자세한 수명은 `routes/video.md`를 따른다.
+- 자막도 별도 탭 메모리에 실제 파일·처리 방식을 유지한다. 새로고침·접수 후 메뉴 복귀는 파일을 비우고 기억한 처리 방식을 복원한다. 완료 후 새 요청은 현재 처리 방식을 유지한다. 실제 파일은 영속 저장하지 않으며 취소·오류·늦은 성공 경계는 `routes/subtitles.md`를 따른다.
 
 ## History query
 
@@ -83,7 +90,7 @@
 - `pnpm --filter web run test`
 - `pnpm --filter web run build`
 - `pnpm run test:web:browser`
-- Browser: `/video`·`/subtitles` in-place 완료와 다운로드, 최초 health status-first gate와 백그라운드 form·입력 보존, failed/unavailable 전환·재확인, 접수 전 취소·AbortError·업로드 abort cleanup·응답 경쟁 접수증 보존, 상태 조회 오류 복구, `/history`, refresh, 두 endpoint, terminal polling, 오류별 보존/삭제, 실제 attachment, storage event/차단, mobile/desktop, `더보기` 메뉴 focus, U/F 단축키 안전성, 200% zoom, screen reader, Console/Network
+- Browser: `/video`·`/subtitles` in-place 완료와 다운로드, 영상·자막의 최초 health·장애 중 입력 편집, 백그라운드 입력 보존, failed/unavailable 전환·재확인, 접수 전 취소·AbortError·업로드 abort cleanup·응답 경쟁 접수증 보존, 상태 조회 오류 복구, `/history`, refresh, 두 endpoint, terminal polling, 오류별 보존/삭제, 실제 attachment, storage event/차단, mobile/desktop, `더보기` 메뉴 focus, U/F 단축키 안전성, 200% zoom, screen reader, Console/Network
 
 ## 후속 보류
 
