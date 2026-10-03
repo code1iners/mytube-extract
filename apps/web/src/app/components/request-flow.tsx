@@ -9,14 +9,14 @@ type RequestFlowProps = {
 
 /** 요청 흐름 trail의 Tailwind layout className. */
 const REQUEST_FLOW_CLASS_NAME =
-  'request-flow grid min-w-0 items-center gap-mytube-8 grid-cols-[minmax(0,1fr)_16px_minmax(0,1fr)_16px_minmax(0,1fr)] m-0 p-0 list-none max-[561px]:grid-cols-[auto_minmax(16px,1fr)_auto_minmax(16px,1fr)_auto]';
+  'request-flow grid min-w-0 items-center gap-mytube-8 grid-cols-[minmax(0,1fr)_16px_minmax(0,1fr)_16px_minmax(0,1fr)] m-0 p-0 list-none max-[561px]:grid-cols-[auto_minmax(16px,1fr)_auto_minmax(16px,1fr)_auto] max-[301px]:grid-cols-1 max-[301px]:items-start max-[301px]:gap-mytube-4';
 
 /** 요청 흐름 한 단계의 표시 상태. */
 type RequestFlowStepState = 'current' | 'complete' | 'upcoming';
 
 /** 요청 흐름 단계의 공통 Tailwind className. */
 const REQUEST_FLOW_STEP_BASE_CLASS_NAME =
-  'inline-flex min-w-0 items-center justify-center gap-mytube-8 text-[14px] font-semibold leading-[1.4] text-center whitespace-nowrap';
+  'inline-flex min-w-0 items-center justify-center gap-mytube-8 text-[14px] font-semibold leading-[1.4] text-center whitespace-nowrap max-[301px]:justify-start max-[301px]:whitespace-normal';
 
 /** 요청 흐름 단계 상태별 Tailwind className. */
 const REQUEST_FLOW_STEP_CLASS_NAMES: Record<
@@ -44,7 +44,7 @@ const REQUEST_FLOW_MARKER_CLASS_NAMES: Record<
 
 /** 요청 흐름 단계 사이 connector의 기본 Tailwind className. */
 const REQUEST_FLOW_CONNECTOR_CLASS_NAME =
-  'request-flow__connector h-px bg-mytube-border';
+  'request-flow__connector h-px bg-mytube-border max-[301px]:hidden';
 
 /** 완료된 요청 흐름 단계 connector의 Tailwind className. */
 const REQUEST_FLOW_COMPLETE_CONNECTOR_CLASS_NAME =
