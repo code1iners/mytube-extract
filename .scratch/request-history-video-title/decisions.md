@@ -32,7 +32,7 @@ Web 앱의 요청 내역에서 영상 요청은 고정된 종류 이름으로 �
 
 ## 관련 문서
 
-- 용어: `CONTEXT.md`의 요청 영상 제목
+- 용어: `GLOSSARY.md`의 요청 영상 제목
 - 현재 요청 내역 계약: `docs/web/routes/history.md`
 - 현재 서버 응답 변환: `apps/api/src/downloads/downloads.service.ts`
 - 현재 제목 수집·저장: `apps/worker/src/main.ts`

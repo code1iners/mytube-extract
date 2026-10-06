@@ -12,4 +12,4 @@
 
 ### Domain docs
 
-멀티 컨텍스트 구조 — 루트 `CONTEXT-MAP.md`가 `apps/*`, `packages/*` 각 context의 `CONTEXT.md`를 가리킨다. 자세한 내용은 `docs/agents/domain.md` 참고.
+멀티 컨텍스트 구조 — 루트 `GLOSSARY-MAP.md`가 `apps/*`, `packages/*` 각 context의 `GLOSSARY.md`를 가리킨다. 자세한 내용은 `docs/agents/domain.md` 참고.

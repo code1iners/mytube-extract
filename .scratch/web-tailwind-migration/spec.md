@@ -88,7 +88,7 @@ Q5에서 합의한 기존 자동 검사와 브라우저 기반 시각·조작 �
 ## 추가 사항 (Further Notes)
 
 - 2026-09-07 사용자가 Q1~Q5와 전체 전환 방침을 확정하고, 구현 없이 스펙을 먼저 작성하도록 요청했다. 추가 인터뷰 없이 합의 내용을 종합했다.
-- 근거: [합의 기록](./decisions.md), [제품 용어](../../CONTEXT.md), [Web 제품 계약](../../apps/web/PRODUCT.md), [디자인 계약](../../docs/DESIGN.md), 현재 Web 앱 코드와 단위·브라우저 테스트.
+- 근거: [합의 기록](./decisions.md), [제품 용어](../../GLOSSARY.md), [Web 제품 계약](../../apps/web/PRODUCT.md), [디자인 계약](../../docs/DESIGN.md), 현재 Web 앱 코드와 단위·브라우저 테스트.
 - 기존 [개인 사용 단계 결정](../../docs/adr/0001-keep-single-user-mode-until-public-service-transition.md)과 [추출 제공자 대체 경로 결정](../../docs/adr/0002-youtube-default-client-with-web-embedded-fallback.md)을 변경하지 않는다.
 - 기존 검증 선례는 [Web 작업 레이아웃 현대화 스펙](../web-layout-modernization/spec.md)의 브라우저 중심 검증이다. 과거 스펙의 기능 목록보다 최신 코드와 디자인 계약을 우선한다.
 - 저장소의 로컬 마크다운 이슈 추적 규칙에 따라 이 문서를 게시하고 `ready-for-agent` 상태를 적용했다. 이 상태는 명세의 준비 상태이며 사용자의 별도 구현 금지 요청을 해제하지 않는다.
