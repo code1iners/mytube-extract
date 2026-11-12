@@ -24,4 +24,3 @@
 - 환경 주의(범위 밖 발견, 이번 티켓에서 고치지 않음):
   - `apps/chrome-extension/.env`가 있는 checkout에서는 `pnpm test:browser`의 popup 스모크가 download flow에서 실패한다(`ERR_CONNECTION_REFUSED`). 빌드는 `.env`의 API 주소를 쓰는데, 스모크는 `process.env`만 읽어 기본 운영 주소만 가로채기 때문이다. 변경 전 커밋에서도 `.env`가 없을 때만 통과한다.
   - 이번 검증은 `WXT_MEDIA_NEST_API_BASE_URL=https://mytube-extract-api.codeliners.cc pnpm test:browser`로 두 주소를 맞춰 실행했다. 10번 티켓의 전체 검증 때 같은 방식이 필요하다.
-
