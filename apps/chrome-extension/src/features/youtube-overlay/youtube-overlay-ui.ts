@@ -233,7 +233,7 @@ function mountCardOverlay(
     };
 
     pending = true;
-    qualityPanel.hidden = true;
+    closeQualityPanel();
     setModeButtonsDisabled(true);
     toast.showAccepted();
 
@@ -333,15 +333,32 @@ function mountCardOverlay(
     createModeButton('audio', 'MP3', '오디오 추출 (MP3)'),
     createModeButton('video', 'MP4', '비디오 추출 (MP4)'),
   );
+  /** 품질 panel을 닫고 mode 버튼의 확장 상태를 되돌린다. */
+  function closeQualityPanel() {
+    qualityPanel.hidden = true;
+    modeButtons
+      .querySelectorAll('button')
+      .forEach((button) => button.setAttribute('aria-expanded', 'false'));
+  }
+
   shadowRoot.addEventListener('keydown', function handleOverlayKeydown(event) {
     /** Shadow Root에서 전달받은 keyboard event. */
     const keyboardEvent = event as KeyboardEvent;
 
     if (keyboardEvent.key === 'Escape') {
-      qualityPanel.hidden = true;
-      modeButtons
-        .querySelectorAll('button')
-        .forEach((button) => button.setAttribute('aria-expanded', 'false'));
+      closeQualityPanel();
+    }
+  });
+  // Shadow DOM 경계 때문에 event.target이 host로 바뀌므로 composedPath로 바깥 클릭을 판별한다.
+  document.addEventListener('pointerdown', function handleOutsidePointerDown(event) {
+    // YouTube가 카드를 제거하면 리스너가 누적되지 않도록 함께 해제한다.
+    if (!host.isConnected) {
+      document.removeEventListener('pointerdown', handleOutsidePointerDown);
+      return;
+    }
+
+    if (!qualityPanel.hidden && !event.composedPath().includes(host)) {
+      closeQualityPanel();
     }
   });
 }
@@ -443,6 +460,7 @@ function createOverlayStyle(): HTMLStyleElement {
     '.mode-button, .quality-button { border: 1px solid var(--overlay-border); border-radius: 8px; background: var(--overlay-surface); color: var(--overlay-text-primary); box-shadow: var(--overlay-shadow); cursor: pointer; font: 600 11px/1.2 "Pretendard Variable", ui-sans-serif, system-ui, sans-serif; }',
     '.mode-button { min-width: 38px; min-height: 28px; padding: 4px 8px; }',
     '.quality-panel { display: grid; grid-template-columns: repeat(3, max-content); gap: 4px; padding: 4px; border: 1px solid var(--overlay-border); border-radius: 8px; background: var(--overlay-surface-alt); box-shadow: var(--overlay-shadow); }',
+    '.quality-panel[hidden] { display: none; }',
     '.quality-button { min-height: 28px; padding: 4px 8px; background: var(--overlay-surface); }',
     'button:hover { border-color: var(--overlay-primary); }',
     'button:focus-visible { outline: 2px solid var(--overlay-focus); outline-offset: 2px; }',
@@ -461,6 +479,7 @@ function createToastStyle(): HTMLStyleElement {
     ':host { --toast-surface: #ffffff; --toast-text-primary: #484848; --toast-text-secondary: #727272; --toast-border: #e0e0e0; --toast-primary: #e60012; --toast-error: #c62828; --toast-focus: #4b5cce; --toast-shadow: rgba(0, 0, 0, .07) 0px 2px 8px 0px; display: block; font-family: "Pretendard Variable", ui-sans-serif, system-ui, sans-serif; }',
     '@font-face { font-display: swap; font-family: "Pretendard Variable"; font-style: normal; font-weight: 45 920; src: url(\"' + chrome.runtime.getURL('fonts/PretendardVariable.woff2') + '\") format(\"woff2-variations\"); }',
     '.toast { display: grid; gap: 4px; min-width: 220px; max-width: 360px; padding: 12px; border: 1px solid var(--toast-border); border-radius: 12px; background: var(--toast-surface); color: var(--toast-text-primary); box-shadow: var(--toast-shadow); font: 400 12px/1.45 "Pretendard Variable", ui-sans-serif, system-ui, sans-serif; }',
+    '.toast:empty { display: none; }',
     '.toast[data-tone=\"error\"] { border-color: var(--toast-error); }',
     '.toast__heading { display: flex; align-items: center; gap: 8px; }',
     '.toast__icon { display: inline-grid; width: 16px; height: 16px; flex: 0 0 16px; place-items: center; border-radius: 9999px; font-size: 11px; font-weight: 600; }',
