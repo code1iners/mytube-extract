@@ -1,0 +1,638 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>확장 UI 시안 3종</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css">
+<style>
+/* DESIGN.md semantic token을 그대로 옮긴다. 시안 간 차이는 구성에서만 낸다. */
+:root{
+  --red:#e60012;--on-red:#fff;
+  --canvas:#fff;--surface:#f8f8f8;--surface-alt:#efefef;
+  --ink:#484848;--muted:#727272;--disabled:#c8c8c8;--border:#8a8a8a;
+  --focus:#4b5cce;--proc:#4b5cce;--ok:#356b43;--bad:#c62828;
+  --page:#e9e8e5;--scrim:rgba(18,18,20,.74);
+  color-scheme:light;
+}
+:root[data-theme="dark"]{
+  --canvas:#18191b;--surface:#202124;--surface-alt:#292a2d;
+  --ink:#f2f0ee;--muted:#b3b0ac;--disabled:#5c5955;--border:#767676;
+  --focus:#a9b4f2;--proc:#a9b4f2;--ok:#8fd6a0;--bad:#ff8a80;
+  --page:#0e0f10;color-scheme:dark;
+}
+*{box-sizing:border-box;margin:0}
+body{font-family:'Pretendard Variable',ui-sans-serif,system-ui,-apple-system,sans-serif;background:var(--page);color:var(--ink);line-height:1.6;-webkit-font-smoothing:antialiased}
+button{font:inherit;color:inherit;border:0;background:none;cursor:pointer}
+button:focus-visible,[tabindex]:focus-visible{outline:2px solid var(--focus);outline-offset:2px}
+svg{display:block}
+.ico{width:24px;height:24px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+
+/* 시안 문서 틀 */
+.doc{max-width:1360px;margin:0 auto;padding:48px 32px 120px}
+.doc-head{display:flex;justify-content:space-between;align-items:flex-end;gap:24px;margin-bottom:72px}
+.doc-head h1{font-size:44px;line-height:1.1;letter-spacing:-.03em;font-weight:700}
+.doc-head p{margin-top:12px;font-size:17px;max-width:620px}
+.theme-btn{display:flex;align-items:center;gap:8px;height:44px;padding:0 16px;border-radius:9999px;background:var(--canvas);font-weight:600;font-size:14px}
+.concept{margin-bottom:144px}
+.concept-head{display:grid;grid-template-columns:auto 1fr;gap:8px 24px;align-items:baseline;margin-bottom:32px}
+.concept-head .mark{grid-row:span 2;font-size:96px;line-height:.85;font-weight:800;letter-spacing:-.05em;color:var(--red)}
+.concept-head h2{font-size:32px;line-height:1.2;letter-spacing:-.02em}
+.concept-head p{font-size:17px;max-width:760px}
+.concept-head p b{font-weight:600}
+.row{display:flex;flex-wrap:wrap;gap:32px;align-items:flex-start}
+.cap{margin-top:12px;font-size:14px;color:var(--muted);font-weight:600}
+.notes{margin-top:32px;display:grid;grid-template-columns:repeat(3,1fr);gap:24px;font-size:15px}
+.notes div{background:var(--canvas);border-radius:12px;padding:20px}
+.notes h3{font-size:16px;margin-bottom:4px}
+
+/* Chrome popup 프레임: 실제 폭 360px. 시안 문서에서만 떠 있는 그림자를 쓴다. */
+.pop{width:360px;background:var(--canvas);border-radius:12px;padding:16px;box-shadow:0 12px 40px rgba(0,0,0,.14);position:relative;overflow:hidden}
+.bar{display:flex;align-items:center;gap:4px;margin-bottom:16px}
+.logo{width:28px;height:28px;border-radius:7px;background:var(--red);color:#fff;display:grid;place-items:center;margin-right:auto}
+.logo .ico{width:18px;height:18px;stroke-width:2.6}
+.icon-btn{width:40px;height:40px;border-radius:9999px;display:grid;place-items:center;color:var(--muted)}
+.icon-btn:hover{background:var(--surface-alt);color:var(--ink)}
+.icon-btn .ico{width:20px;height:20px}
+.thumb{display:block;width:100%;height:auto;border-radius:10px;background:var(--surface-alt)}
+.title-1{font-size:15px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}
+
+/* 상태 전환: data-state=ready|run|done. 각 요소는 보일 상태만 지정한다. */
+[data-show]{display:none!important}
+[data-state="ready"] [data-show~="ready"],
+[data-state="run"] [data-show~="run"],
+[data-state="done"] [data-show~="done"],
+[data-state="paste"] [data-show~="paste"]{display:revert!important}
+[data-state="ready"] [data-show~="ready"].flex,[data-state="run"] [data-show~="run"].flex,[data-state="done"] [data-show~="done"].flex,[data-state="paste"] [data-show~="paste"].flex{display:flex!important}
+[data-state="ready"] [data-show~="ready"].grid,[data-state="run"] [data-show~="run"].grid,[data-state="done"] [data-show~="done"].grid,[data-state="paste"] [data-show~="paste"].grid{display:grid!important}
+
+/* ---------- A. 무대 ---------- */
+.a .stage{position:relative;border-radius:10px;overflow:hidden}
+.a .stage .dur{position:absolute;right:8px;bottom:8px;background:var(--scrim);color:#fff;font-size:12px;font-weight:600;padding:1px 6px;border-radius:4px}
+.a .stage .veil{position:absolute;inset:0;background:var(--scrim);place-items:center;color:#fff}
+.a .stage .veil svg.ring{width:88px;height:88px}
+.a .stage .veil .pct{position:absolute;font-size:26px;font-weight:700;letter-spacing:-.02em}
+.a .stage .veil.ok{background:rgba(53,107,67,.82)}
+.a .title-1{margin:10px 0 16px}
+.a .controls{display:flex;gap:12px;align-items:stretch}
+.a .modes{display:flex;gap:8px}
+.mode{width:64px;height:64px;border-radius:12px;background:var(--surface);display:grid;place-items:center;color:var(--muted);box-shadow:inset 0 0 0 2px transparent;transition:transform .12s,box-shadow .12s}
+.mode .ico{width:28px;height:28px}
+.mode[aria-pressed="true"]{color:var(--red);box-shadow:inset 0 0 0 2px var(--red);background:var(--canvas)}
+.mode:active{transform:scale(.94)}
+.levels{flex:1;display:flex;gap:6px;background:var(--surface);border-radius:12px;padding:8px}
+.lvl{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;gap:4px;border-radius:8px;color:var(--muted)}
+.lvl i{display:block;width:12px;border-radius:3px;background:var(--disabled);transition:background .15s}
+.lvl:nth-child(1) i{height:10px}.lvl:nth-child(2) i{height:20px}.lvl:nth-child(3) i{height:30px}
+.lvl span{font-size:12px;font-weight:600;line-height:1}
+.lvl.on i{background:var(--red)}
+.lvl[aria-checked="true"] span{color:var(--ink)}
+.cta{width:100%;height:56px;margin-top:12px;border-radius:12px;background:var(--red);color:#fff;display:grid;place-items:center;transition:transform .12s,filter .12s}
+.cta:hover{filter:brightness(1.06)}.cta:active{transform:scale(.98)}
+.cta .ico{width:28px;height:28px;stroke-width:2.4}
+.cta[disabled]{background:var(--surface-alt);color:var(--disabled);cursor:default}
+.strip{display:flex;gap:8px;margin-top:16px}
+.mini{position:relative;width:74px;flex:none}
+.mini .thumb{border-radius:6px}
+.mini .pb{position:absolute;left:0;bottom:0;height:3px;background:var(--red);border-radius:0 2px 2px 6px}
+.badge{position:absolute;right:-4px;top:-4px;width:22px;height:22px;border-radius:9999px;display:grid;place-items:center;color:#fff;box-shadow:0 0 0 2px var(--canvas)}
+.badge .ico{width:13px;height:13px;stroke-width:3}
+.b-ok{background:var(--ok)}.b-bad{background:var(--bad)}.b-proc{background:var(--proc)}.b-off{background:var(--disabled)}
+:root[data-theme="dark"] .badge{color:#18191b}
+.paste{aspect-ratio:16/9;border-radius:10px;background:var(--surface);place-items:center;align-content:center;gap:12px;color:var(--muted)}
+.paste .ico{width:40px;height:40px;stroke-width:1.6}
+.keys{display:flex;gap:6px}
+.keys kbd{font:600 14px 'Pretendard Variable',sans-serif;min-width:32px;height:32px;padding:0 8px;border-radius:8px;background:var(--canvas);color:var(--ink);display:grid;place-items:center;box-shadow:0 2px 0 var(--surface-alt)}
+
+/* ---------- B. 다이얼 ---------- */
+.b .src{display:flex;align-items:center;gap:10px;background:var(--surface);border-radius:12px;padding:8px}
+.b .src .thumb{width:72px;border-radius:6px;flex:none}
+.b .src .title-1{flex:1;min-width:0}
+.dial{position:relative;width:248px;height:248px;margin:16px auto 8px}
+.dial>svg{width:100%;height:100%;overflow:visible}
+.seg{cursor:pointer}
+.seg circle.hit{stroke:transparent;stroke-width:34}
+.seg circle.vis{stroke:var(--surface-alt);stroke-width:14;transition:stroke .15s}
+.seg.on circle.vis{stroke:var(--red)}
+.seg text{font:600 13px 'Pretendard Variable',sans-serif;fill:var(--muted);text-anchor:middle;dominant-baseline:middle}
+.seg[aria-checked="true"] text{fill:var(--ink)}
+.seg:focus-visible{outline:none}.seg:focus-visible circle.vis{stroke:var(--focus)}
+.dial .core{position:absolute;left:50%;top:50%;width:120px;height:120px;margin:-60px 0 0 -60px;border-radius:9999px;background:var(--red);color:#fff;display:grid;place-items:center;transition:transform .12s}
+.dial .core:active{transform:scale(.95)}
+.dial .core .ico{width:40px;height:40px;stroke-width:2.4}
+.dial .core.idle{background:var(--surface);color:var(--ink);cursor:default}
+.dial .core.idle .big{font-size:40px;font-weight:700;letter-spacing:-.04em;line-height:1}
+.dial .core.idle small{font-size:16px;font-weight:600;color:var(--muted)}
+.dial .core.ok{background:var(--ok);color:#fff}
+:root[data-theme="dark"] .dial .core.ok{color:#18191b}
+.dial .toggle{position:absolute;left:50%;bottom:0;transform:translateX(-50%);display:flex;background:var(--surface);border-radius:9999px;padding:4px}
+.dial .toggle button{width:44px;height:36px;border-radius:9999px;display:grid;place-items:center;color:var(--muted)}
+.dial .toggle button .ico{width:20px;height:20px}
+.dial .toggle button[aria-pressed="true"]{background:var(--canvas);color:var(--red);box-shadow:0 1px 3px rgba(0,0,0,.12)}
+.dots{display:flex;justify-content:center;gap:12px;margin-top:8px}
+.dot{position:relative;width:52px;height:52px}
+.dot .face{position:absolute;inset:5px;border-radius:9999px;overflow:hidden}
+.dot .face svg{width:100%;height:100%}
+.dot>svg{position:absolute;inset:0;width:52px;height:52px;transform:rotate(-90deg)}
+.dot .tag{position:absolute;right:-2px;bottom:-2px;width:20px;height:20px;border-radius:9999px;display:grid;place-items:center;color:#fff;box-shadow:0 0 0 2px var(--canvas)}
+.dot .tag .ico{width:12px;height:12px;stroke-width:3}
+:root[data-theme="dark"] .dot .tag{color:#18191b}
+
+/* ---------- C. 빨간 막대 ---------- */
+.c .now{background:var(--surface);border-radius:12px;padding:10px;display:grid;grid-template-columns:112px 1fr 52px;gap:10px;align-items:center;position:relative}
+.tframe{position:relative;border-radius:8px;overflow:hidden;line-height:0}
+.tframe .thumb{border-radius:0}
+.redbar{position:absolute;left:0;right:0;bottom:0;height:4px;background:rgba(255,255,255,.35)}
+.redbar i{display:block;height:100%;width:0;background:var(--red);transition:width .2s linear}
+.c .side{display:flex;flex-direction:column;justify-content:space-between;gap:8px;min-width:0}
+.seg2{display:flex;background:var(--canvas);border-radius:8px;padding:3px}
+.seg2 button{flex:1;height:34px;border-radius:6px;display:grid;place-items:center;color:var(--muted)}
+.seg2 button .ico{width:20px;height:20px}
+.seg2 button[aria-pressed="true"]{background:var(--surface-alt);color:var(--red)}
+.sizes{display:flex;align-items:flex-end;gap:6px}
+.size{display:flex;flex-direction:column;align-items:center;gap:3px;color:var(--muted);flex:1}
+.size .box{border-radius:3px;box-shadow:inset 0 0 0 2px var(--disabled);transition:box-shadow .15s,background .15s}
+.size:nth-child(1) .box{width:16px;height:9px}.size:nth-child(2) .box{width:24px;height:14px}.size:nth-child(3) .box{width:34px;height:19px}
+.size .wave{display:flex;gap:2px;align-items:center;height:19px}
+.size .wave i{width:2px;border-radius:1px;background:var(--disabled)}
+.size span{font-size:11px;font-weight:600;line-height:1}
+.size[aria-checked="true"]{color:var(--ink)}
+.size[aria-checked="true"] .box{box-shadow:inset 0 0 0 2px var(--red);background:rgba(230,0,18,.12)}
+.size[aria-checked="true"] .wave i{background:var(--red)}
+.c .go{display:grid}
+.fab{width:52px;height:52px;border-radius:9999px;background:var(--red);color:#fff;display:grid;place-items:center;transition:transform .12s}
+.fab:active{transform:scale(.92)}
+.fab .ico{width:26px;height:26px;stroke-width:2.4}
+.c .now{margin-bottom:20px}
+.queue{display:flex;flex-direction:column;gap:12px}
+.q{display:grid;grid-template-columns:104px 1fr 44px;gap:12px;align-items:center}
+.q .meta{display:flex;align-items:center;gap:6px;color:var(--muted);font-size:13px;font-weight:600;min-width:0}
+.q .meta .ico{width:16px;height:16px}
+.q .meta .t{color:var(--ink);font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.q .stack{display:flex;flex-direction:column;gap:2px;min-width:0}
+.q .act{width:44px;height:44px;border-radius:9999px;display:grid;place-items:center}
+.q .act .ico{width:20px;height:20px}
+.act-dl{background:var(--surface);color:var(--ink)}
+.act-retry{background:var(--surface);color:var(--bad)}
+.spin{animation:spin 1s linear infinite;color:var(--proc)}
+@keyframes spin{to{transform:rotate(360deg)}}
+.q.failed .redbar i{background:var(--bad)}
+
+/* ---------- YouTube 썸네일 오버레이 무대 ---------- */
+.yt{width:340px;background:#fff;border-radius:12px;padding:12px;color:#0f0f0f;box-shadow:0 12px 40px rgba(0,0,0,.14)}
+:root[data-theme="dark"] .yt{background:#0f0f0f;color:#f1f1f1}
+.yt .tile{position:relative;border-radius:12px;overflow:hidden;line-height:0}
+.yt .tile .thumb{border-radius:0}
+.yt .info{display:flex;gap:10px;margin-top:10px;line-height:1.4}
+.yt .ava{width:32px;height:32px;border-radius:9999px;flex:none}
+.yt .info b{display:block;font-size:14px;font-weight:600}
+.yt .info span{font-size:12px;opacity:.65}
+.ov-btn{width:40px;height:40px;border-radius:9999px;background:var(--scrim);color:#fff;display:grid;place-items:center;transition:transform .12s,background .12s}
+.ov-btn:hover{background:rgba(0,0,0,.9)}.ov-btn:active{transform:scale(.92)}
+.ov-btn .ico{width:20px;height:20px}
+.ov-btn.red{background:var(--red)}
+/* A 오버레이 */
+.ovA{position:absolute;top:8px;right:8px;display:flex;flex-direction:column;align-items:flex-end;gap:8px;line-height:1}
+.ovA .pair{display:flex;gap:6px}
+.ovA .pick{display:flex;gap:4px;background:var(--scrim);border-radius:10px;padding:6px}
+.ovA .pick button{display:flex;flex-direction:column;align-items:center;justify-content:flex-end;gap:3px;width:40px;height:44px;color:#fff;border-radius:6px}
+.ovA .pick button:hover{background:rgba(255,255,255,.12)}
+.ovA .pick i{display:block;width:8px;border-radius:2px;background:rgba(255,255,255,.4)}
+.ovA .pick button:nth-child(1) i{height:8px}.ovA .pick button:nth-child(2) i{height:15px}.ovA .pick button:nth-child(3) i{height:22px}
+.ovA .pick button.on i{background:var(--red)}
+.ovA .pick span{font-size:11px;font-weight:600}
+.ovRing{position:absolute;inset:0;display:grid;place-items:center;background:rgba(0,0,0,.45)}
+.ovRing svg{width:64px;height:64px}
+.ovRing .pct{position:absolute;color:#fff;font:700 18px 'Pretendard Variable',sans-serif}
+.ovDone{position:absolute;top:8px;right:8px;width:40px;height:40px;border-radius:9999px;background:var(--ok);color:#fff;display:grid;place-items:center}
+:root[data-theme="dark"] .ovDone{color:#18191b}
+/* B 오버레이 */
+.ovB{position:absolute;right:8px;bottom:8px;line-height:1}
+.ovB .mini-dial{position:relative;width:104px;height:104px}
+.ovB .mini-dial>svg{width:100%;height:100%;overflow:visible}
+.ovB .mini-dial .ov-btn{position:absolute;left:50%;top:50%;width:48px;height:48px;margin:-24px 0 0 -24px}
+.ovB .flip{position:absolute;left:-52px;top:50%;margin-top:-20px;display:flex;flex-direction:column;gap:4px}
+.ovB .flip .ov-btn{width:36px;height:36px}
+.ovB .flip .ov-btn.sel{background:#fff;color:var(--red)}
+/* C 오버레이 */
+.ovC{position:absolute;left:0;right:0;bottom:0;line-height:1}
+.ovC .strip-open{height:44px;background:var(--scrim);display:flex;align-items:center;gap:4px;padding:0 6px;color:#fff;border-top:4px solid var(--red)}
+.ovC .strip-open button{height:36px;min-width:36px;padding:0 8px;border-radius:6px;display:flex;align-items:center;gap:6px;color:#fff;font-size:13px;font-weight:600}
+.ovC .strip-open button:hover{background:rgba(255,255,255,.14)}
+.ovC .strip-open button .ico{width:18px;height:18px}
+.ovC .strip-open .sep{width:8px}
+.ovC .strip-open button.sel{background:var(--red)}
+.ovC .rb{height:6px;background:rgba(255,255,255,.3)}
+.ovC .rb i{display:block;height:100%;width:0;background:var(--red);transition:width .2s linear}
+
+@media (max-width:820px){
+  .doc{padding:32px 16px 96px}
+  .doc-head{flex-direction:column;align-items:flex-start;margin-bottom:48px}
+  .doc-head h1{font-size:32px}
+  .doc-head>div{max-width:100%}
+  .concept-head{grid-template-columns:1fr}
+  .concept-head .mark{grid-row:auto;font-size:64px}
+  .notes{grid-template-columns:1fr}
+  .pop,.yt{width:100%;max-width:360px}
+}
+@media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+</style>
+</head>
+<body>
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <!-- 아이콘 -->
+    <symbol id="i-audio" viewBox="0 0 24 24"><path d="M4 10v4M8 6v12M12 3v18M16 8v8M20 10.5v3"/></symbol>
+    <symbol id="i-video" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="3"/><path d="M10 9.2v5.6l4.8-2.8z" fill="currentColor"/></symbol>
+    <symbol id="i-down" viewBox="0 0 24 24"><path d="M12 4v11M6.5 10l5.5 5.5 5.5-5.5M5 20h14"/></symbol>
+    <symbol id="i-check" viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7"/></symbol>
+    <symbol id="i-alert" viewBox="0 0 24 24"><path d="M12 6v8M12 18.5v.01"/></symbol>
+    <symbol id="i-retry" viewBox="0 0 24 24"><path d="M4.5 12a7.5 7.5 0 1 0 2.2-5.3M4.5 4v4.5H9"/></symbol>
+    <symbol id="i-link" viewBox="0 0 24 24"><path d="M10 14a4 4 0 0 0 5.66 0l3-3a4 4 0 0 0-5.66-5.66l-1 1M14 10a4 4 0 0 0-5.66 0l-3 3a4 4 0 0 0 5.66 5.66l1-1"/></symbol>
+    <symbol id="i-sliders" viewBox="0 0 24 24"><path d="M4 7h9M17 7h3M4 17h3M11 17h9"/><circle cx="15" cy="7" r="2"/><circle cx="9" cy="17" r="2"/></symbol>
+    <symbol id="i-moon" viewBox="0 0 24 24"><path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5z"/></symbol>
+    <symbol id="i-grid" viewBox="0 0 24 24"><rect x="3" y="4" width="8" height="7" rx="1.5"/><rect x="13" y="4" width="8" height="7" rx="1.5"/><rect x="3" y="13" width="8" height="7" rx="1.5"/><rect x="13" y="13" width="8" height="7" rx="1.5"/></symbol>
+    <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+    <symbol id="i-loader" viewBox="0 0 24 24"><path d="M12 3a9 9 0 1 0 9 9"/></symbol>
+
+    <!-- 썸네일: 실제 영상 이미지 자리. 평면 장면으로 대신 그린다. -->
+    <symbol id="t-sunrise" viewBox="0 0 160 90"><rect width="160" height="90" fill="#f3b46b"/><circle cx="104" cy="44" r="16" fill="#ffe7b8"/><path d="M0 70 38 34l22 20 26-30 34 36 18-14 22 18v26H0z" fill="#5a6488"/><path d="M0 78l30-18 30 14 34-20 32 18 34-12v30H0z" fill="#323b5e"/></symbol>
+    <symbol id="t-sea" viewBox="0 0 160 90"><rect width="160" height="90" fill="#a9dbe9"/><rect y="50" width="160" height="40" fill="#2f86ad"/><path d="M0 62h160v28H0z" fill="#1f6489"/><path d="M58 50l14-22v22zM74 50l12-16v16z" fill="#fff"/><path d="M52 50h40l-6 7H58z" fill="#e2483d"/></symbol>
+    <symbol id="t-city" viewBox="0 0 160 90"><rect width="160" height="90" fill="#1d2140"/><circle cx="130" cy="18" r="7" fill="#f6e7b0"/><path d="M8 90V44h22v46zM34 90V28h20v62zM58 90V52h18v38zM80 90V20h24v70zM108 90V40h20v50zM132 90V56h22v34z" fill="#363e6d"/><g fill="#ffd36b"><rect x="38" y="34" width="4" height="4"/><rect x="46" y="44" width="4" height="4"/><rect x="86" y="28" width="4" height="4"/><rect x="94" y="40" width="4" height="4"/><rect x="86" y="54" width="4" height="4"/><rect x="114" y="48" width="4" height="4"/><rect x="14" y="52" width="4" height="4"/></g></symbol>
+    <symbol id="t-desk" viewBox="0 0 160 90"><rect width="160" height="90" fill="#e8dfd2"/><rect y="62" width="160" height="28" fill="#a87550"/><rect x="50" y="30" width="56" height="34" rx="3" fill="#3a3a3c"/><rect x="54" y="34" width="48" height="26" fill="#7fb0d6"/><path d="M128 62c-6-10-4-22 4-30 8 8 10 20 4 30z" fill="#4f8a5b"/><rect x="126" y="56" width="12" height="8" fill="#c8634a"/><circle cx="30" cy="54" r="8" fill="#f2f0ee"/></symbol>
+    <symbol id="t-forest" viewBox="0 0 160 90"><rect width="160" height="90" fill="#d3e7c4"/><path d="M14 90l18-56 18 56zM44 90l22-70 22 70zM84 90l16-48 16 48zM112 90l20-62 20 62z" fill="#3d7a4f"/><path d="M0 82h160v8H0z" fill="#2c5e3c"/></symbol>
+    <symbol id="t-stage" viewBox="0 0 160 90"><rect width="160" height="90" fill="#2a1631"/><path d="M40 0l-18 70h36zM120 0l-18 70h36z" fill="#ff6b6b" opacity=".55"/><path d="M80 0 66 70h28z" fill="#ffd36b" opacity=".6"/><path d="M0 74c10-8 20-8 30 0s20-8 30 0 20-8 30 0 20-8 30 0 20-8 40 0v16H0z" fill="#120914"/></symbol>
+  </defs>
+</svg>
+
+<main class="doc">
+  <header class="doc-head">
+    <div>
+      <h1>확장 UI 시안 3종</h1>
+      <p>글자를 줄이고 썸네일·아이콘·형태로 상태를 말하는 세 방향입니다. 각 시안의 첫 팝업과 오른쪽 오버레이는 눌러볼 수 있어요.</p>
+    </div>
+    <button class="theme-btn" id="theme" type="button" aria-label="라이트·다크 전환"><svg class="ico" style="width:18px;height:18px"><use href="#i-moon"/></svg>다크</button>
+  </header>
+
+  <!-- ================= A ================= -->
+  <section class="concept" aria-labelledby="a-title">
+    <div class="concept-head">
+      <span class="mark" aria-hidden="true">A</span>
+      <h2 id="a-title">무대: 썸네일이 곧 화면</h2>
+      <p>현재 탭 영상의 <b>썸네일을 크게 띄우고</b>, 그 아래 형식 두 칸 · 품질 막대 세 개 · 빨간 버튼 하나만 둡니다. URL 입력창은 유튜브 탭이 아닐 때만 붙여넣기 칸으로 나타나요. 진행률은 썸네일 위 링으로 표시합니다.</p>
+    </div>
+    <div class="row">
+      <div>
+        <div class="pop a" data-live="a" data-state="ready" data-mode="video" data-q="1">
+          <div class="bar">
+            <span class="logo" aria-label="MyTube Extract"><svg class="ico"><use href="#i-down"/></svg></span>
+            <button class="icon-btn" aria-label="썸네일 버튼 켜기"><svg class="ico"><use href="#i-grid"/></svg></button>
+            <button class="icon-btn" aria-label="설정"><svg class="ico"><use href="#i-sliders"/></svg></button>
+          </div>
+          <figure class="stage">
+            <svg class="thumb" viewBox="0 0 160 90"><use href="#t-sunrise"/></svg>
+            <span class="dur">12:48</span>
+            <div class="veil grid" data-show="run">
+              <svg class="ring" viewBox="0 0 40 40"><circle cx="20" cy="20" r="17" fill="none" stroke="rgba(255,255,255,.25)" stroke-width="3"/><circle data-prog cx="20" cy="20" r="17" fill="none" stroke="#fff" stroke-width="3" pathLength="100" stroke-dasharray="0 100" stroke-linecap="round" transform="rotate(-90 20 20)"/></svg>
+              <span class="pct" data-pct>0</span>
+            </div>
+            <div class="veil ok grid" data-show="done"><svg class="ico" style="width:56px;height:56px;stroke-width:2.4"><use href="#i-check"/></svg></div>
+          </figure>
+          <p class="title-1">산 너머 일출 타임랩스 — 4K</p>
+          <div class="controls">
+            <div class="modes">
+              <button class="mode" data-set-mode="audio" aria-pressed="false" aria-label="오디오(MP3)"><svg class="ico"><use href="#i-audio"/></svg></button>
+              <button class="mode" data-set-mode="video" aria-pressed="true" aria-label="비디오(MP4)"><svg class="ico"><use href="#i-video"/></svg></button>
+            </div>
+            <div class="levels" role="radiogroup" aria-label="품질">
+              <button class="lvl" role="radio" data-set-q="0" data-a="128" data-v="360"><i></i><span>360</span></button>
+              <button class="lvl" role="radio" data-set-q="1" data-a="192" data-v="720"><i></i><span>720</span></button>
+              <button class="lvl" role="radio" data-set-q="2" data-a="320" data-v="1080"><i></i><span>1080</span></button>
+            </div>
+          </div>
+          <button class="cta" data-go aria-label="추출 시작"><svg class="ico"><use href="#i-down"/></svg></button>
+          <div class="strip" aria-label="최근 요청">
+            <div class="mini"><svg class="thumb" viewBox="0 0 160 90"><use href="#t-sea"/></svg><span class="badge b-ok"><svg class="ico"><use href="#i-check"/></svg></span></div>
+            <div class="mini"><svg class="thumb" viewBox="0 0 160 90"><use href="#t-city"/></svg><span class="pb" style="width:58%"></span><span class="badge b-proc"><svg class="ico spin" style="color:inherit"><use href="#i-loader"/></svg></span></div>
+            <div class="mini"><svg class="thumb" viewBox="0 0 160 90"><use href="#t-desk"/></svg><span class="badge b-bad"><svg class="ico"><use href="#i-alert"/></svg></span></div>
+            <div class="mini"><svg class="thumb" viewBox="0 0 160 90" style="opacity:.45"><use href="#t-forest"/></svg><span class="badge b-off"><svg class="ico"><use href="#i-alert"/></svg></span></div>
+          </div>
+        </div>
+        <p class="cap">유튜브 탭 · 눌러보기</p>
+      </div>
+
+      <div>
+        <div class="pop a" data-state="paste">
+          <div class="bar">
+            <span class="logo" aria-label="MyTube Extract"><svg class="ico"><use href="#i-down"/></svg></span>
+            <button class="icon-btn" aria-label="썸네일 버튼 켜기"><svg class="ico"><use href="#i-grid"/></svg></button>
+            <button class="icon-btn" aria-label="설정"><svg class="ico"><use href="#i-sliders"/></svg></button>
+          </div>
+          <div class="paste grid" data-show="paste" tabindex="0" aria-label="YouTube 주소 붙여넣기">
+            <svg class="ico"><use href="#i-link"/></svg>
+            <div class="keys"><kbd>⌘</kbd><kbd>V</kbd></div>
+          </div>
+          <p class="title-1" style="margin:10px 0 16px;color:var(--disabled)">&nbsp;</p>
+          <div class="controls">
+            <div class="modes">
+              <button class="mode" aria-pressed="false" aria-label="오디오(MP3)"><svg class="ico"><use href="#i-audio"/></svg></button>
+              <button class="mode" aria-pressed="true" aria-label="비디오(MP4)"><svg class="ico"><use href="#i-video"/></svg></button>
+            </div>
+            <div class="levels" aria-label="품질">
+              <span class="lvl on"><i></i><span>360</span></span>
+              <span class="lvl on"><i></i><span style="color:var(--ink)">720</span></span>
+              <span class="lvl"><i></i><span>1080</span></span>
+            </div>
+          </div>
+          <button class="cta" disabled aria-label="추출 시작"><svg class="ico"><use href="#i-down"/></svg></button>
+        </div>
+        <p class="cap">유튜브가 아닌 탭 · 붙여넣기 대기</p>
+      </div>
+
+      <div>
+        <div class="yt" data-live="ovA" data-state="ready">
+          <div class="tile">
+            <svg class="thumb" viewBox="0 0 160 90"><use href="#t-stage"/></svg>
+            <div class="ovA flex" data-show="ready">
+              <div class="pair">
+                <button class="ov-btn" data-go aria-label="오디오(MP3) 추출"><svg class="ico"><use href="#i-audio"/></svg></button>
+                <button class="ov-btn red" aria-label="비디오(MP4) 선택됨"><svg class="ico"><use href="#i-video"/></svg></button>
+              </div>
+              <div class="pick" role="group" aria-label="해상도">
+                <button data-go aria-label="360p"><i></i><span>360</span></button>
+                <button data-go class="on" aria-label="720p"><i></i><span>720</span></button>
+                <button data-go aria-label="1080p"><i></i><span>1080</span></button>
+              </div>
+            </div>
+            <div class="ovRing grid" data-show="run"><svg viewBox="0 0 40 40"><circle cx="20" cy="20" r="17" fill="none" stroke="rgba(255,255,255,.3)" stroke-width="3"/><circle data-prog cx="20" cy="20" r="17" fill="none" stroke="#fff" stroke-width="3" pathLength="100" stroke-dasharray="0 100" stroke-linecap="round" transform="rotate(-90 20 20)"/></svg><span class="pct" data-pct>0</span></div>
+            <div class="ovDone grid" data-show="done"><svg class="ico"><use href="#i-check"/></svg></div>
+          </div>
+          <div class="info"><svg class="ava" viewBox="0 0 160 90" preserveAspectRatio="xMidYMid slice"><use href="#t-stage"/></svg><div><b>라이브 세트 풀버전 · 서울 공연</b><span>채널 이름 · 조회수 12만회</span></div></div>
+        </div>
+        <p class="cap">썸네일 오버레이 · 호버 → 품질 막대 누르기</p>
+      </div>
+    </div>
+    <div class="notes">
+      <div><h3>남는 글자</h3>영상 제목 한 줄, 길이, 품질 숫자. 나머지는 아이콘과 접근성 이름으로만.</div>
+      <div><h3>강점</h3>무엇을 받는지가 썸네일로 바로 보여서 확인 단계가 필요 없어요. 현재 구조와 가장 가까워 구현 위험이 낮습니다.</div>
+      <div><h3>약점</h3>파일명 입력이 사라집니다(설정이나 길게 누르기로 이동 필요). 유튜브 탭이 아니면 위쪽이 비어 보여요.</div>
+    </div>
+  </section>
+
+  <!-- ================= B ================= -->
+  <section class="concept" aria-labelledby="b-title">
+    <div class="concept-head">
+      <span class="mark" aria-hidden="true">B</span>
+      <h2 id="b-title">다이얼: 버튼 하나, 고리 하나</h2>
+      <p>팝업 한가운데 <b>둥근 빨간 버튼</b>을 두고, 둘레 고리 세 조각으로 품질을 고릅니다. 고리 아래 틈에 형식 스위치가 들어가요. 누르면 그 고리가 그대로 진행률이 되고, 최근 요청은 상태 고리를 두른 동그라미로 표시합니다.</p>
+    </div>
+    <div class="row">
+      <div>
+        <div class="pop b" data-live="b" data-state="ready" data-mode="video" data-q="1">
+          <div class="bar">
+            <span class="logo" aria-label="MyTube Extract"><svg class="ico"><use href="#i-down"/></svg></span>
+            <button class="icon-btn" aria-label="썸네일 버튼 켜기"><svg class="ico"><use href="#i-grid"/></svg></button>
+            <button class="icon-btn" aria-label="설정"><svg class="ico"><use href="#i-sliders"/></svg></button>
+          </div>
+          <div class="src"><svg class="thumb" viewBox="0 0 160 90"><use href="#t-sunrise"/></svg><p class="title-1">산 너머 일출 타임랩스 — 4K</p></div>
+          <div class="dial">
+            <svg viewBox="0 0 240 240">
+              <g data-show="ready" role="radiogroup" aria-label="품질">
+                <g class="seg" role="radio" tabindex="0" data-set-q="0" data-a="128" data-v="360"><circle class="hit" cx="120" cy="120" r="104" fill="none" pathLength="360" stroke-dasharray="86 274" stroke-dashoffset="-135"/><circle class="vis" cx="120" cy="120" r="104" fill="none" pathLength="360" stroke-dasharray="86 274" stroke-dashoffset="-135" stroke-linecap="round"/><text x="36" y="123">360</text></g>
+                <g class="seg" role="radio" tabindex="0" data-set-q="1" data-a="192" data-v="720"><circle class="hit" cx="120" cy="120" r="104" fill="none" pathLength="360" stroke-dasharray="86 274" stroke-dashoffset="-227"/><circle class="vis" cx="120" cy="120" r="104" fill="none" pathLength="360" stroke-dasharray="86 274" stroke-dashoffset="-227" stroke-linecap="round"/><text x="120" y="38">720</text></g>
+                <g class="seg" role="radio" tabindex="0" data-set-q="2" data-a="320" data-v="1080"><circle class="hit" cx="120" cy="120" r="104" fill="none" pathLength="360" stroke-dasharray="86 274" stroke-dashoffset="-319"/><circle class="vis" cx="120" cy="120" r="104" fill="none" pathLength="360" stroke-dasharray="86 274" stroke-dashoffset="-319" stroke-linecap="round"/><text x="204" y="123">1080</text></g>
+              </g>
+              <g data-show="run done">
+                <circle cx="120" cy="120" r="104" fill="none" stroke="var(--surface-alt)" stroke-width="14"/>
+                <circle data-prog cx="120" cy="120" r="104" fill="none" stroke="var(--proc)" stroke-width="14" pathLength="100" stroke-dasharray="0 100" stroke-linecap="round" transform="rotate(-90 120 120)"/>
+              </g>
+            </svg>
+            <button class="core grid" data-go data-show="ready" aria-label="추출 시작"><svg class="ico"><use href="#i-down"/></svg></button>
+            <div class="core idle grid" data-show="run" role="status"><span><span class="big" data-pct>0</span><small>%</small></span></div>
+            <div class="core ok grid" data-show="done"><svg class="ico"><use href="#i-check"/></svg></div>
+            <div class="toggle flex" data-show="ready">
+              <button data-set-mode="audio" aria-pressed="false" aria-label="오디오(MP3)"><svg class="ico"><use href="#i-audio"/></svg></button>
+              <button data-set-mode="video" aria-pressed="true" aria-label="비디오(MP4)"><svg class="ico"><use href="#i-video"/></svg></button>
+            </div>
+          </div>
+          <div class="dots" aria-label="최근 요청">
+            <div class="dot"><div class="face"><svg viewBox="0 0 160 90" preserveAspectRatio="xMidYMid slice"><use href="#t-sea"/></svg></div><svg viewBox="0 0 52 52"><circle cx="26" cy="26" r="24" fill="none" stroke="var(--ok)" stroke-width="3"/></svg><span class="tag b-ok"><svg class="ico"><use href="#i-check"/></svg></span></div>
+            <div class="dot"><div class="face"><svg viewBox="0 0 160 90" preserveAspectRatio="xMidYMid slice"><use href="#t-city"/></svg></div><svg viewBox="0 0 52 52"><circle cx="26" cy="26" r="24" fill="none" stroke="var(--surface-alt)" stroke-width="3"/><circle cx="26" cy="26" r="24" fill="none" stroke="var(--proc)" stroke-width="3" pathLength="100" stroke-dasharray="58 100" stroke-linecap="round"/></svg></div>
+            <div class="dot"><div class="face"><svg viewBox="0 0 160 90" preserveAspectRatio="xMidYMid slice"><use href="#t-desk"/></svg></div><svg viewBox="0 0 52 52"><circle cx="26" cy="26" r="24" fill="none" stroke="var(--bad)" stroke-width="3"/></svg><span class="tag b-bad"><svg class="ico"><use href="#i-alert"/></svg></span></div>
+            <div class="dot" style="opacity:.45"><div class="face"><svg viewBox="0 0 160 90" preserveAspectRatio="xMidYMid slice"><use href="#t-forest"/></svg></div><svg viewBox="0 0 52 52"><circle cx="26" cy="26" r="24" fill="none" stroke="var(--disabled)" stroke-width="3" stroke-dasharray="3 5"/></svg></div>
+          </div>
+        </div>
+        <p class="cap">유튜브 탭 · 눌러보기</p>
+      </div>
+
+      <div>
+        <div class="pop b" data-state="run">
+          <div class="bar">
+            <span class="logo" aria-label="MyTube Extract"><svg class="ico"><use href="#i-down"/></svg></span>
+            <button class="icon-btn" aria-label="썸네일 버튼 켜기"><svg class="ico"><use href="#i-grid"/></svg></button>
+            <button class="icon-btn" aria-label="설정"><svg class="ico"><use href="#i-sliders"/></svg></button>
+          </div>
+          <div class="src"><svg class="thumb" viewBox="0 0 160 90"><use href="#t-city"/></svg><p class="title-1">도시 야경 드론 1시간</p></div>
+          <div class="dial">
+            <svg viewBox="0 0 240 240"><circle cx="120" cy="120" r="104" fill="none" stroke="var(--surface-alt)" stroke-width="14"/><circle cx="120" cy="120" r="104" fill="none" stroke="var(--proc)" stroke-width="14" pathLength="100" stroke-dasharray="58 100" stroke-linecap="round" transform="rotate(-90 120 120)"/></svg>
+            <div class="core idle" style="display:grid"><span><span class="big">58</span><small>%</small></span></div>
+          </div>
+        </div>
+        <p class="cap">처리 중 · 고리가 진행률로 바뀜</p>
+      </div>
+
+      <div>
+        <div class="yt" data-live="ovB" data-state="ready">
+          <div class="tile">
+            <svg class="thumb" viewBox="0 0 160 90"><use href="#t-stage"/></svg>
+            <div class="ovB">
+              <div class="mini-dial">
+                <svg viewBox="0 0 104 104">
+                  <g data-show="ready">
+                    <circle cx="52" cy="52" r="44" fill="none" stroke="rgba(255,255,255,.35)" stroke-width="7" pathLength="360" stroke-dasharray="86 274" stroke-dashoffset="-135" stroke-linecap="round"/>
+                    <circle cx="52" cy="52" r="44" fill="none" stroke="#e60012" stroke-width="7" pathLength="360" stroke-dasharray="86 274" stroke-dashoffset="-227" stroke-linecap="round"/>
+                    <circle cx="52" cy="52" r="44" fill="none" stroke="rgba(255,255,255,.35)" stroke-width="7" pathLength="360" stroke-dasharray="86 274" stroke-dashoffset="-319" stroke-linecap="round"/>
+                  </g>
+                  <g data-show="run done">
+                    <circle cx="52" cy="52" r="44" fill="none" stroke="rgba(255,255,255,.3)" stroke-width="7"/>
+                    <circle data-prog cx="52" cy="52" r="44" fill="none" stroke="#fff" stroke-width="7" pathLength="100" stroke-dasharray="0 100" stroke-linecap="round" transform="rotate(-90 52 52)"/>
+                  </g>
+                </svg>
+                <button class="ov-btn red grid" data-go data-show="ready" aria-label="720p 비디오 추출"><svg class="ico"><use href="#i-down"/></svg></button>
+                <span class="ov-btn grid" data-show="run"><svg class="ico spin" style="color:#fff"><use href="#i-loader"/></svg></span>
+                <span class="ov-btn grid" data-show="done" style="background:var(--ok)"><svg class="ico"><use href="#i-check"/></svg></span>
+              </div>
+              <div class="flip flex" data-show="ready">
+                <button class="ov-btn" aria-label="오디오(MP3)"><svg class="ico"><use href="#i-audio"/></svg></button>
+                <button class="ov-btn sel" aria-label="비디오(MP4) 선택됨"><svg class="ico"><use href="#i-video"/></svg></button>
+              </div>
+            </div>
+          </div>
+          <div class="info"><svg class="ava" viewBox="0 0 160 90" preserveAspectRatio="xMidYMid slice"><use href="#t-stage"/></svg><div><b>라이브 세트 풀버전 · 서울 공연</b><span>채널 이름 · 조회수 12만회</span></div></div>
+        </div>
+        <p class="cap">썸네일 오버레이 · 같은 다이얼의 축소판</p>
+      </div>
+    </div>
+    <div class="notes">
+      <div><h3>남는 글자</h3>제목 한 줄, 품질 숫자, 진행 퍼센트. 가장 적은 글자 수예요.</div>
+      <div><h3>강점</h3>팝업과 오버레이가 같은 형태라 한 번 배우면 끝. 닌텐도식 장난감 같은 손맛이 브랜드와 잘 맞아요.</div>
+      <div><h3>약점</h3>고리를 눌러 품질을 고른다는 걸 처음엔 모를 수 있어요. 세로 공간을 가장 많이 써서 최근 요청은 4개 정도만 보입니다.</div>
+    </div>
+  </section>
+
+  <!-- ================= C ================= -->
+  <section class="concept" aria-labelledby="c-title">
+    <div class="concept-head">
+      <span class="mark" aria-hidden="true">C</span>
+      <h2 id="c-title">빨간 막대: 유튜브의 재생바가 진행률</h2>
+      <p>유튜브 썸네일 아래 <b>"이어보기" 빨간 막대</b>를 추출 진행률로 바꿉니다. 팝업은 썸네일 목록(대기열)이고, 품질은 화면 크기(사각형)와 파형 밀도로 그려요. 오버레이도 썸네일 아래 막대가 펼쳐지는 방식입니다.</p>
+    </div>
+    <div class="row">
+      <div>
+        <div class="pop c" data-live="c" data-state="ready" data-mode="video" data-q="1">
+          <div class="bar">
+            <span class="logo" aria-label="MyTube Extract"><svg class="ico"><use href="#i-down"/></svg></span>
+            <button class="icon-btn" aria-label="썸네일 버튼 켜기"><svg class="ico"><use href="#i-grid"/></svg></button>
+            <button class="icon-btn" aria-label="설정"><svg class="ico"><use href="#i-sliders"/></svg></button>
+          </div>
+          <div class="now">
+            <div class="tframe"><svg class="thumb" viewBox="0 0 160 90"><use href="#t-sunrise"/></svg><div class="redbar"><i data-bar></i></div></div>
+            <div class="side">
+              <div class="seg2">
+                <button data-set-mode="audio" aria-pressed="false" aria-label="오디오(MP3)"><svg class="ico"><use href="#i-audio"/></svg></button>
+                <button data-set-mode="video" aria-pressed="true" aria-label="비디오(MP4)"><svg class="ico"><use href="#i-video"/></svg></button>
+              </div>
+              <div class="sizes" role="radiogroup" aria-label="품질">
+                <button class="size" role="radio" data-set-q="0" data-a="128" data-v="360"><span class="box"></span><span class="wave"><i style="height:6px"></i><i style="height:12px"></i><i style="height:6px"></i></span><span class="n">360</span></button>
+                <button class="size" role="radio" data-set-q="1" data-a="192" data-v="720"><span class="box"></span><span class="wave"><i style="height:6px"></i><i style="height:14px"></i><i style="height:9px"></i><i style="height:16px"></i><i style="height:6px"></i></span><span class="n">720</span></button>
+                <button class="size" role="radio" data-set-q="2" data-a="320" data-v="1080"><span class="box"></span><span class="wave"><i style="height:6px"></i><i style="height:14px"></i><i style="height:10px"></i><i style="height:19px"></i><i style="height:8px"></i><i style="height:15px"></i><i style="height:6px"></i></span><span class="n">1080</span></button>
+              </div>
+            </div>
+            <div class="go">
+              <button class="fab grid" data-go data-show="ready" aria-label="추출 시작"><svg class="ico"><use href="#i-down"/></svg></button>
+              <span class="fab grid" data-show="run" style="background:var(--surface-alt);color:var(--proc)"><svg class="ico spin" style="color:inherit"><use href="#i-loader"/></svg></span>
+              <span class="fab grid" data-show="done" style="background:var(--ok)"><svg class="ico"><use href="#i-check"/></svg></span>
+            </div>
+          </div>
+          <div class="queue" aria-label="최근 요청">
+            <div class="q"><div class="tframe"><svg class="thumb" viewBox="0 0 160 90"><use href="#t-city"/></svg><div class="redbar"><i style="width:58%"></i></div></div><div class="stack"><span class="meta"><span class="t">도시 야경 드론 1시간</span></span><span class="meta"><svg class="ico"><use href="#i-video"/></svg>1080</span></div><span class="act"><svg class="ico spin"><use href="#i-loader"/></svg></span></div>
+            <div class="q"><div class="tframe"><svg class="thumb" viewBox="0 0 160 90"><use href="#t-sea"/></svg><div class="redbar"><i style="width:100%"></i></div></div><div class="stack"><span class="meta"><span class="t">바다 위 요트 브이로그</span></span><span class="meta"><svg class="ico"><use href="#i-audio"/></svg>320</span></div><button class="act act-dl" aria-label="다시 내려받기"><svg class="ico"><use href="#i-down"/></svg></button></div>
+            <div class="q failed"><div class="tframe"><svg class="thumb" viewBox="0 0 160 90"><use href="#t-desk"/></svg><div class="redbar"><i style="width:22%"></i></div></div><div class="stack"><span class="meta"><span class="t">작업실 데스크 투어</span></span><span class="meta" style="color:var(--bad)"><svg class="ico"><use href="#i-alert"/></svg>720</span></div><button class="act act-retry" aria-label="다시 시도"><svg class="ico"><use href="#i-retry"/></svg></button></div>
+          </div>
+        </div>
+        <p class="cap">유튜브 탭 · 눌러보기 (오디오로 바꾸면 파형)</p>
+      </div>
+
+      <div>
+        <div class="yt" data-live="ovC" data-state="ready">
+          <div class="tile">
+            <svg class="thumb" viewBox="0 0 160 90"><use href="#t-stage"/></svg>
+            <div class="ovC">
+              <div class="strip-open flex" data-show="ready">
+                <button class="sel" aria-label="비디오(MP4) 선택됨"><svg class="ico"><use href="#i-video"/></svg></button>
+                <button aria-label="오디오(MP3)"><svg class="ico"><use href="#i-audio"/></svg></button>
+                <span class="sep"></span>
+                <button data-go aria-label="360p 추출">360</button>
+                <button data-go aria-label="720p 추출">720</button>
+                <button data-go aria-label="1080p 추출">1080</button>
+              </div>
+              <div class="rb" data-show="run done"><i data-bar></i></div>
+            </div>
+            <div class="ovDone grid" data-show="done"><svg class="ico"><use href="#i-check"/></svg></div>
+          </div>
+          <div class="info"><svg class="ava" viewBox="0 0 160 90" preserveAspectRatio="xMidYMid slice"><use href="#t-stage"/></svg><div><b>라이브 세트 풀버전 · 서울 공연</b><span>채널 이름 · 조회수 12만회</span></div></div>
+        </div>
+        <p class="cap">썸네일 오버레이 · 호버하면 막대가 펼쳐짐 → 숫자 누르기</p>
+        <div class="yt" style="margin-top:24px">
+          <div class="tile">
+            <svg class="thumb" viewBox="0 0 160 90"><use href="#t-forest"/></svg>
+            <div class="ovC"><div class="rb"><i style="width:36%"></i></div></div>
+          </div>
+          <div class="info"><svg class="ava" viewBox="0 0 160 90" preserveAspectRatio="xMidYMid slice"><use href="#t-forest"/></svg><div><b>숲속 빗소리 3시간</b><span>채널 이름 · 조회수 8.4만회</span></div></div>
+        </div>
+        <p class="cap">호버를 떼도 진행 중인 영상엔 막대가 남음</p>
+      </div>
+    </div>
+    <div class="notes">
+      <div><h3>남는 글자</h3>제목, 품질 숫자. 상태는 막대 길이와 오른쪽 아이콘 하나로.</div>
+      <div><h3>강점</h3>유튜브 사용자가 이미 아는 시각 언어라 설명이 필요 없어요. 여러 개를 동시에 걸어두는 대기열 사용에 가장 강합니다.</div>
+      <div><h3>약점</h3>진행률에 빨강을 써서 <b>DESIGN.md의 "빨강은 액션 전용" 규칙과 충돌</b>해요(파랑 막대로 바꾸면 해결되지만 아이디어가 약해짐).</div>
+    </div>
+  </section>
+</main>
+
+<script>
+// 시안 동작 시뮬레이션: 형식·품질 선택과 추출 진행만 흉내 낸다.
+(function(){
+  var root=document.documentElement;
+  var themeBtn=document.getElementById('theme');
+  try{ if(localStorage.getItem('mte-theme')==='dark') root.dataset.theme='dark'; }catch(e){}
+  function syncTheme(){ themeBtn.lastChild.textContent = root.dataset.theme==='dark' ? '라이트' : '다크'; }
+  syncTheme();
+  themeBtn.addEventListener('click',function(){
+    root.dataset.theme = root.dataset.theme==='dark' ? 'light' : 'dark';
+    try{ localStorage.setItem('mte-theme',root.dataset.theme); }catch(e){}
+    syncTheme();
+  });
+
+  /** 선택 상태(mode, q)를 버튼의 pressed·checked·on 표시에 반영한다. */
+  function paint(el){
+    var mode=el.dataset.mode, q=+el.dataset.q;
+    el.querySelectorAll('[data-set-mode]').forEach(function(b){ b.setAttribute('aria-pressed', b.dataset.setMode===mode); });
+    el.querySelectorAll('[data-set-q]').forEach(function(b){
+      var i=+b.dataset.setQ, label=mode==='audio'?b.dataset.a:b.dataset.v;
+      b.setAttribute('aria-checked', i===q);
+      b.setAttribute('aria-label', label+(mode==='audio'?' kbps':'p'));
+      // A는 선택값 이하 막대를 모두 채워 "더 높을수록 더 큼"을 보이게 한다.
+      b.classList.toggle('on', el.dataset.live==='a' ? i<=q : i===q);
+      var t=b.querySelector('text, span:not(.box):not(.wave)');
+      if(b.querySelector('.n')) t=b.querySelector('.n');
+      if(t) t.textContent=label;
+      var box=b.querySelector('.box'), wave=b.querySelector('.wave');
+      if(box){ box.style.display = mode==='audio'?'none':''; wave.style.display = mode==='audio'?'flex':'none'; }
+    });
+  }
+
+  /** 0→100 진행을 링·막대·숫자에 그리고 완료 뒤 준비 상태로 되돌린다. */
+  function run(el){
+    if(el.dataset.state!=='ready') return;
+    el.dataset.state='run';
+    var reduce=matchMedia('(prefers-reduced-motion: reduce)').matches;
+    var p=0, step=reduce?25:2;
+    var timer=setInterval(function(){
+      p=Math.min(100,p+step);
+      el.querySelectorAll('[data-prog]').forEach(function(c){ c.setAttribute('stroke-dasharray', p+' 100'); });
+      el.querySelectorAll('[data-bar]').forEach(function(b){ b.style.width=p+'%'; });
+      el.querySelectorAll('[data-pct]').forEach(function(n){ n.textContent=p; });
+      if(p>=100){
+        clearInterval(timer);
+        el.dataset.state='done';
+        setTimeout(function(){
+          el.dataset.state='ready';
+          el.querySelectorAll('[data-bar]').forEach(function(b){ b.style.width='0'; });
+          el.querySelectorAll('[data-prog]').forEach(function(c){ c.setAttribute('stroke-dasharray','0 100'); });
+        },1600);
+      }
+    }, reduce?250:45);
+  }
+
+  document.querySelectorAll('[data-live]').forEach(function(el){
+    if(el.dataset.mode) paint(el);
+    el.addEventListener('click',function(e){
+      var m=e.target.closest('[data-set-mode]'), q=e.target.closest('[data-set-q]'), g=e.target.closest('[data-go]');
+      if(m){ el.dataset.mode=m.dataset.setMode; paint(el); }
+      else if(q){ el.dataset.q=q.dataset.setQ; paint(el); }
+      else if(g){ run(el); }
+    });
+    // SVG 고리 조각은 버튼이 아니므로 Enter·Space를 직접 받는다.
+    el.addEventListener('keydown',function(e){
+      var q=e.target.closest('.seg');
+      if(q && (e.key==='Enter'||e.key===' ')){ e.preventDefault(); el.dataset.q=q.dataset.setQ; paint(el); }
+    });
+  });
+})();
+</script>
+</body>
+</html>
