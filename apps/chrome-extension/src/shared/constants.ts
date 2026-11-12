@@ -23,8 +23,8 @@ const configuredApiBaseUrl =
 /** 기본 MyTube Extract API 서버 주소. */
 export const DEFAULT_API_BASE_URL = resolveDefaultApiBaseUrl(configuredApiBaseUrl);
 
-/** Chrome storage에 저장하는 popup option key 목록. */
-export const STORAGE_KEYS = ['filename', 'bitrate', 'resolution', 'mode'] as const;
+/** Chrome storage에 저장하는 popup option key 목록. 파일명은 영상별 값이라 저장하지 않는다. */
+export const STORAGE_KEYS = ['bitrate', 'resolution', 'mode'] as const;
 
 /** 환경 변수 값이 없으면 운영 API 주소를 기본값으로 사용한다. */
 export function resolveDefaultApiBaseUrl(apiBaseUrl: string | undefined): string {

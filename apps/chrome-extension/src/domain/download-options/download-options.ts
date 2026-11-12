@@ -10,7 +10,7 @@ export type DownloadOptions = {
   apiBaseUrl: string;
   /** 오디오 bitrate option. */
   bitrate: string;
-  /** 다운로드 파일명 option. */
+  /** 사용자가 고친 저장 파일명. 영상별 session-only 값이며 비어 있으면 기본 이름을 쓴다. */
   filename: string;
   /** 다운로드 모드. */
   mode: DownloadMode;
@@ -22,7 +22,7 @@ export type DownloadOptions = {
 
 /** 저장소에서 읽은 다운로드 옵션. */
 export type StoredDownloadOptions = Partial<
-  Pick<DownloadOptions, 'bitrate' | 'filename' | 'mode' | 'resolution'>
+  Pick<DownloadOptions, 'bitrate' | 'mode' | 'resolution'>
 >;
 
 /** 기본 popup 다운로드 옵션. */
@@ -48,7 +48,6 @@ export function mergeStoredDownloadOptions(
   return {
     ...DEFAULT_DOWNLOAD_OPTIONS,
     bitrate: resolveStoredQualityOption('audio', storedOptions.bitrate),
-    filename: typeof storedOptions.filename === 'string' ? storedOptions.filename : '',
     resolution: resolveStoredQualityOption('video', storedOptions.resolution),
     mode: isDownloadMode(storedMode) ? storedMode : DEFAULT_DOWNLOAD_OPTIONS.mode,
   };

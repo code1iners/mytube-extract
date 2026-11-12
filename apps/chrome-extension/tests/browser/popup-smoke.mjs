@@ -434,15 +434,24 @@ async function verifyDownloadFlow(origin) {
     /** 형식·품질 선택 뒤 저장된 옵션. */
     const storedOptions = await page.evaluate(() => globalThis.__myTubeExtractStoredOptions);
 
-    if (storedOptions.mode !== 'video' || storedOptions.resolution !== '1080' || 'sourceUrl' in storedOptions) {
+    if (storedOptions.mode !== 'video' || storedOptions.resolution !== '1080' || 'sourceUrl' in storedOptions || 'filename' in storedOptions) {
       throw new Error(`Unexpected stored options: ${JSON.stringify(storedOptions)}`);
     }
 
+    await editFilenameWithKeyboard(page);
+
     await expectDownloadButtonDisabled(page, false);
     await expectDownloadButtonVisibleInViewport(page);
-    await page.getByRole('button', { name: '추출 시작' }).click();
+    // 파일명 확정 뒤에도 키보드만으로 추출 버튼까지 이어 간다.
+    await page.getByRole('button', { name: '추출 시작' }).focus();
+    await page.keyboard.press('Enter');
     // 서버 확인 동안은 회전 링 덮개, 회색 회전 버튼, 잠긴 형식·품질을 보여준다.
     await page.locator('figure.stage [data-veil="checking"]').waitFor({ timeout: 10000 });
+    // 진행 중에는 파일명을 고칠 수 없다.
+    if ((await page.getByRole('button', { name: '파일명 바꾸기' }).count()) !== 0) {
+      throw new Error('Expected the filename edit button to be hidden while the request is in progress.');
+    }
+
     await page.getByRole('button', { name: '서버 확인 중' }).waitFor({ timeout: 10000 });
     await expectLiveText(page, '서버 확인 중');
     await expectRadiosDisabled(page, true);
@@ -472,9 +481,16 @@ async function verifyDownloadFlow(origin) {
       throw new Error(`Unexpected download URL: ${downloadUrl}`);
     }
 
-    // 파일명 편집이 없으면 로컬 파일명을 덮어쓰지 않고 서버 기본 이름을 쓴다.
-    if (downloadFilename !== null) {
+    // 편집한 파일명이 정리되어 형식 확장자와 함께 로컬 저장 이름이 된다.
+    if (downloadFilename !== '내 스모크 클립.mp4') {
       throw new Error(`Unexpected download filename: ${downloadFilename}`);
+    }
+
+    /** 파일명 편집 뒤 저장소에 남은 옵션. 파일명은 영상별 값이라 저장하지 않는다. */
+    const storedOptionsAfterSubmit = await page.evaluate(() => globalThis.__myTubeExtractStoredOptions);
+
+    if ('filename' in storedOptionsAfterSubmit) {
+      throw new Error(`Expected the filename not to be stored: ${JSON.stringify(storedOptionsAfterSubmit)}`);
     }
 
     /** 가짜 API가 받은 job 생성 요청 본문. */
@@ -491,6 +507,48 @@ async function verifyDownloadFlow(origin) {
     return requests;
   } finally {
     await browser.close();
+  }
+}
+
+/** 연필 → 입력 → Enter 확정을 키보드로만 진행한다. 빈 값 확정은 제목 기반 기본 이름으로 돌아간다. */
+async function editFilenameWithKeyboard(page) {
+  /** 제목 줄의 연필 버튼. */
+  const editButton = page.getByRole('button', { name: '파일명 바꾸기' });
+  /** 편집 중 파일명 입력칸. */
+  const filenameInput = page.getByRole('textbox', { name: '파일명' });
+
+  await editButton.focus();
+  await page.keyboard.press('Enter');
+  await filenameInput.waitFor({ timeout: 10000 });
+
+  if ((await filenameInput.inputValue()) !== '브라우저 스모크 영상') {
+    throw new Error(`Expected the edit to start from the default name, got ${await filenameInput.inputValue()}`);
+  }
+
+  // 입력칸 옆에 지금 형식의 확장자가 보인다.
+  await page.getByText('.mp4', { exact: true }).waitFor({ timeout: 10000 });
+  await expectNoHorizontalOverflow(page);
+  await saveScreenshot(page, 'popup-filename-editing-light.png');
+
+  // 비우고 확정하면 기본 이름으로 돌아간다.
+  await page.keyboard.press('Backspace');
+  await page.keyboard.press('Enter');
+  await editButton.waitFor({ timeout: 10000 });
+  await page.getByText('브라우저 스모크 영상', { exact: true }).waitFor({ timeout: 10000 });
+
+  if (!(await editButton.evaluate((button) => button === document.activeElement))) {
+    throw new Error('Expected focus to return to the filename edit button after committing.');
+  }
+
+  // 다시 열어 새 이름을 입력하고 Enter로 확정한다. 경로 구분자는 정리된다.
+  await page.keyboard.press('Enter');
+  await filenameInput.waitFor({ timeout: 10000 });
+  await page.keyboard.type('내/스모크 클립');
+  await page.keyboard.press('Enter');
+  await page.getByText('내 스모크 클립', { exact: true }).waitFor({ timeout: 10000 });
+
+  if ((await page.getByRole('listitem').count()) !== 0) {
+    throw new Error('Expected Enter in the filename input to confirm the name, not submit the request.');
   }
 }
 

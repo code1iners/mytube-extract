@@ -1,9 +1,9 @@
-import { type ChangeEvent, type FormEvent, type RefObject, useEffect, useRef, useState } from 'react';
+import { type ChangeEvent, type FormEvent, type KeyboardEvent, type RefObject, useEffect, useRef, useState } from 'react';
 import { type DownloadJob } from '../domain/download-job/download-job';
 import { type DownloadMode } from '../domain/download-options/download-options';
 import { getQualityOptions } from '../domain/download-options/quality-options';
 import { type StagePhase, type StageSource, hasStageVideo, isStagePhaseBusy, isStagePhaseProblem } from '../domain/popup-state/popup-state';
-import { type PopupDownloadModel, type PopupDownloadSnapshot, createChromePopupDownloadModel } from '../features/popup-download/popup-download-model';
+import { type FileExtension, type PopupDownloadModel, type PopupDownloadSnapshot, createChromePopupDownloadModel } from '../features/popup-download/popup-download-model';
 import { type PopupIconName, PopupIcon } from './popup-icons';
 
 /** 추출 버튼에 표시할 아이콘과 접근 가능한 이름. */
@@ -128,6 +128,11 @@ export function PopupApp() {
     void getPopupModel().updateOption(snapshot.options.mode === 'audio' ? 'bitrate' : 'resolution', event.currentTarget.value);
   }
 
+  /** 확정한 파일명을 모델에 반영한다. 빈 값이면 모델이 기본 이름으로 돌린다. */
+  function handleFilenameCommit(filename: string) {
+    void getPopupModel().updateOption('filename', filename.trim());
+  }
+
   /** form submit으로 서버 확인과 다운로드 요청을 시작한다. */
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -140,7 +145,9 @@ export function PopupApp() {
       {hasStageVideo(stageSource)
         ? <StageThumbnail key={stageSource.thumbnailUrl} phase={snapshot.stagePhase} thumbnailUrl={stageSource.thumbnailUrl} />
         : <PasteField inputRef={sourceInputRef} invalid={stageSource.kind === 'invalid'} sourceUrl={snapshot.options.sourceUrl} onChange={handleSourceUrlChange} onClear={handleClearSourceUrl} />}
-      <StageLine reason={snapshot.status.message} stageSource={stageSource} />
+      {hasStageVideo(stageSource)
+        ? <FilenameLine key={stageSource.videoId} extension={snapshot.fileExtension} filename={snapshot.stageFilename} locked={controlsLocked} onCommit={handleFilenameCommit} />
+        : <StageLine reason={snapshot.status.message} stageSource={stageSource} />}
       <StageProblemLine snapshot={snapshot} />
       <div className="stage-controls">
         <ModeToggle disabled={controlsLocked} mode={snapshot.options.mode} onChange={handleModeChange} />
@@ -226,15 +233,72 @@ function PasteField(props: { /** 주소 입력 ref. */ inputRef: RefObject<HTMLI
   </div>;
 }
 
-/** 무대 아래 한 줄. 영상 제목(모르면 영상 ID)이나 잘못된 주소의 이유를 보여준다. */
-function StageLine(props: { /** 무대 원본. */ stageSource: StageSource; /** 잘못된 주소의 이유. */ reason: string }) {
-  if (hasStageVideo(props.stageSource)) {
-    /** 화면에 보일 제목. */
-    const title = props.stageSource.title ?? props.stageSource.videoId;
+/** 무대 아래 제목 줄 = 저장 파일명. 연필로 입력칸과 확장자 표시로 바꾸고, Enter나 체크 버튼으로 확정한다. 영상이 바뀌면 key로 새로 시작한다. */
+function FilenameLine(props: { /** 지금 저장될 파일명(확장자 제외). */ filename: string; /** 지금 형식의 확장자. */ extension: FileExtension; /** 진행 중이라 편집을 막는지 여부. */ locked: boolean; /** 파일명 확정. */ onCommit: (filename: string) => void }) {
+  // Refs.
 
-    return <p className="stage-line stage-line--title" title={title}>{title}</p>;
+  /** 연필 버튼. 편집을 끝내면 포커스를 돌려준다. */
+  const editButtonRef = useRef<HTMLButtonElement | null>(null);
+  /** 편집을 끝낸 직후인지 여부. 처음 그릴 때는 연필에 포커스를 옮기지 않는다. */
+  const returnFocusRef = useRef(false);
+
+  // States.
+
+  /** 편집 중 입력값. null이면 편집 중이 아니다. */
+  const [draft, setDraft] = useState<string | null>(null);
+
+  // Computed.
+
+  /** 편집 입력칸을 보여 주는지 여부. 진행이 시작되면 편집 중이던 입력도 닫는다. */
+  const editing = draft !== null && !props.locked;
+
+  // Effects.
+
+  useEffect(function returnFocusToEditButton() {
+    // 확정·취소 뒤 키보드 사용자가 같은 자리에서 이어 갈 수 있게 연필로 포커스를 돌린다.
+    if (!editing && returnFocusRef.current) {
+      returnFocusRef.current = false;
+      editButtonRef.current?.focus();
+    }
+  }, [editing]);
+
+  // Handlers.
+
+  /** 입력값을 확정하고 제목 줄로 돌아간다. */
+  function commit() {
+    props.onCommit(draft ?? '');
+    returnFocusRef.current = true;
+    setDraft(null);
   }
 
+  /** Enter는 form 제출 대신 파일명 확정, Escape는 편집 취소로 쓴다. */
+  function handleKeyDown(event: KeyboardEvent<HTMLInputElement>) {
+    if (event.key === 'Enter') {
+      event.preventDefault();
+      commit();
+    } else if (event.key === 'Escape') {
+      event.preventDefault();
+      returnFocusRef.current = true;
+      setDraft(null);
+    }
+  }
+
+  if (editing) {
+    return <div className="stage-line stage-line--editing">
+      <input aria-label="파일명" autoFocus className="stage-line__input" name="filename" spellCheck={false} type="text" value={draft} onChange={(event) => setDraft(event.currentTarget.value)} onFocus={(event) => event.currentTarget.select()} onKeyDown={handleKeyDown} />
+      <span className="stage-line__extension">.{props.extension}</span>
+      <button aria-label="파일명 저장" className="icon-button" type="button" onClick={commit}><PopupIcon name="check" /></button>
+    </div>;
+  }
+
+  return <div className="stage-line stage-line--title">
+    <p className="stage-line__text" title={props.filename}>{props.filename}</p>
+    {props.locked ? null : <button ref={editButtonRef} aria-label="파일명 바꾸기" className="icon-button" type="button" onClick={() => setDraft(props.filename)}><PopupIcon name="pencil" /></button>}
+  </div>;
+}
+
+/** 무대 아래 한 줄. 붙여넣기 칸 상태에서 잘못된 주소의 이유를 보여준다. */
+function StageLine(props: { /** 무대 원본. */ stageSource: StageSource; /** 잘못된 주소의 이유. */ reason: string }) {
   if (props.stageSource.kind === 'invalid') {
     return <p className="stage-line stage-line--error" id={SOURCE_URL_REASON_ID} role="alert">{props.reason}</p>;
   }

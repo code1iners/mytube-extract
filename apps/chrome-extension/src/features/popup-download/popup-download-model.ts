@@ -17,6 +17,7 @@ import {
   getDownloadJobVideoId,
 } from '../../domain/download-job/download-job';
 import {
+  type DownloadMode,
   type DownloadOptions,
   DEFAULT_DOWNLOAD_OPTIONS,
   mergeStoredDownloadOptions,
@@ -46,6 +47,7 @@ import {
   parseYoutubeTabTitle,
 } from '../../domain/popup-state/popup-state';
 import { sanitizeFilenameSegment } from '../../shared/sanitize-filename';
+import { sanitizeYoutubeOverlayFilename } from '../youtube-overlay/youtube-overlay-download';
 
 /** Popup model dependency. */
 export type PopupDownloadModelDependencies = {
@@ -87,9 +89,16 @@ export type PopupDownloadSnapshot = {
   stageSource: StageSource;
   /** 무대 위 진행 단계. 현재 무대 영상의 최신 job을 기준으로 도출한다. */
   stagePhase: StagePhase;
+  /** 무대 아래 제목 줄에 보일 저장 파일명(확장자 제외). 편집값을 정리한 값이고, 없으면 기본 이름이다. 무대 영상이 없으면 빈 문자열이다. */
+  stageFilename: string;
+  /** 지금 형식으로 저장될 파일의 확장자. */
+  fileExtension: FileExtension;
   /** YouTube 썸네일 Overlay 상태. */
   youtubeOverlay: YoutubeOverlaySnapshot;
 };
+
+/** 저장 파일 확장자. */
+export type FileExtension = 'mp3' | 'mp4';
 
 /** Popup model. */
 export type PopupDownloadModel = {
@@ -122,6 +131,8 @@ const INITIAL_SNAPSHOT: PopupDownloadSnapshot = {
   status: MISSING_SOURCE_URL_STATUS,
   stageSource: { kind: 'empty' },
   stagePhase: 'idle',
+  stageFilename: '',
+  fileExtension: 'mp3',
   youtubeOverlay: {
     enabled: false,
     message: 'YouTube 썸네일 버튼 권한을 확인하고 있습니다.',
@@ -319,6 +330,8 @@ export function createPopupDownloadModel(
         isSubmittableSource(base.options) &&
         !isStagePhaseBusy(progress.phase),
       downloading: base.jobs.some(isUnsettledJob),
+      fileExtension: getFileExtension(base.options.mode),
+      stageFilename: resolveStageFilename(base.options.filename, stageSource),
       stagePhase: progress.phase,
       stageSource,
       status: derivePopupStatus(stageSource, progress),
@@ -408,7 +421,7 @@ export function createPopupDownloadModel(
     if (!isStagePhaseProblem(progress.phase)) {
       return {
         apiBaseUrl: options.apiBaseUrl,
-        localFilename: resolveLocalFilename(options.filename),
+        localFilename: buildLocalFilename(snapshot.stageFilename, options.mode),
         mode: options.mode,
         quality: resolveJobQuality(options),
         sourceUrl: options.sourceUrl,
@@ -420,11 +433,14 @@ export function createPopupDownloadModel(
       return submitFailure.request;
     }
 
+    /** 다시 시도할 형식. */
+    const mode = progress.job?.type ?? options.mode;
+
     // 접수 뒤 실패한 job은 그 job의 원본·형식·품질로 다시 보낸다. Popup을 다시 열어 옵션이 달라졌어도 같은 조건이 된다.
     return {
       apiBaseUrl: options.apiBaseUrl,
-      localFilename: resolveLocalFilename(options.filename),
-      mode: progress.job?.type ?? options.mode,
+      localFilename: buildLocalFilename(snapshot.stageFilename, mode),
+      mode,
       quality: progress.job?.quality ?? resolveJobQuality(options),
       sourceUrl: progress.job?.sourceUrl ?? options.sourceUrl,
     };
@@ -496,9 +512,11 @@ export function createPopupDownloadModel(
         // 탭을 읽지 못하면 원본 없이 붙여넣기 칸에서 시작한다.
       }
 
-      // 원본 URL은 저장하지 않으므로 저장된 값 대신 활성 탭에서 매번 새로 정한다.
+      // 원본 URL과 파일명은 저장하지 않으므로 활성 탭에서 매번 새로 정한다.
+      // 예전 버전이 저장해 둔 파일명이 섞여 들어와도 버린다.
       options = {
         ...options,
+        filename: '',
         sourceUrl: tabSourceUrl,
       };
 
@@ -619,6 +637,11 @@ export function createPopupDownloadModel(
       }
     },
     async updateOption(key, value) {
+      // 진행 중에 이름을 바꾸면 이미 보낸 요청의 저장 이름과 화면이 어긋나므로 받지 않는다.
+      if (key === 'filename' && isStagePhaseBusy(snapshot.stagePhase)) {
+        return;
+      }
+
       hasUserInteracted = true;
       // 조건이 바뀌면 이전 실패·완료 표시는 더 이상 이 요청의 결과가 아니다.
       dismissStageResult();
@@ -630,10 +653,18 @@ export function createPopupDownloadModel(
         [key]: value,
       };
 
+      // 파일명은 영상별 값이라 원본 영상이 바뀌면 이전 영상에서 고친 이름을 버린다.
+      if (
+        key === 'sourceUrl' &&
+        parseYoutubeVideoId(options.sourceUrl) !== getStageVideoId(snapshot.stageSource)
+      ) {
+        options.filename = '';
+      }
+
       refresh({ options });
 
-      // sourceUrl은 session-only 입력이므로 Chrome storage 저장에서 제외한다.
-      if (key === 'sourceUrl') {
+      // 원본 URL과 파일명은 session-only 입력이므로 Chrome storage 저장에서 제외한다.
+      if (key === 'sourceUrl' || key === 'filename') {
         return;
       }
 
@@ -662,10 +693,28 @@ function resolveJobQuality(options: DownloadOptions): DownloadQuality {
   return (options.mode === 'audio' ? options.bitrate : options.resolution) as DownloadQuality;
 }
 
-/** 사용자가 입력한 파일명을 로컬 저장에 안전한 형태로 정리한다. 정리 후 비어 있거나 상대 경로 표기만 남으면 override하지 않는다. */
-function resolveLocalFilename(filename: string): string {
-  /** 경로 구분자·제어 문자를 제거한 파일명. */
-  const sanitized = sanitizeFilenameSegment(filename);
+/** 형식에 맞는 저장 파일 확장자를 고른다. */
+function getFileExtension(mode: DownloadMode): FileExtension {
+  return mode === 'audio' ? 'mp3' : 'mp4';
+}
 
-  return sanitized === '.' || sanitized === '..' ? '' : sanitized;
+/** 무대 영상의 저장 파일명(확장자 제외)을 정한다. 편집값을 정리해 쓰고, 비거나 상대 경로 표기만 남으면 제목 기반 기본 이름(실패 시 영상 ID)으로 돌아간다. */
+function resolveStageFilename(editedFilename: string, stageSource: StageSource): string {
+  if (!hasStageVideo(stageSource)) {
+    return '';
+  }
+
+  /** 경로 구분자·제어 문자를 정리한 편집값. */
+  const sanitized = sanitizeFilenameSegment(editedFilename);
+
+  if (sanitized && sanitized !== '.' && sanitized !== '..') {
+    return sanitized;
+  }
+
+  return sanitizeYoutubeOverlayFilename(stageSource.title ?? '', stageSource.videoId);
+}
+
+/** 로컬 저장에 넘길 파일명. 입력칸 옆에 보인 확장자를 그대로 붙인다. */
+function buildLocalFilename(stageFilename: string, mode: DownloadMode): string {
+  return `${stageFilename}.${getFileExtension(mode)}`;
 }

@@ -51,7 +51,20 @@ describe('Chrome storage adapter', () => {
     );
   });
 
-  it('saves only the non-sensitive download options', async () => {
+  it('ignores a filename stored by an earlier version', async () => {
+    /** 테스트용 Chrome API. */
+    const chromeApi = createChromeApi({
+      lastError: null,
+      storedItems: { bitrate: '192', filename: '예전 이름', mode: 'audio' },
+    });
+    /** storage adapter. */
+    const adapter = createStorageAdapter(chromeApi);
+
+    await expect(adapter.loadOptions()).resolves.toMatchObject({ filename: '' });
+    expect(STORAGE_KEYS).not.toContain('filename');
+  });
+
+  it('saves only format and quality, leaving out the per-video filename and source', async () => {
     /** 테스트용 Chrome API. */
     const chromeApi = createChromeApi({ lastError: null, storedItems: {} });
     /** storage adapter. */
@@ -67,7 +80,7 @@ describe('Chrome storage adapter', () => {
     });
 
     expect(chromeApi.storage.local.set).toHaveBeenCalledWith(
-      { bitrate: '192', filename: 'clip', mode: 'audio', resolution: '' },
+      { bitrate: '192', mode: 'audio', resolution: '' },
       expect.any(Function),
     );
   });

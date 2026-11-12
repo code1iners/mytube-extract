@@ -80,7 +80,7 @@ describe('download URL behavior', () => {
     );
   });
 
-  it('keeps storage compatibility while ignoring saved API and source URLs', () => {
+  it('keeps storage compatibility while ignoring saved API, source URLs and filenames', () => {
     expect(
       mergeStoredDownloadOptions({
         apiBaseUrl: 'http://127.0.0.1:3030',
@@ -90,7 +90,7 @@ describe('download URL behavior', () => {
       } as never),
     ).toMatchObject({
       apiBaseUrl: 'https://mytube-extract-api.codeliners.cc',
-      filename: 'saved',
+      filename: '',
       mode: 'video',
       sourceUrl: '',
     });
