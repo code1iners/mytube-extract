@@ -1,4 +1,9 @@
-import { type CreateDownloadJobInput, type DownloadJob } from '../../domain/download-job/download-job';
+import {
+  type CreateDownloadJobInput,
+  type DownloadJob,
+  type StoredDownloadJob,
+  restoreStoredDownloadJob,
+} from '../../domain/download-job/download-job';
 import { normalizeApiBaseUrl, normalizeSourceUrl } from '../../domain/download-options/download-options';
 import { buildDownloadJobUrl, buildDownloadJobsUrl, buildHealthUrl } from './download-url';
 
@@ -36,13 +41,8 @@ export class DownloadJobRequestError extends Error {
   responseMessage: string | undefined;
 }
 
-/** 서버가 내려주는 job 상태 원본 응답. `downloadUrl`은 API base URL 기준 상대 경로다. */
-type RawDownloadJobResponse = Omit<DownloadJob, 'sourceUrl' | 'title'> & {
-  /** 원본 YouTube 주소. 이전 버전 서버 응답에는 없을 수 있다. */
-  sourceUrl?: string | null;
-  /** 요청 영상 제목. 이전 버전 서버 응답에는 없을 수 있다. */
-  title?: string | null;
-};
+/** 서버가 내려주는 job 상태 원본 응답. `downloadUrl`은 API base URL 기준 상대 경로다. 원본 주소·제목이 빠진 응답도 예전 저장 job과 같은 방식으로 null로 채운다. */
+type RawDownloadJobResponse = StoredDownloadJob;
 
 /** MyTube Extract API client를 만든다. */
 export function createMyTubeExtractClient(
@@ -152,9 +152,7 @@ async function readErrorMessage(response: Response): Promise<string | undefined>
 /** 서버 원본 job 응답을 상대 경로가 절대 URL로 resolve된 domain 값으로 바꾼다. */
 function toDownloadJob(raw: RawDownloadJobResponse, apiBaseUrl: string): DownloadJob {
   return {
-    ...raw,
+    ...restoreStoredDownloadJob(raw),
     downloadUrl: raw.downloadUrl ? `${apiBaseUrl}${raw.downloadUrl}` : null,
-    sourceUrl: raw.sourceUrl ?? null,
-    title: raw.title ?? null,
   };
 }

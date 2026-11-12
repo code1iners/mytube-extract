@@ -1,18 +1,13 @@
-import { type DownloadJob } from '../../domain/download-job/download-job';
+import {
+  type DownloadJob,
+  type StoredDownloadJob,
+  restoreStoredDownloadJob,
+} from '../../domain/download-job/download-job';
 
 /** 최근 다운로드 job을 저장하는 chrome.storage.local key. */
 export const LATEST_DOWNLOAD_JOB_STORAGE_KEY = 'latestDownloadJob';
 /** 최근 다운로드 job 목록을 저장하는 chrome.storage.local key. */
 export const RECENT_DOWNLOAD_JOBS_STORAGE_KEY = 'recentDownloadJobs';
-
-/** storage에 남아 있는 job 값. 원본 주소·제목 필드가 생기기 전 버전이 저장한 job에는 두 필드가 없다. */
-type StoredDownloadJob = Omit<DownloadJob, 'sourceUrl' | 'title'> &
-  Partial<Pick<DownloadJob, 'sourceUrl' | 'title'>>;
-
-/** 예전 버전이 저장한 job도 현재 job 모양으로 읽히도록 빠진 원본 주소·제목을 null로 채운다. */
-function restoreStoredDownloadJob(job: StoredDownloadJob): DownloadJob {
-  return { ...job, sourceUrl: job.sourceUrl ?? null, title: job.title ?? null };
-}
 
 /** 최근 다운로드 job 영속 저장 adapter. Popup이 닫혀 있어도 Background가 기록한 최신 상태를 읽고 구독할 수 있게 한다. */
 export type DownloadJobStorageAdapter = {

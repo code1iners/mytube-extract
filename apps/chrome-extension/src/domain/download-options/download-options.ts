@@ -128,7 +128,7 @@ export function normalizeSourceUrl(sourceUrl: string | undefined): string {
 }
 
 /** 지원 YouTube 주소 문자열에서 영상 ID를 읽는다. 주소가 아니거나 지원 형식이 아니면 null을 돌려준다. */
-export function readYoutubeVideoId(sourceUrl: string): string | null {
+export function parseYoutubeVideoId(sourceUrl: string): string | null {
   try {
     return getYoutubeVideoId(new URL(sourceUrl.trim())) || null;
   } catch {

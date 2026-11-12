@@ -1,4 +1,4 @@
-import { type DownloadMode, readYoutubeVideoId } from '../download-options/download-options';
+import { type DownloadMode, parseYoutubeVideoId } from '../download-options/download-options';
 
 /** 다운로드 job 실제 상태. */
 export type DownloadJobStatus = 'queued' | 'processing' | 'completed' | 'failed';
@@ -63,5 +63,14 @@ export type CreateDownloadJobInput = {
 
 /** job의 원본 주소에서 YouTube 영상 ID를 얻는다. 원본 주소가 없는 예전 job이나 지원하지 않는 주소면 null이다. */
 export function getDownloadJobVideoId(job: Pick<DownloadJob, 'sourceUrl'>): string | null {
-  return job.sourceUrl ? readYoutubeVideoId(job.sourceUrl) : null;
+  return job.sourceUrl ? parseYoutubeVideoId(job.sourceUrl) : null;
+}
+
+/** storage에 남아 있는 job 값. 원본 주소·제목 필드가 생기기 전 버전이 저장한 job에는 두 필드가 없다. */
+export type StoredDownloadJob = Omit<DownloadJob, 'sourceUrl' | 'title'> &
+  Partial<Pick<DownloadJob, 'sourceUrl' | 'title'>>;
+
+/** 예전 버전이 저장한 job도 현재 job 모양으로 읽히도록 빠진 원본 주소·제목을 null로 채운다. */
+export function restoreStoredDownloadJob(job: StoredDownloadJob): DownloadJob {
+  return { ...job, sourceUrl: job.sourceUrl ?? null, title: job.title ?? null };
 }
