@@ -5,6 +5,15 @@ export const LATEST_DOWNLOAD_JOB_STORAGE_KEY = 'latestDownloadJob';
 /** 최근 다운로드 job 목록을 저장하는 chrome.storage.local key. */
 export const RECENT_DOWNLOAD_JOBS_STORAGE_KEY = 'recentDownloadJobs';
 
+/** storage에 남아 있는 job 값. 원본 주소·제목 필드가 생기기 전 버전이 저장한 job에는 두 필드가 없다. */
+type StoredDownloadJob = Omit<DownloadJob, 'sourceUrl' | 'title'> &
+  Partial<Pick<DownloadJob, 'sourceUrl' | 'title'>>;
+
+/** 예전 버전이 저장한 job도 현재 job 모양으로 읽히도록 빠진 원본 주소·제목을 null로 채운다. */
+function restoreStoredDownloadJob(job: StoredDownloadJob): DownloadJob {
+  return { ...job, sourceUrl: job.sourceUrl ?? null, title: job.title ?? null };
+}
+
 /** 최근 다운로드 job 영속 저장 adapter. Popup이 닫혀 있어도 Background가 기록한 최신 상태를 읽고 구독할 수 있게 한다. */
 export type DownloadJobStorageAdapter = {
   /** 저장된 최근 job 목록을 읽는다. 최신순으로 반환한다. */
@@ -40,14 +49,14 @@ export function createDownloadJobStorageAdapter(
             const storedJobs = items[RECENT_DOWNLOAD_JOBS_STORAGE_KEY];
 
             if (Array.isArray(storedJobs)) {
-              resolve(storedJobs as DownloadJob[]);
+              resolve(storedJobs.map(restoreStoredDownloadJob));
               return;
             }
 
             /** 이전 버전의 단일 latest job. */
-            const legacyJob = items[LATEST_DOWNLOAD_JOB_STORAGE_KEY] as DownloadJob | undefined;
+            const legacyJob = items[LATEST_DOWNLOAD_JOB_STORAGE_KEY] as StoredDownloadJob | undefined;
 
-            resolve(legacyJob ? [legacyJob] : []);
+            resolve(legacyJob ? [restoreStoredDownloadJob(legacyJob)] : []);
           },
         );
       });
@@ -83,7 +92,7 @@ export function createDownloadJobStorageAdapter(
         if (jobsChange) {
           listener(
             Array.isArray(jobsChange.newValue)
-              ? (jobsChange.newValue as DownloadJob[])
+              ? (jobsChange.newValue as StoredDownloadJob[]).map(restoreStoredDownloadJob)
               : [],
           );
           return;
@@ -94,9 +103,9 @@ export function createDownloadJobStorageAdapter(
         const legacyChange = changes[LATEST_DOWNLOAD_JOB_STORAGE_KEY];
 
         if (legacyChange) {
-          const legacyJob = legacyChange.newValue as DownloadJob | undefined;
+          const legacyJob = legacyChange.newValue as StoredDownloadJob | undefined;
 
-          listener(legacyJob ? [legacyJob] : []);
+          listener(legacyJob ? [restoreStoredDownloadJob(legacyJob)] : []);
         }
       }
 
@@ -115,9 +124,9 @@ export function createDownloadJobStorageAdapter(
           }
 
           /** 저장된 최근 job. */
-          const storedJob = items[LATEST_DOWNLOAD_JOB_STORAGE_KEY] as DownloadJob | undefined;
+          const storedJob = items[LATEST_DOWNLOAD_JOB_STORAGE_KEY] as StoredDownloadJob | undefined;
 
-          resolve(storedJob ?? null);
+          resolve(storedJob ? restoreStoredDownloadJob(storedJob) : null);
         });
       });
     },
@@ -150,7 +159,7 @@ export function createDownloadJobStorageAdapter(
           return;
         }
 
-        listener(change.newValue as DownloadJob);
+        listener(restoreStoredDownloadJob(change.newValue as StoredDownloadJob));
       }
 
       chromeApi.storage.onChanged.addListener(handleStorageChange);

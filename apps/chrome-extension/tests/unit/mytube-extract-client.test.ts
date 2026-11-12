@@ -18,7 +18,9 @@ function createJobResponseBody(
     progress: 0,
     quality: '320',
     retentionDays: 7,
+    sourceUrl: 'https://www.youtube.com/watch?v=abc123_DEF0',
     status: 'queued',
+    title: '테스트 영상 제목',
     type: 'audio',
     ...overrides,
   };
@@ -80,6 +82,64 @@ describe('mytube extract client download jobs', () => {
 
     expect(fetchMock).toHaveBeenCalledWith('http://127.0.0.1:3030/downloads/job-1', undefined);
     expect(job.downloadUrl).toBe('http://127.0.0.1:3030/downloads/job-1/file');
+  });
+
+  it('keeps the source URL and requested video title from the job response', async () => {
+    /** 가짜 fetch 함수. */
+    const fetchMock = vi.fn().mockResolvedValue({
+      json: () => Promise.resolve(createJobResponseBody()),
+      ok: true,
+      status: 200,
+    });
+    /** 테스트용 client. */
+    const client = createMyTubeExtractClient({ fetch: fetchMock });
+
+    /** job 상태 조회 결과. */
+    const job = await client.getDownloadJob('http://127.0.0.1:3030', 'job-1');
+
+    expect(job.sourceUrl).toBe('https://www.youtube.com/watch?v=abc123_DEF0');
+    expect(job.title).toBe('테스트 영상 제목');
+  });
+
+  it('keeps a null requested video title from the job creation response', async () => {
+    /** 가짜 fetch 함수. */
+    const fetchMock = vi.fn().mockResolvedValue({
+      json: () => Promise.resolve(createJobResponseBody({ title: null })),
+      ok: true,
+      status: 201,
+    });
+    /** 테스트용 client. */
+    const client = createMyTubeExtractClient({ fetch: fetchMock });
+
+    /** job 생성 결과. */
+    const job = await client.createDownloadJob({
+      apiBaseUrl: 'http://127.0.0.1:3030',
+      quality: '320',
+      sourceUrl: 'https://youtu.be/abc123_DEF0',
+      type: 'audio',
+    });
+
+    expect(job.sourceUrl).toBe('https://www.youtube.com/watch?v=abc123_DEF0');
+    expect(job.title).toBeNull();
+  });
+
+  it('fills empty values when the job response omits the source URL and title', async () => {
+    /** source URL과 제목이 없는 응답 body. */
+    const { sourceUrl: _sourceUrl, title: _title, ...bodyWithoutSource } = createJobResponseBody();
+    /** 가짜 fetch 함수. */
+    const fetchMock = vi.fn().mockResolvedValue({
+      json: () => Promise.resolve(bodyWithoutSource),
+      ok: true,
+      status: 200,
+    });
+    /** 테스트용 client. */
+    const client = createMyTubeExtractClient({ fetch: fetchMock });
+
+    /** job 상태 조회 결과. */
+    const job = await client.getDownloadJob('http://127.0.0.1:3030', 'job-1');
+
+    expect(job.sourceUrl).toBeNull();
+    expect(job.title).toBeNull();
   });
 
   it('throws a distinguishable error with the response status on job request failures', async () => {

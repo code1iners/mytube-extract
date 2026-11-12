@@ -6,6 +6,14 @@ import {
   createDownloadJobStorageAdapter,
 } from '../../src/adapters/chrome/download-job-storage';
 
+/** 원본 주소·제목 필드가 생기기 전 버전이 저장한 job 모양을 만든다. */
+function createLegacyStoredJob(overrides: Partial<DownloadJob> = {}): Record<string, unknown> {
+  /** 현재 job에서 두 필드를 뺀 예전 저장 값. */
+  const { sourceUrl: _sourceUrl, title: _title, ...legacyJob } = createJob(overrides);
+
+  return legacyJob;
+}
+
 /** 테스트용 job 상태를 만든다. */
 function createJob(overrides: Partial<DownloadJob> = {}): DownloadJob {
   return {
@@ -18,7 +26,9 @@ function createJob(overrides: Partial<DownloadJob> = {}): DownloadJob {
     progress: 0,
     quality: '192',
     retentionDays: 7,
+    sourceUrl: 'https://www.youtube.com/watch?v=abc123_DEF0',
     status: 'queued',
+    title: '테스트 영상 제목',
     type: 'audio',
     ...overrides,
   };
@@ -99,6 +109,90 @@ describe('download job storage adapter', () => {
       'local',
     );
     expect(listener).toHaveBeenCalledWith(jobs);
+  });
+
+  it('saves and restores the source URL and requested video title of each job', async () => {
+    /** 원본 주소와 제목을 가진 job 목록. 제목이 없는 job도 포함한다. */
+    const jobs = [
+      createJob({ jobId: 'job-2', title: null }),
+      createJob({ jobId: 'job-1', sourceUrl: 'https://www.youtube.com/watch?v=zyx987_WVU6' }),
+    ];
+    /** 저장 후 다시 읽을 storage 값. */
+    const storedItems: Record<string, unknown> = {};
+    /** 테스트용 Chrome API. */
+    const chromeApi = createChromeApi({ lastError: null, storedItems });
+    /** job storage adapter. */
+    const adapter = createDownloadJobStorageAdapter(chromeApi);
+
+    await adapter.saveJobs(jobs);
+    Object.assign(storedItems, vi.mocked(chromeApi.storage.local.set).mock.calls[0]?.[0]);
+
+    /** 다시 읽은 job 목록. */
+    const restoredJobs = await adapter.loadJobs();
+
+    expect(restoredJobs.map((job) => [job.sourceUrl, job.title])).toEqual([
+      ['https://www.youtube.com/watch?v=abc123_DEF0', null],
+      ['https://www.youtube.com/watch?v=zyx987_WVU6', '테스트 영상 제목'],
+    ]);
+  });
+
+  it('restores previously stored jobs without source URL and title as empty values', async () => {
+    /** 테스트용 Chrome API. */
+    const chromeApi = createChromeApi({
+      lastError: null,
+      storedItems: {
+        [RECENT_DOWNLOAD_JOBS_STORAGE_KEY]: [createLegacyStoredJob({ status: 'completed' })],
+      },
+    });
+    /** job storage adapter. */
+    const adapter = createDownloadJobStorageAdapter(chromeApi);
+
+    await expect(adapter.loadJobs()).resolves.toEqual([
+      createJob({ sourceUrl: null, status: 'completed', title: null }),
+    ]);
+  });
+
+  it('restores a legacy latest job without source URL and title as empty values', async () => {
+    /** 테스트용 Chrome API. */
+    const chromeApi = createChromeApi({
+      lastError: null,
+      storedItems: { [LATEST_DOWNLOAD_JOB_STORAGE_KEY]: createLegacyStoredJob() },
+    });
+    /** job storage adapter. */
+    const adapter = createDownloadJobStorageAdapter(chromeApi);
+    /** 기대하는 복원 job. */
+    const expectedJob = createJob({ sourceUrl: null, title: null });
+
+    await expect(adapter.loadJobs()).resolves.toEqual([expectedJob]);
+    await expect(adapter.loadLatestJob()).resolves.toEqual(expectedJob);
+  });
+
+  it('delivers changed jobs without source URL and title as empty values to subscribers', () => {
+    /** 테스트용 Chrome API. */
+    const chromeApi = createChromeApi({ lastError: null, storedItems: {} });
+    /** job storage adapter. */
+    const adapter = createDownloadJobStorageAdapter(chromeApi);
+    /** 목록 구독 listener. */
+    const jobsListener = vi.fn();
+    /** 단일 latest job 구독 listener. */
+    const latestListener = vi.fn();
+    /** 기대하는 복원 job. */
+    const expectedJob = createJob({ sourceUrl: null, title: null });
+
+    adapter.subscribeJobs(jobsListener);
+    adapter.subscribeLatestJob(latestListener);
+    chromeApi.storage.onChanged.__fire(
+      { [RECENT_DOWNLOAD_JOBS_STORAGE_KEY]: { newValue: [createLegacyStoredJob()] } },
+      'local',
+    );
+    chromeApi.storage.onChanged.__fire(
+      { [LATEST_DOWNLOAD_JOB_STORAGE_KEY]: { newValue: createLegacyStoredJob() } },
+      'local',
+    );
+
+    expect(jobsListener).toHaveBeenNthCalledWith(1, [expectedJob]);
+    expect(jobsListener).toHaveBeenNthCalledWith(2, [expectedJob]);
+    expect(latestListener).toHaveBeenCalledWith(expectedJob);
   });
 
   it('resolves null when no job has been saved yet', async () => {

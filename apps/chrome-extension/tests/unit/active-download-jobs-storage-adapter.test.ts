@@ -18,7 +18,9 @@ function createJob(overrides: Partial<DownloadJob> = {}): DownloadJob {
     progress: 50,
     quality: '192',
     retentionDays: 7,
+    sourceUrl: 'https://www.youtube.com/watch?v=abc123_DEF0',
     status: 'processing',
+    title: null,
     type: 'audio',
     ...overrides,
   };

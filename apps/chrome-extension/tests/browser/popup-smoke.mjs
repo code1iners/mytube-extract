@@ -404,7 +404,9 @@ async function routeMyTubeExtractApi(page, { requests, healthOk }) {
           progress: 100,
           quality: body.quality,
           retentionDays: 7,
+          sourceUrl: body.url,
           status: 'completed',
+          title: null,
           type: body.type,
         }),
       });

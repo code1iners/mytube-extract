@@ -37,7 +37,12 @@ export class DownloadJobRequestError extends Error {
 }
 
 /** 서버가 내려주는 job 상태 원본 응답. `downloadUrl`은 API base URL 기준 상대 경로다. */
-type RawDownloadJobResponse = DownloadJob;
+type RawDownloadJobResponse = Omit<DownloadJob, 'sourceUrl' | 'title'> & {
+  /** 원본 YouTube 주소. 이전 버전 서버 응답에는 없을 수 있다. */
+  sourceUrl?: string | null;
+  /** 요청 영상 제목. 이전 버전 서버 응답에는 없을 수 있다. */
+  title?: string | null;
+};
 
 /** MyTube Extract API client를 만든다. */
 export function createMyTubeExtractClient(
@@ -149,5 +154,7 @@ function toDownloadJob(raw: RawDownloadJobResponse, apiBaseUrl: string): Downloa
   return {
     ...raw,
     downloadUrl: raw.downloadUrl ? `${apiBaseUrl}${raw.downloadUrl}` : null,
+    sourceUrl: raw.sourceUrl ?? null,
+    title: raw.title ?? null,
   };
 }
