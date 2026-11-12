@@ -50,10 +50,12 @@ const STATE_LABELS: Record<RecentRequestState, string> = {
   queued: '대기 중',
 };
 
-/** 완료 파일의 보관 기간이 지났는지 확인한다. */
-// Background는 완료 뒤 job을 다시 조회하지 않아 저장된 job이 `completed`로 남는다.
-// 그래서 서버의 `expired` 외에 생성 시각 + 보관 기간으로도 판정한다. 완료 시각이 아닌 생성 시각을
-// 기준으로 하므로 서버보다 조금 일찍 만료로 볼 수 있지만, 이미 지워진 주소를 내미는 것보다 낫다.
+/**
+ * 완료 파일의 보관 기간이 지났는지 확인한다.
+ * Background는 완료 뒤 job을 다시 조회하지 않아 저장된 job이 `completed`로 남는다.
+ * 그래서 서버의 `expired` 외에 생성 시각 + 보관 기간으로도 판정한다. 완료 시각이 아닌 생성 시각을
+ * 기준으로 하므로 서버보다 조금 일찍 만료로 볼 수 있지만, 이미 지워진 주소를 내미는 것보다 낫다.
+ */
 export function isDownloadJobExpired(job: DownloadJob, now: number): boolean {
   if (job.displayStatus === 'expired') {
     return true;

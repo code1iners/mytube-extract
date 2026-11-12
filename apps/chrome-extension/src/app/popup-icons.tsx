@@ -8,6 +8,7 @@ export type PopupIconName =
   | 'check'
   | 'chevron'
   | 'clock'
+  | 'clock-off'
   | 'cloud-off'
   | 'down'
   | 'grid'
@@ -31,6 +32,12 @@ const ICON_PATHS: Record<PopupIconName, ReactNode> = {
     <>
       <circle cx="12" cy="12" r="8.5" />
       <path d="M12 7.5V12l3 2" />
+    </>
+  ),
+  'clock-off': (
+    <>
+      <circle cx="12" cy="12" r="8.5" />
+      <path d="M12 7.5V12M4 4l16 16" />
     </>
   ),
   'cloud-off': (

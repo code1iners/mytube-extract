@@ -82,6 +82,16 @@ export type YoutubeOverlaySnapshot = {
 export type PopupRecentRequest = RecentRequest & {
   /** 다시 내려받기·다시 시도·다시 요청을 실행하는 중인지 여부. 실행 중에는 같은 항목의 행동을 막는다. */
   pending: boolean;
+  /** 같은 영상의 다른 요청이 진행 중이라 다시 시도·다시 요청을 잠갔는지 여부. 무대의 같은 영상 제출 잠금과 같은 규칙이다. */
+  locked: boolean;
+};
+
+/** 마지막 최근 요청 행동의 결과. recent 화면이 live region과 오류 줄로 알린다. */
+export type RecentActionResult = {
+  /** 행동을 시작했으면 `started`, 실패했으면 `failed`다. */
+  kind: 'started' | 'failed';
+  /** 알릴 문장. */
+  message: string;
 };
 
 /** Popup 화면 snapshot. */
@@ -98,8 +108,8 @@ export type PopupDownloadSnapshot = {
   jobs: DownloadJob[];
   /** 최근 job 목록에서 도출한 최근 요청 표시 정보. jobs와 같은 순서다. */
   recentRequests: PopupRecentRequest[];
-  /** 마지막 최근 요청 행동이 실패한 이유. 다음 행동을 시작하면 비운다. */
-  recentActionError: string | null;
+  /** 마지막 최근 요청 행동의 결과. 다음 행동을 시작하거나 화면을 바꾸면 비운다. */
+  recentActionResult: RecentActionResult | null;
   /** 현재 form option. */
   options: DownloadOptions;
   /** 현재 상태. */
@@ -149,7 +159,7 @@ const INITIAL_SNAPSHOT: PopupDownloadSnapshot = {
   submitting: false,
   jobs: [],
   recentRequests: [],
-  recentActionError: null,
+  recentActionResult: null,
   options: DEFAULT_DOWNLOAD_OPTIONS,
   status: MISSING_SOURCE_URL_STATUS,
   stageSource: { kind: 'empty' },
@@ -252,6 +262,18 @@ export function createPopupDownloadModel(
   /** 최근 요청 행동을 실행 중인 job ID. */
   const pendingRecentJobIds = new Set<string>();
 
+  /** 한 영상의 요청이 제출 중이거나 아직 끝나지 않았는지 확인한다. 같은 영상의 중복 제출을 막는 데 쓴다. */
+  function isVideoInProgress(videoId: string | null, jobs: readonly DownloadJob[]): boolean {
+    if (!videoId) {
+      return false;
+    }
+
+    return (
+      submittingVideoIds.has(videoId) ||
+      jobs.some((job) => isUnsettledJob(job) && getDownloadJobVideoId(job) === videoId)
+    );
+  }
+
   /** 무대 영상의 최신 job과 이번 Popup의 제출 상태로 무대 단계를 도출한다. */
   function deriveStageProgress(
     stageVideoId: string | null,
@@ -341,7 +363,7 @@ export function createPopupDownloadModel(
     changes: Partial<
       Pick<
         PopupDownloadSnapshot,
-        'jobs' | 'options' | 'recentActionError' | 'view' | 'youtubeOverlay'
+        'jobs' | 'options' | 'recentActionResult' | 'view' | 'youtubeOverlay'
       >
     > = {},
   ) {
@@ -362,10 +384,18 @@ export function createPopupDownloadModel(
         !isStagePhaseBusy(progress.phase),
       downloading: base.jobs.some(isUnsettledJob),
       fileExtension: getFileExtension(base.options.mode),
-      recentRequests: base.jobs.map((job) => ({
-        ...deriveRecentRequest(job, Date.now()),
-        pending: pendingRecentJobIds.has(job.jobId),
-      })),
+      recentRequests: base.jobs.map((job) => {
+        /** 도출한 표시 정보. */
+        const request = deriveRecentRequest(job, Date.now());
+
+        return {
+          ...request,
+          locked:
+            (request.action === 'retry' || request.action === 'rerequest') &&
+            isVideoInProgress(request.videoId, base.jobs),
+          pending: pendingRecentJobIds.has(job.jobId),
+        };
+      }),
       stageFilename: resolveStageFilename(
         base.options.filename,
         stageSource,
@@ -620,7 +650,7 @@ export function createPopupDownloadModel(
     },
     openView(view) {
       // 이전 화면에서 실패한 최근 요청 행동의 이유는 다른 화면으로 옮겨 가면 의미가 없다.
-      refresh({ recentActionError: null, view });
+      refresh({ recentActionResult: null, view });
     },
     async returnToForm() {
       // 원본과 옵션은 그대로 두어 사용자가 설정만 고쳐 재요청할 수 있게 한다.
@@ -633,12 +663,12 @@ export function createPopupDownloadModel(
       /** 그 요청의 원본 job. */
       const job = snapshot.jobs.find((item) => item.jobId === jobId);
 
-      if (!request?.action || !job || pendingRecentJobIds.has(jobId)) {
+      if (!request?.action || !job || request.locked || pendingRecentJobIds.has(jobId)) {
         return;
       }
 
       pendingRecentJobIds.add(jobId);
-      refresh({ recentActionError: null });
+      refresh({ recentActionResult: null });
 
       /** 행동이 실패한 이유. 성공하면 null이다. */
       let failureMessage: string | null = null;
@@ -677,7 +707,12 @@ export function createPopupDownloadModel(
 
       refresh({
         jobs: submittedJob && acceptJobUpdate(submittedJob) ? upsertJob(submittedJob) : snapshot.jobs,
-        recentActionError: failureMessage,
+        recentActionResult: failureMessage
+          ? { kind: 'failed', message: failureMessage }
+          : {
+              kind: 'started',
+              message: request.action === 'redownload' ? '다운로드를 다시 시작했어요' : '다시 요청했어요',
+            },
       });
     },
     subscribe(listener) {

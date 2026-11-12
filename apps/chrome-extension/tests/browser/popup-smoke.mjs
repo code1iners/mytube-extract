@@ -524,6 +524,7 @@ async function verifyDownloadFlow(origin) {
     await expectFocused(page, page.getByRole('button', { name: '뒤로' }), 'the back button after opening the recent view');
     await page.getByRole('button', { name: '다시 내려받기' }).click();
     await page.waitForFunction(() => globalThis.__myTubeExtractDownloadUrl !== null, null, { timeout: 10000 });
+    await expectLiveText(page, '다운로드를 다시 시작했어요');
 
     /** 다시 내려받기가 요청한 URL과 파일명. 제목을 모르는 job이라 영상 ID 기반 기본 이름이다. */
     const redownload = await page.evaluate(() => ({ filename: globalThis.__myTubeExtractDownloadFilename, url: globalThis.__myTubeExtractDownloadUrl }));
@@ -824,6 +825,7 @@ async function verifyRecentRequestsFlow(origin) {
     await page.locator('[data-job-id="job-failed"]').getByRole('button', { name: '다시 시도' }).click();
     await waitForRequestCount(requests, 'POST /downloads', 1);
     await page.waitForFunction(() => globalThis.__myTubeExtractDownloadFilename !== null, null, { timeout: 10000 });
+    await expectLiveText(page, '다시 요청했어요');
 
     /** 다시 시도로 만든 job 생성 요청 본문. */
     const retryBody = requestBodies.find((body) => body.path === '/downloads')?.body;

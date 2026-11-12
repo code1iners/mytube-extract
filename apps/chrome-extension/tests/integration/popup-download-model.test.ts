@@ -1450,7 +1450,7 @@ describe('popup recent requests', () => {
     deferred.resolve(createJob({ jobId: 'job-2', createdAt: '2026-06-24T06:00:00.000Z' }));
     await running;
 
-    expect(model.getSnapshot()).toMatchObject({ recentActionError: null });
+    expect(model.getSnapshot()).toMatchObject({ recentActionResult: { kind: 'started', message: '다시 요청했어요' } });
     expect(model.getSnapshot().recentRequests.every((request) => !request.pending)).toBe(true);
 
     // 다시 내려받기 실패는 그 이유를 recent 화면에 남긴다.
@@ -1462,7 +1462,11 @@ describe('popup recent requests', () => {
     await failingModel.initialize();
     await failingModel.runRecentRequestAction('job-1');
 
-    expect(failingModel.getSnapshot().recentActionError).toBe('다운로드를 시작하지 못했어요.');
+    expect(failingModel.getSnapshot().recentActionResult).toEqual({ kind: 'failed', message: '다운로드를 시작하지 못했어요.' });
+
+    failingModel.openView('main');
+
+    expect(failingModel.getSnapshot().recentActionResult).toBeNull();
   });
 
   it('builds display info without errors for an old job with no source and for an empty list', async () => {
@@ -1516,5 +1520,24 @@ describe('popup recent requests', () => {
     await reopened.initialize();
 
     expect(reopened.getSnapshot().view).toBe('main');
+  });
+
+  it('locks resubmitting a request while another request for the same video is in progress', async () => {
+    const { dependencies, model } = createStageModel({
+      downloadJobs: {
+        getJobs: vi.fn().mockResolvedValue([
+          createJob({ createdAt: '2026-06-24T06:00:00.000Z', jobId: 'job-new', status: 'processing', displayStatus: 'processing' }),
+          createJob({ displayStatus: 'failed', jobId: 'job-old', status: 'failed' }),
+        ]),
+      },
+    });
+
+    await model.initialize();
+
+    expect(model.getSnapshot().recentRequests[1]).toMatchObject({ action: 'retry', locked: true });
+
+    await model.runRecentRequestAction('job-old');
+
+    expect(dependencies.downloadJobs.submitJob).not.toHaveBeenCalled();
   });
 });

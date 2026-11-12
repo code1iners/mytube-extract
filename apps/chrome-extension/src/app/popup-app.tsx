@@ -3,7 +3,7 @@ import { type DownloadMode, type FileExtension } from '../domain/download-option
 import { getQualityOptions } from '../domain/download-options/quality-options';
 import { type PopupView, type StagePhase, type StageSource, hasStageVideo, isStagePhaseBusy, isStagePhaseProblem } from '../domain/popup-state/popup-state';
 import { type RecentRequestAction, type RecentRequestState, RECENT_REQUEST_STRIP_LIMIT } from '../domain/recent-request/recent-request';
-import { type PopupDownloadModel, type PopupDownloadSnapshot, type PopupRecentRequest, createChromePopupDownloadModel } from '../features/popup-download/popup-download-model';
+import { type PopupDownloadModel, type PopupDownloadSnapshot, type PopupRecentRequest, type RecentActionResult, createChromePopupDownloadModel } from '../features/popup-download/popup-download-model';
 import { type PopupIconName, PopupIcon } from './popup-icons';
 
 /** 추출 버튼에 표시할 아이콘과 접근 가능한 이름. */
@@ -22,10 +22,10 @@ const MODE_OPTIONS: ReadonlyArray<{ /** 다운로드 형식. */ mode: DownloadMo
   { icon: 'video', label: '비디오 MP4', mode: 'video' },
 ];
 
-/** 최근 요청 상태별 배지·상태 아이콘. 대기는 회색 시계, 처리는 파란 회전, 완료는 초록 체크, 실패는 crimson 느낌표, 만료는 흐린 시계다. */
+/** 최근 요청 상태별 배지·상태 아이콘. 상태는 색만으로 구분하지 않도록 상태마다 다른 아이콘을 쓴다. */
 const RECENT_STATE_ICONS: Record<RecentRequestState, PopupIconName> = {
   completed: 'check',
-  expired: 'clock',
+  expired: 'clock-off',
   failed: 'alert',
   processing: 'loader',
   queued: 'clock',
@@ -185,7 +185,7 @@ export function PopupApp() {
   if (snapshot.view === 'recent') {
     return <main className="popup-shell" data-view="recent">
       <ViewBar backButtonRef={backButtonRef} title="최근 요청" onBack={() => handleOpenView('main')} />
-      <RecentRequestList error={snapshot.recentActionError} requests={snapshot.recentRequests} onAction={handleRecentRequestAction} />
+      <RecentRequestList result={snapshot.recentActionResult} requests={snapshot.recentRequests} onAction={handleRecentRequestAction} />
     </main>;
   }
 
@@ -432,7 +432,7 @@ function RecentThumbnail(props: { /** 그릴 최근 요청. */ request: PopupRec
 }
 
 /** recent 화면의 최근 요청 목록. 비어 있으면 빈 상자 아이콘만 보여준다. */
-function RecentRequestList(props: { /** 최신순 최근 요청. */ requests: PopupRecentRequest[]; /** 마지막 행동이 실패한 이유. */ error: string | null; /** 항목 행동 실행. */ onAction: (jobId: string) => void }) {
+function RecentRequestList(props: { /** 최신순 최근 요청. */ requests: PopupRecentRequest[]; /** 마지막 행동의 결과. */ result: RecentActionResult | null; /** 항목 행동 실행. */ onAction: (jobId: string) => void }) {
   if (!props.requests.length) {
     return <div className="recent-empty" role="status">
       <PopupIcon name="inbox" />
@@ -441,7 +441,8 @@ function RecentRequestList(props: { /** 최신순 최근 요청. */ requests: Po
   }
 
   return <>
-    {props.error ? <p className="stage-problem" role="alert"><PopupIcon name="alert" /><span>{props.error}</span></p> : null}
+    {props.result?.kind === 'failed' ? <p className="stage-problem" role="alert"><PopupIcon name="alert" /><span>{props.result.message}</span></p> : null}
+    <p aria-live="polite" className="visually-hidden" role="status">{props.result?.kind === 'started' ? props.result.message : ''}</p>
     <ul aria-label="최근 요청" className="recent-list">
       {props.requests.map((request) => <RecentRequestRow key={request.jobId} request={request} onAction={props.onAction} />)}
     </ul>
@@ -481,7 +482,7 @@ function RecentRequestActionButton(props: { /** 그릴 최근 요청. */ request
   /** 행동 아이콘과 이름. */
   const action = RECENT_ACTION_VIEWS[props.request.action];
 
-  return <button aria-busy={props.request.pending || undefined} aria-label={action.label} className={props.request.action === 'redownload' ? 'recent-row__action' : 'recent-row__action is-retry'} disabled={props.request.pending} type="button" onClick={() => props.onAction(props.request.jobId)}>
+  return <button aria-busy={props.request.pending || undefined} aria-label={action.label} className={props.request.action === 'redownload' ? 'recent-row__action' : 'recent-row__action is-retry'} disabled={props.request.pending || props.request.locked} type="button" onClick={() => props.onAction(props.request.jobId)}>
     <PopupIcon className={props.request.pending ? 'is-spinning' : undefined} name={props.request.pending ? 'loader' : action.icon} />
   </button>;
 }

@@ -21,7 +21,6 @@
   --color-status-processing: #4b5cce;
   --color-status-completed: #356b43;
   --color-status-failed: #c62828;
-  --color-status-expired: #c8c8c8;
   --color-focus: #4b5cce;
   --color-on-status: #ffffff;
   /* 무대 덮개는 썸네일 위에 얹혀 테마와 무관하게 어두운 바탕이라 두 테마가 같은 값을 쓴다. */
@@ -51,7 +50,6 @@
   --color-status-processing: #a9b4f2;
   --color-status-completed: #8fd6a0;
   --color-status-failed: #ff8a80;
-  --color-status-expired: #5c5955;
   --color-focus: #a9b4f2;
   --color-on-status: #18191b;
 }
@@ -159,7 +157,8 @@ button:disabled { cursor: not-allowed; }
 .recent-badge--processing { background: var(--color-status-processing); }
 .recent-badge--completed { background: var(--color-status-completed); }
 .recent-badge--failed { background: var(--color-status-failed); }
-.recent-badge--expired { background: var(--color-status-expired); }
+/* DESIGN.md 9절: 만료는 비활성 회색 대신 보조 텍스트색을 써 대비를 확보한다. 대기와는 아이콘으로 구분한다. */
+.recent-badge--expired { background: var(--color-text-secondary); }
 
 .popup-header__title { margin: 0 auto 0 0; color: var(--color-text-primary); font-size: 16px; font-weight: 600; }
 .recent-list { display: grid; gap: 12px; margin: 0; padding: 0; list-style: none; }
@@ -174,7 +173,8 @@ button:disabled { cursor: not-allowed; }
 .recent-row__action { display: grid; width: 44px; height: 44px; place-items: center; padding: 0; border: 0; border-radius: 9999px; background: var(--color-surface); color: var(--color-text-primary); }
 .recent-row__action:hover:not(:disabled) { background: var(--color-surface-alt); }
 .recent-row__action.is-retry { color: var(--color-primary); }
-.recent-row__action:disabled { color: var(--color-status-processing); }
+.recent-row__action:disabled { color: var(--color-text-disabled); }
+.recent-row__action[aria-busy='true'] { color: var(--color-status-processing); }
 .recent-row__action .icon { width: 20px; height: 20px; }
 .recent-row__wait { display: grid; width: 44px; height: 44px; place-items: center; }
 .recent-row__wait .icon { width: 20px; height: 20px; }
