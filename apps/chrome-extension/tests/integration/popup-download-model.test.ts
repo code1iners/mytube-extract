@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { type DownloadJob } from '../../src/domain/download-job/download-job';
 import { DEFAULT_DOWNLOAD_OPTIONS } from '../../src/domain/download-options/download-options';
 import { DownloadJobSubmitError } from '../../src/adapters/chrome/download-jobs-bridge';
@@ -89,6 +89,10 @@ function createDependencies(
       isEnabled: vi.fn().mockResolvedValue(false),
       requestAndEnable: vi.fn().mockResolvedValue(true),
       ...overrides.youtubeOverlay,
+    },
+    downloads: {
+      startDownload: vi.fn().mockResolvedValue(1),
+      ...overrides.downloads,
     },
   };
 }
@@ -1297,5 +1301,243 @@ describe('popup filename editing', () => {
     expect(dependencies.downloadJobs.submitJob).toHaveBeenCalledWith(
       expect.objectContaining({ localFilename: '내 곡.mp3' }),
     );
+  });
+});
+
+describe('popup recent requests', () => {
+  /** 테스트 기준 현재 시각. job 생성 시각과 보관 기간으로 만료를 판정할 때 쓴다. */
+  const NOW = new Date('2026-06-25T00:00:00.000Z');
+
+  beforeEach(() => {
+    // fixture job의 생성 시각과 보관 기간이 만료 판정에 쓰이므로 날짜만 고정한다.
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(NOW);
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('derives the badge and the single action of each recent request from the job state and expiry', async () => {
+    const { model } = createStageModel({
+      downloadJobs: {
+        getJobs: vi.fn().mockResolvedValue([
+          createJob({ createdAt: '2026-06-24T05:36:00.000Z', jobId: 'job-queued', status: 'queued', title: '대기 영상' }),
+          createJob({ createdAt: '2026-06-24T05:35:00.000Z', displayStatus: 'processing', jobId: 'job-processing', status: 'processing' }),
+          createCompletedJob({ createdAt: '2026-06-24T05:34:00.000Z', jobId: 'job-completed', title: '완료 영상' }),
+          createJob({ createdAt: '2026-06-24T05:33:00.000Z', displayStatus: 'failed', jobId: 'job-failed', message: '추출하지 못했어요.', status: 'failed' }),
+          // 서버가 만료로 알려 준 job과, 저장 뒤 보관 기간이 지나 완료로 남아 있는 job 모두 만료다.
+          createCompletedJob({ createdAt: '2026-06-24T05:32:00.000Z', displayStatus: 'expired', jobId: 'job-expired-server' }),
+          createCompletedJob({ createdAt: '2026-06-10T05:32:00.000Z', jobId: 'job-expired-local', retentionDays: 7 }),
+        ]),
+      },
+    });
+
+    await model.initialize();
+
+    expect(model.getSnapshot().recentRequests.map(({ action, jobId, state, stateLabel }) => ({ action, jobId, state, stateLabel }))).toEqual([
+      { action: null, jobId: 'job-queued', state: 'queued', stateLabel: '대기 중' },
+      { action: null, jobId: 'job-processing', state: 'processing', stateLabel: '처리 중' },
+      { action: 'redownload', jobId: 'job-completed', state: 'completed', stateLabel: '완료' },
+      { action: 'retry', jobId: 'job-failed', state: 'failed', stateLabel: '실패' },
+      { action: 'rerequest', jobId: 'job-expired-server', state: 'expired', stateLabel: '만료됨' },
+      { action: 'rerequest', jobId: 'job-expired-local', state: 'expired', stateLabel: '만료됨' },
+    ]);
+    expect(model.getSnapshot().recentRequests[0]).toMatchObject({
+      mode: 'audio',
+      quality: '192',
+      thumbnailUrl: 'https://i.ytimg.com/vi/abc123_DEF0/hqdefault.jpg',
+      title: '대기 영상',
+      videoId: 'abc123_DEF0',
+    });
+    // 제목을 모르는 job은 영상 ID를 제목 자리에 쓴다.
+    expect(model.getSnapshot().recentRequests[1].title).toBe('abc123_DEF0');
+  });
+
+  it.each([
+    ['failed', createJob({ displayStatus: 'failed', jobId: 'job-old', quality: '720', sourceUrl: OTHER_VIDEO_URL, status: 'failed', title: '다른 영상/라이브', type: 'video' })],
+    ['expired', createCompletedJob({ displayStatus: 'expired', jobId: 'job-old', quality: '720', sourceUrl: OTHER_VIDEO_URL, title: '다른 영상/라이브', type: 'video' })],
+  ])('resubmits a %s request with the source, format and quality of its job and the default filename', async (_state, job) => {
+    /** 재제출로 새로 생긴 job. */
+    const newJob = createJob({ createdAt: '2026-06-24T06:00:00.000Z', jobId: 'job-new', quality: '720', sourceUrl: OTHER_VIDEO_URL, type: 'video' });
+    const { dependencies, model } = createStageModel({
+      downloadJobs: { getJobs: vi.fn().mockResolvedValue([job]), submitJob: vi.fn().mockResolvedValue(newJob) },
+      // 무대의 형식·품질과 다른 조건이어도 job의 조건으로 보낸다.
+      storage: { loadOptions: vi.fn().mockResolvedValue({ ...DEFAULT_DOWNLOAD_OPTIONS, bitrate: '320', mode: 'audio' }) },
+    });
+
+    await model.initialize();
+    await model.updateOption('filename', '무대에서 고친 이름');
+    await model.runRecentRequestAction('job-old');
+
+    expect(dependencies.downloadJobs.submitJob).toHaveBeenCalledTimes(1);
+    expect(dependencies.downloadJobs.submitJob).toHaveBeenCalledWith({
+      apiBaseUrl: DEFAULT_DOWNLOAD_OPTIONS.apiBaseUrl,
+      localFilename: '다른 영상 라이브.mp4',
+      mode: 'video',
+      quality: '720',
+      sourceUrl: OTHER_VIDEO_URL,
+    });
+    expect(dependencies.downloads.startDownload).not.toHaveBeenCalled();
+    expect(model.getSnapshot().recentRequests.map((request) => request.jobId)).toEqual(['job-new', 'job-old']);
+    // 다른 영상의 재제출은 무대를 바꾸지 않는다.
+    expect(model.getSnapshot()).toMatchObject({ stagePhase: 'idle', stageFilename: '무대에서 고친 이름' });
+  });
+
+  it('restarts the local download from the job download address for a completed request', async () => {
+    const { dependencies, model } = createStageModel({
+      downloadJobs: { getJobs: vi.fn().mockResolvedValue([createCompletedJob({ title: '완료 영상', type: 'audio' })]) },
+    });
+
+    await model.initialize();
+    await model.runRecentRequestAction('job-1');
+
+    expect(dependencies.downloads.startDownload).toHaveBeenCalledWith(
+      'https://mytube-extract-api.codeliners.cc/downloads/job-1/file',
+      '완료 영상.mp3',
+    );
+    expect(dependencies.downloadJobs.submitJob).not.toHaveBeenCalled();
+  });
+
+  it('offers a new request instead of a download for a completed request past its retention', async () => {
+    const { dependencies, model } = createStageModel({
+      downloadJobs: { getJobs: vi.fn().mockResolvedValue([createCompletedJob({ createdAt: '2026-06-01T00:00:00.000Z', retentionDays: 7 })]) },
+    });
+
+    await model.initialize();
+
+    expect(model.getSnapshot().recentRequests[0]).toMatchObject({ action: 'rerequest', state: 'expired' });
+
+    await model.runRecentRequestAction('job-1');
+
+    expect(dependencies.downloads.startDownload).not.toHaveBeenCalled();
+    expect(dependencies.downloadJobs.submitJob).toHaveBeenCalledWith(
+      expect.objectContaining({ mode: 'audio', quality: '192', sourceUrl: STAGE_VIDEO_URL }),
+    );
+  });
+
+  it('does nothing for a request that is still in progress', async () => {
+    const { dependencies, model } = createStageModel({
+      downloadJobs: { getJobs: vi.fn().mockResolvedValue([createJob({ jobId: 'job-queued' })]) },
+    });
+
+    await model.initialize();
+    await model.runRecentRequestAction('job-queued');
+
+    expect(dependencies.downloadJobs.submitJob).not.toHaveBeenCalled();
+    expect(dependencies.downloads.startDownload).not.toHaveBeenCalled();
+  });
+
+  it('shows why a recent request action failed and blocks repeated presses while it runs', async () => {
+    /** 응답을 직접 정하는 제출. */
+    const deferred = createDeferredSubmit();
+    const { model } = createStageModel({
+      downloadJobs: {
+        getJobs: vi.fn().mockResolvedValue([createJob({ displayStatus: 'failed', status: 'failed' })]),
+        submitJob: deferred.submitJob,
+      },
+    });
+
+    await model.initialize();
+
+    /** 진행 중인 다시 시도. */
+    const running = model.runRecentRequestAction('job-1');
+
+    expect(model.getSnapshot().recentRequests[0].pending).toBe(true);
+    await model.runRecentRequestAction('job-1');
+    expect(deferred.submitJob).toHaveBeenCalledTimes(1);
+
+    deferred.resolve(createJob({ jobId: 'job-2', createdAt: '2026-06-24T06:00:00.000Z' }));
+    await running;
+
+    expect(model.getSnapshot()).toMatchObject({ recentActionResult: { kind: 'started', message: '다시 요청했어요' } });
+    expect(model.getSnapshot().recentRequests.every((request) => !request.pending)).toBe(true);
+
+    // 다시 내려받기 실패는 그 이유를 recent 화면에 남긴다.
+    const failingModel = createStageModel({
+      downloadJobs: { getJobs: vi.fn().mockResolvedValue([createCompletedJob()]) },
+      downloads: { startDownload: vi.fn().mockRejectedValue(new Error('다운로드를 시작하지 못했어요.')) },
+    }).model;
+
+    await failingModel.initialize();
+    await failingModel.runRecentRequestAction('job-1');
+
+    expect(failingModel.getSnapshot().recentActionResult).toEqual({ kind: 'failed', message: '다운로드를 시작하지 못했어요.' });
+
+    failingModel.openView('main');
+
+    expect(failingModel.getSnapshot().recentActionResult).toBeNull();
+  });
+
+  it('builds display info without errors for an old job with no source and for an empty list', async () => {
+    const { model } = createStageModel({
+      downloadJobs: {
+        getJobs: vi.fn().mockResolvedValue([
+          createJob({ displayStatus: 'failed', jobId: 'job-old-failed', sourceUrl: null, status: 'failed', type: 'video' }),
+          createCompletedJob({ jobId: 'job-old-completed', sourceUrl: null }),
+        ]),
+      },
+    });
+
+    await model.initialize();
+
+    expect(model.getSnapshot().recentRequests).toMatchObject([
+      // 다시 보낼 원본이 없으면 다시 시도할 수 없다. 썸네일 대신 형식으로 그린다.
+      { action: null, jobId: 'job-old-failed', mode: 'video', state: 'failed', thumbnailUrl: null, title: '비디오 MP4', videoId: null },
+      // 완료 파일 주소는 남아 있어 다시 내려받을 수 있다.
+      { action: 'redownload', jobId: 'job-old-completed', mode: 'audio', state: 'completed', thumbnailUrl: null, title: '오디오 MP3', videoId: null },
+    ]);
+
+    const emptyModel = createStageModel().model;
+
+    await emptyModel.initialize();
+
+    expect(emptyModel.getSnapshot()).toMatchObject({ recentRequests: [], view: 'main' });
+  });
+
+  it('opens the recent view inside the popup, returns to the stage, and always starts on the stage', async () => {
+    const { model } = createStageModel({
+      downloadJobs: { getJobs: vi.fn().mockResolvedValue([createCompletedJob()]) },
+    });
+
+    expect(model.getSnapshot().view).toBe('main');
+
+    await model.initialize();
+    model.openView('recent');
+
+    expect(model.getSnapshot().view).toBe('recent');
+
+    model.openView('main');
+
+    expect(model.getSnapshot().view).toBe('main');
+
+    // 다시 연 Popup은 새 model이라 무대에서 시작한다.
+    model.openView('recent');
+    const reopened = createStageModel({
+      downloadJobs: { getJobs: vi.fn().mockResolvedValue([createCompletedJob()]) },
+    }).model;
+
+    await reopened.initialize();
+
+    expect(reopened.getSnapshot().view).toBe('main');
+  });
+
+  it('locks resubmitting a request while another request for the same video is in progress', async () => {
+    const { dependencies, model } = createStageModel({
+      downloadJobs: {
+        getJobs: vi.fn().mockResolvedValue([
+          createJob({ createdAt: '2026-06-24T06:00:00.000Z', jobId: 'job-new', status: 'processing', displayStatus: 'processing' }),
+          createJob({ displayStatus: 'failed', jobId: 'job-old', status: 'failed' }),
+        ]),
+      },
+    });
+
+    await model.initialize();
+
+    expect(model.getSnapshot().recentRequests[1]).toMatchObject({ action: 'retry', locked: true });
+
+    await model.runRecentRequestAction('job-old');
+
+    expect(dependencies.downloadJobs.submitJob).not.toHaveBeenCalled();
   });
 });

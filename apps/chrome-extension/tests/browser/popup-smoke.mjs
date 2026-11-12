@@ -90,6 +90,9 @@ const staticServer = await createStaticServer(extensionOutputRoot);
   /** 다운로드 flow에서 수집한 fake API 요청. */
   const fakeApiRequests = await verifyDownloadFlow(staticServer.origin);
   console.error('[popup-smoke] download flow ok');
+  /** 최근 요청 flow에서 수집한 fake API 요청. */
+  const recentFakeApiRequests = await verifyRecentRequestsFlow(staticServer.origin);
+  console.error('[popup-smoke] recent requests flow ok');
 
   console.log(
     JSON.stringify(
@@ -98,6 +101,7 @@ const staticServer = await createStaticServer(extensionOutputRoot);
         mode: smokeMode,
         outputRoot: extensionOutputRoot,
         fakeApiRequests,
+        recentFakeApiRequests,
         rejectedFakeApiRequests,
         unavailableFakeApiRequests,
         status: 'ok',
@@ -220,6 +224,11 @@ async function verifyStageFromSupportedTabFlow(origin) {
 
     if ((await page.getByLabel('YouTube 주소').count()) !== 0) {
       throw new Error('Expected no paste field while a tab video is on the stage.');
+    }
+
+    // 최근 요청이 없으면 무대 아래 줄을 숨긴다.
+    if ((await page.locator('.recent-strip').count()) !== 0) {
+      throw new Error('Expected no recent request strip without recent requests.');
     }
 
     // 무대에 영상이 있어도 입력칸 밖에서 붙여넣으면 원본을 바꾼다.
@@ -463,10 +472,11 @@ async function verifyDownloadFlow(origin) {
     await page.locator('figure.stage [data-veil]').waitFor({ state: 'detached', timeout: 5000 });
     await expectDownloadButtonDisabled(page, false);
     await expectRadiosDisabled(page, false);
-    await page.getByRole('heading', { name: '최근 요청' }).waitFor({ timeout: 10000 });
+    // 완료된 요청이 무대 아래 최근 요청 줄에 완료 배지로 올라온다.
+    await page.getByRole('button', { name: 'abc123_DEF0, 완료' }).waitFor({ timeout: 10000 });
 
-    /** 완료된 job 목록 항목 수. */
-    const recentJobCount = await page.getByRole('listitem').count();
+    /** 최근 요청 줄의 썸네일 수. */
+    const recentJobCount = await page.locator('.recent-strip__item').count();
 
     if (recentJobCount !== 1) {
       throw new Error(`Expected one recent job, got ${recentJobCount}`);
@@ -503,6 +513,34 @@ async function verifyDownloadFlow(origin) {
     ) {
       throw new Error(`Unexpected job create body: ${JSON.stringify(createdJobBody)}`);
     }
+
+    // 더보기로 recent 화면을 열어 완료 요청을 다시 내려받는다.
+    await page.evaluate(() => {
+      globalThis.__myTubeExtractDownloadUrl = null;
+      globalThis.__myTubeExtractDownloadFilename = null;
+    });
+    await page.getByRole('button', { name: '최근 요청 모두 보기' }).click();
+    await page.getByRole('heading', { name: '최근 요청' }).waitFor({ timeout: 10000 });
+    await expectFocused(page, page.getByRole('button', { name: '뒤로' }), 'the back button after opening the recent view');
+    await page.getByRole('button', { name: '다시 내려받기' }).click();
+    await page.waitForFunction(() => globalThis.__myTubeExtractDownloadUrl !== null, null, { timeout: 10000 });
+    await expectLiveText(page, '다운로드를 다시 시작했어요');
+
+    /** 다시 내려받기가 요청한 URL과 파일명. 제목을 모르는 job이라 영상 ID 기반 기본 이름이다. */
+    const redownload = await page.evaluate(() => ({ filename: globalThis.__myTubeExtractDownloadFilename, url: globalThis.__myTubeExtractDownloadUrl }));
+
+    if (redownload.url !== `${expectedApiOrigin}/downloads/job-1/file` || redownload.filename !== 'abc123_DEF0.mp4') {
+      throw new Error(`Unexpected redownload: ${JSON.stringify(redownload)}`);
+    }
+
+    if (requestBodies.filter((body) => body.path === '/downloads').length !== 1) {
+      throw new Error('Expected the redownload not to create a new job.');
+    }
+
+    // 뒤로 버튼으로 무대 화면에 돌아오고, 포커스는 더보기 버튼으로 돌아온다.
+    await page.getByRole('button', { name: '뒤로' }).click();
+    await page.locator('figure.stage').waitFor({ timeout: 10000 });
+    await expectFocused(page, page.getByRole('button', { name: '최근 요청 모두 보기' }), 'the more button after returning to the stage');
 
     return requests;
   } finally {
@@ -547,7 +585,7 @@ async function editFilenameWithKeyboard(page) {
   await page.keyboard.press('Enter');
   await page.getByText('내 스모크 클립', { exact: true }).waitFor({ timeout: 10000 });
 
-  if ((await page.getByRole('listitem').count()) !== 0) {
+  if ((await page.locator('.recent-strip').count()) !== 0) {
     throw new Error('Expected Enter in the filename input to confirm the name, not submit the request.');
   }
 }
@@ -644,7 +682,7 @@ async function verifyRestoredProgressAndReducedMotion(origin) {
         await page.goto(`${origin}/popup.html`, { timeout: 10000, waitUntil: 'domcontentloaded' });
 
         await page.locator(`figure.stage [data-veil="${status}"]`).waitFor({ timeout: 10000 });
-        await page.getByRole('button', { name: status === 'queued' ? '대기 중' : '처리 중' }).waitFor({ timeout: 10000 });
+        await page.getByRole('button', { exact: true, name: status === 'queued' ? '대기 중' : '처리 중' }).waitFor({ timeout: 10000 });
         await expectLiveText(page, status === 'queued' ? '대기 중' : '처리 중');
         await expectDownloadButtonState(page, status === 'queued' ? '대기 중' : '처리 중', true);
         await expectRadiosDisabled(page, true);
@@ -675,6 +713,160 @@ async function verifyRestoredProgressAndReducedMotion(origin) {
     }
   } finally {
     await browser.close();
+  }
+}
+
+/** 저장된 여러 상태의 최근 요청으로 무대 아래 줄의 배지, recent 화면의 항목별 행동, 다시 시도 재제출, 빈 상태를 확인한다. */
+async function verifyRecentRequestsFlow(origin) {
+  /** Browser instance. */
+  const browser = await chromium.launch();
+  /** Fake API 요청 목록. */
+  const requests = [];
+  /** Fake API가 받은 요청 본문 목록. */
+  const requestBodies = [];
+  /** 생성 시각 기준. 최신순 정렬이 고정되도록 1분씩 앞당긴다. */
+  const now = Date.now();
+
+  /** 저장해 둘 최근 job을 만든다. */
+  function createStoredJob(index, overrides) {
+    return {
+      createdAt: new Date(now - index * 60_000).toISOString(),
+      displayStatus: overrides.status,
+      downloadUrl: null,
+      errorCode: null,
+      message: '',
+      progress: null,
+      quality: '192',
+      retentionDays: 7,
+      sourceUrl: null,
+      title: null,
+      type: 'audio',
+      ...overrides,
+    };
+  }
+
+  try {
+    /** 최근 요청이 있는 page. */
+    const page = await browser.newPage({ viewport: { width: 360, height: 640 } });
+
+    await routeMyTubeExtractApi(page, { requestBodies, requests, healthOk: true });
+    await routeYoutubeThumbnails(page, { available: true });
+    await installFakeChromeApi(page, {
+      currentTabTitle: '무대 영상 - YouTube',
+      storedOptions: {
+        mode: 'audio',
+        recentDownloadJobs: [
+          createStoredJob(0, { jobId: 'job-processing', sourceUrl: 'https://www.youtube.com/watch?v=procVID0001', status: 'processing', title: '처리 중인 라이브' }),
+          createStoredJob(1, { errorCode: 'EXTRACTION_FAILED', jobId: 'job-failed', message: '추출하지 못했어요.', quality: '720', sourceUrl: 'https://www.youtube.com/watch?v=failVID0001', status: 'failed', title: '실패한/뮤직비디오', type: 'video' }),
+          createStoredJob(2, { displayStatus: 'expired', downloadUrl: null, jobId: 'job-expired', sourceUrl: 'https://youtu.be/explVID0001', status: 'completed', title: '만료된 강의' }),
+          // 원본 주소·제목 필드가 생기기 전에 저장된 예전 완료 job.
+          createStoredJob(3, { downloadUrl: `${expectedApiOrigin}/downloads/job-1/file`, jobId: 'job-legacy', quality: '720', sourceUrl: undefined, status: 'completed', title: undefined, type: 'video' }),
+          createStoredJob(4, { jobId: 'job-queued', sourceUrl: 'https://www.youtube.com/watch?v=queuVID0001', status: 'queued', title: '대기 중인 팟캐스트' }),
+        ],
+      },
+    });
+    await page.goto(`${origin}/popup.html`, { timeout: 10000, waitUntil: 'domcontentloaded' });
+
+    await page.locator('figure.stage').waitFor({ timeout: 10000 });
+    // 무대 아래 줄은 최신 세 개와 더보기 버튼만 보여준다.
+    await page.getByRole('button', { name: '처리 중인 라이브, 처리 중' }).waitFor({ timeout: 10000 });
+    await page.getByRole('button', { name: '실패한/뮤직비디오, 실패' }).waitFor({ timeout: 10000 });
+    await page.getByRole('button', { name: '만료된 강의, 만료됨' }).waitFor({ timeout: 10000 });
+    await page.getByRole('button', { name: '최근 요청 모두 보기' }).waitFor({ timeout: 10000 });
+
+    /** 무대 아래 줄의 배지 상태. */
+    const stripStates = await page.locator('.recent-strip__thumb').evaluateAll((items) => items.map((item) => item.dataset.state));
+
+    if (JSON.stringify(stripStates) !== JSON.stringify(['processing', 'failed', 'expired'])) {
+      throw new Error(`Unexpected recent strip states: ${JSON.stringify(stripStates)}`);
+    }
+
+    // 다른 영상의 진행은 무대를 바꾸지 않는다.
+    await expectDownloadButtonState(page, '추출 시작', false);
+    await saveScreenshot(page, 'popup-recent-strip-light.png');
+    await page.evaluate(() => document.documentElement.setAttribute('data-theme', 'dark'));
+    await saveScreenshot(page, 'popup-recent-strip-dark.png');
+    await page.evaluate(() => document.documentElement.removeAttribute('data-theme'));
+
+    // 썸네일을 눌러도 recent 화면이 열린다.
+    await page.getByRole('button', { name: '실패한/뮤직비디오, 실패' }).click();
+    await page.getByRole('heading', { name: '최근 요청' }).waitFor({ timeout: 10000 });
+
+    /** recent 화면 항목별 상태명과 행동 이름. */
+    const rows = await page.locator('.recent-row').evaluateAll((items) =>
+      items.map((item) => ({
+        action: item.querySelector('button')?.getAttribute('aria-label') ?? null,
+        id: item.dataset.jobId,
+        state: item.querySelector('.recent-row__state')?.textContent ?? '',
+        thumbnail: item.querySelector('.recent-thumb')?.dataset.thumbnail,
+        title: item.querySelector('.recent-row__title')?.textContent ?? '',
+      })),
+    );
+    /** 기대하는 항목. 예전 job은 형식 이름을 제목으로, 중립 배경을 썸네일로 쓴다. */
+    const expectedRows = [
+      { action: null, id: 'job-processing', state: '처리 중', thumbnail: 'image', title: '처리 중인 라이브' },
+      { action: '다시 시도', id: 'job-failed', state: '실패', thumbnail: 'image', title: '실패한/뮤직비디오' },
+      { action: '다시 요청', id: 'job-expired', state: '만료됨', thumbnail: 'image', title: '만료된 강의' },
+      { action: '다시 내려받기', id: 'job-legacy', state: '완료', thumbnail: 'fallback', title: '비디오 MP4' },
+      { action: null, id: 'job-queued', state: '대기 중', thumbnail: 'image', title: '대기 중인 팟캐스트' },
+    ];
+
+    if (JSON.stringify(rows) !== JSON.stringify(expectedRows)) {
+      throw new Error(`Unexpected recent rows: ${JSON.stringify(rows)}`);
+    }
+
+    await expectNoHorizontalOverflow(page);
+    await saveScreenshot(page, 'popup-recent-light.png');
+    await page.evaluate(() => document.documentElement.setAttribute('data-theme', 'dark'));
+    await saveScreenshot(page, 'popup-recent-dark.png');
+    await page.evaluate(() => document.documentElement.removeAttribute('data-theme'));
+
+    // 실패 항목의 다시 시도는 job의 원본·형식·품질로 새 job을 만들고, 파일명은 기본 이름을 쓴다.
+    await page.locator('[data-job-id="job-failed"]').getByRole('button', { name: '다시 시도' }).click();
+    await waitForRequestCount(requests, 'POST /downloads', 1);
+    await page.waitForFunction(() => globalThis.__myTubeExtractDownloadFilename !== null, null, { timeout: 10000 });
+    await expectLiveText(page, '다시 요청했어요');
+
+    /** 다시 시도로 만든 job 생성 요청 본문. */
+    const retryBody = requestBodies.find((body) => body.path === '/downloads')?.body;
+    /** 다시 시도한 job이 완료되어 저장된 파일명. */
+    const retryFilename = await page.evaluate(() => globalThis.__myTubeExtractDownloadFilename);
+
+    if (retryBody?.type !== 'video' || retryBody.quality !== '720' || retryBody.url !== 'https://www.youtube.com/watch?v=failVID0001' || retryFilename !== '실패한 뮤직비디오.mp4') {
+      throw new Error(`Unexpected retry: ${JSON.stringify({ retryBody, retryFilename })}`);
+    }
+
+    // 새 job이 목록 맨 위에 생긴다.
+    await page.locator('.recent-row').first().and(page.locator('[data-job-id="job-1"]')).waitFor({ timeout: 10000 });
+    await page.getByRole('button', { name: '뒤로' }).click();
+    await page.locator('figure.stage').waitFor({ timeout: 10000 });
+    await page.close();
+
+    /** 최근 요청이 없는 page. 무대 아래 줄을 숨긴다. */
+    const emptyPage = await browser.newPage({ viewport: { width: 360, height: 600 } });
+
+    await routeYoutubeThumbnails(emptyPage, { available: true });
+    await installFakeChromeApi(emptyPage, { currentTabTitle: '무대 영상 - YouTube', storedOptions: {} });
+    await emptyPage.goto(`${origin}/popup.html`, { timeout: 10000, waitUntil: 'domcontentloaded' });
+    await emptyPage.locator('figure.stage').waitFor({ timeout: 10000 });
+    await emptyPage.getByRole('button', { name: '추출 시작' }).waitFor({ timeout: 10000 });
+
+    if ((await emptyPage.locator('.recent-strip').count()) !== 0) {
+      throw new Error('Expected no recent request strip without recent requests.');
+    }
+
+    return requests;
+  } finally {
+    await browser.close();
+  }
+}
+
+/** 지정한 control에 포커스가 있는지 확인한다. */
+async function expectFocused(page, locator, description) {
+  await locator.waitFor({ timeout: 10000 });
+
+  if (!(await locator.evaluate((element) => element === document.activeElement))) {
+    throw new Error(`Expected focus on ${description}.`);
   }
 }
 
@@ -728,7 +920,8 @@ async function expectRadiosDisabled(page, expectedDisabled) {
 /** 이름이 주어진 추출 버튼의 disabled 상태를 확인한다. */
 async function expectDownloadButtonState(page, name, expectedDisabled) {
   /** 버튼 disabled 여부. */
-  const disabled = await page.getByRole('button', { name }).evaluate((button) => button.disabled);
+  // 최근 요청 썸네일 이름(`제목, 대기 중`)과 겹치지 않게 이름 전체로 찾는다.
+  const disabled = await page.getByRole('button', { exact: true, name }).evaluate((button) => button.disabled);
 
   if (disabled !== expectedDisabled) {
     throw new Error(`Expected "${name}" button disabled=${expectedDisabled}, got ${disabled}`);

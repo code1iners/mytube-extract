@@ -4,11 +4,15 @@ import { type ReactNode } from 'react';
 export type PopupIconName =
   | 'alert'
   | 'audio'
+  | 'back'
   | 'check'
+  | 'chevron'
   | 'clock'
+  | 'clock-off'
   | 'cloud-off'
   | 'down'
   | 'grid'
+  | 'inbox'
   | 'link'
   | 'link-off'
   | 'loader'
@@ -21,11 +25,19 @@ export type PopupIconName =
 /** 아이콘별 SVG 내용. viewBox는 모두 `0 0 24 24`다. */
 const ICON_PATHS: Record<PopupIconName, ReactNode> = {
   alert: <path d="M12 6v8M12 18.5v.01" />,
+  back: <path d="M15 5l-7 7 7 7" />,
   check: <path d="M5 12.5l4.5 4.5L19 7" />,
+  chevron: <path d="M9 5l7 7-7 7" />,
   clock: (
     <>
       <circle cx="12" cy="12" r="8.5" />
       <path d="M12 7.5V12l3 2" />
+    </>
+  ),
+  'clock-off': (
+    <>
+      <circle cx="12" cy="12" r="8.5" />
+      <path d="M12 7.5V12M4 4l16 16" />
     </>
   ),
   'cloud-off': (
@@ -41,6 +53,7 @@ const ICON_PATHS: Record<PopupIconName, ReactNode> = {
       <rect x="13" y="13" width="8" height="7" rx="1.5" />
     </>
   ),
+  inbox: <path d="M3 13l3-8h12l3 8v6H3zM3 13h5l1 3h6l1-3h5" />,
   link: (
     <path d="M10 14a4 4 0 0 0 5.66 0l3-3a4 4 0 0 0-5.66-5.66l-1 1M14 10a4 4 0 0 0-5.66 0l-3 3a4 4 0 0 0 5.66 5.66l1-1" />
   ),

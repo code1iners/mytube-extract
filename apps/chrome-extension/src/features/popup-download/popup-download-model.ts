@@ -4,6 +4,7 @@ import {
   DownloadJobSubmitError,
   createDownloadJobsBridge,
 } from '../../adapters/chrome/download-jobs-bridge';
+import { type DownloadsAdapter, createDownloadsAdapter } from '../../adapters/chrome/downloads';
 import { type StorageAdapter, createStorageAdapter } from '../../adapters/chrome/storage';
 import { type TabsAdapter, createTabsAdapter } from '../../adapters/chrome/tabs';
 import {
@@ -36,6 +37,7 @@ import {
   MISSING_SOURCE_URL_STATUS,
   OPTIONS_SAVE_FAILED_STATUS,
   type PopupStatus,
+  type PopupView,
   SERVER_UNREACHABLE_STATUS,
   type StagePhase,
   type StageSource,
@@ -48,6 +50,7 @@ import {
   isStagePhaseProblem,
   parseYoutubeTabTitle,
 } from '../../domain/popup-state/popup-state';
+import { type RecentRequest, deriveRecentRequest } from '../../domain/recent-request/recent-request';
 import { sanitizeFilenameStem } from '../../shared/sanitize-filename';
 import { sanitizeYoutubeOverlayFilename } from '../youtube-overlay/youtube-overlay-download';
 
@@ -61,6 +64,8 @@ export type PopupDownloadModelDependencies = {
   tabs: TabsAdapter;
   /** YouTube 썸네일 Overlay 권한 adapter. */
   youtubeOverlay: YoutubeOverlayAdapter;
+  /** 최근 요청의 다시 내려받기에 쓰는 Chrome downloads adapter. */
+  downloads: DownloadsAdapter;
 };
 
 /** YouTube 썸네일 Overlay 권한 상태. */
@@ -73,8 +78,26 @@ export type YoutubeOverlaySnapshot = {
   message: string;
 };
 
+/** Popup이 그리는 최근 요청 하나. 도출한 표시 정보에 이 Popup에서 행동을 실행 중인지를 더한다. */
+export type PopupRecentRequest = RecentRequest & {
+  /** 다시 내려받기·다시 시도·다시 요청을 실행하는 중인지 여부. 실행 중에는 같은 항목의 행동을 막는다. */
+  pending: boolean;
+  /** 같은 영상의 다른 요청이 진행 중이라 다시 시도·다시 요청을 잠갔는지 여부. 무대의 같은 영상 제출 잠금과 같은 규칙이다. */
+  locked: boolean;
+};
+
+/** 마지막 최근 요청 행동의 결과. recent 화면이 live region과 오류 줄로 알린다. */
+export type RecentActionResult = {
+  /** 행동을 시작했으면 `started`, 실패했으면 `failed`다. */
+  kind: 'started' | 'failed';
+  /** 알릴 문장. */
+  message: string;
+};
+
 /** Popup 화면 snapshot. */
 export type PopupDownloadSnapshot = {
+  /** 지금 보이는 Popup 화면. */
+  view: PopupView;
   /** 다운로드 가능 여부. */
   canDownload: boolean;
   /** 끝나지 않은 job이 하나라도 있는지 여부. 무대 영상과 관계없이 최근 요청 전체를 본다. */
@@ -83,6 +106,10 @@ export type PopupDownloadSnapshot = {
   submitting: boolean;
   /** 최근 job 목록. 최신순으로 정렬한다. */
   jobs: DownloadJob[];
+  /** 최근 job 목록에서 도출한 최근 요청 표시 정보. jobs와 같은 순서다. */
+  recentRequests: PopupRecentRequest[];
+  /** 마지막 최근 요청 행동의 결과. 다음 행동을 시작하거나 화면을 바꾸면 비운다. */
+  recentActionResult: RecentActionResult | null;
   /** 현재 form option. */
   options: DownloadOptions;
   /** 현재 상태. */
@@ -107,10 +134,14 @@ export type PopupDownloadModel = {
   initialize(): Promise<void>;
   /** YouTube 썸네일 Overlay를 활성화한다. */
   activateYoutubeOverlay(): Promise<void>;
+  /** Popup 안의 화면을 바꾼다. */
+  openView(view: PopupView): void;
   /** 무대에 남은 완료·실패 표시를 걷고 준비 상태로 돌아간다. */
   returnToForm(): Promise<void>;
   /** Snapshot 변경 구독을 등록한다. */
   subscribe(listener: () => void): () => void;
+  /** 최근 요청 항목의 행동(다시 내려받기·다시 시도·다시 요청)을 실행한다. 행동이 없는 항목이면 아무것도 하지 않는다. */
+  runRecentRequestAction(jobId: string): Promise<void>;
   /** 추출을 제출한다. 무대가 실패를 보여 주는 중이면 실패한 요청과 같은 조건으로 다시 제출한다. */
   submitDownload(): Promise<void>;
   /** Form option 변경을 처리한다. */
@@ -122,10 +153,13 @@ export type PopupDownloadModel = {
 
 /** 초기 popup snapshot. */
 const INITIAL_SNAPSHOT: PopupDownloadSnapshot = {
+  view: 'main',
   canDownload: false,
   downloading: false,
   submitting: false,
   jobs: [],
+  recentRequests: [],
+  recentActionResult: null,
   options: DEFAULT_DOWNLOAD_OPTIONS,
   status: MISSING_SOURCE_URL_STATUS,
   stageSource: { kind: 'empty' },
@@ -191,6 +225,7 @@ export function createChromePopupDownloadModel(): PopupDownloadModel {
     downloadJobs: createDownloadJobsBridge(),
     tabs: createTabsAdapter(),
     youtubeOverlay: createYoutubeOverlayAdapter(),
+    downloads: createDownloadsAdapter(),
   });
 }
 
@@ -224,6 +259,20 @@ export function createPopupDownloadModel(
   const scheduledDoneJobIds = new Set<string>();
   /** job별 마지막 상태. 제출 응답과 storage 구독이 서로 다른 시점에 도착해도 되돌리지 않는다. */
   const lastAppliedJobs = new Map<string, DownloadJob>();
+  /** 최근 요청 행동을 실행 중인 job ID. */
+  const pendingRecentJobIds = new Set<string>();
+
+  /** 한 영상의 요청이 제출 중이거나 아직 끝나지 않았는지 확인한다. 같은 영상의 중복 제출을 막는 데 쓴다. */
+  function isVideoInProgress(videoId: string | null, jobs: readonly DownloadJob[]): boolean {
+    if (!videoId) {
+      return false;
+    }
+
+    return (
+      submittingVideoIds.has(videoId) ||
+      jobs.some((job) => isUnsettledJob(job) && getDownloadJobVideoId(job) === videoId)
+    );
+  }
 
   /** 무대 영상의 최신 job과 이번 Popup의 제출 상태로 무대 단계를 도출한다. */
   function deriveStageProgress(
@@ -311,7 +360,12 @@ export function createPopupDownloadModel(
 
   /** 입력 상태를 바꾸고 도출 값(무대 원본·단계·제출 가능 여부·안내 상태)을 모두 다시 계산한다. */
   function refresh(
-    changes: Partial<Pick<PopupDownloadSnapshot, 'jobs' | 'options' | 'youtubeOverlay'>> = {},
+    changes: Partial<
+      Pick<
+        PopupDownloadSnapshot,
+        'jobs' | 'options' | 'recentActionResult' | 'view' | 'youtubeOverlay'
+      >
+    > = {},
   ) {
     /** 바뀐 입력 상태. */
     const base = { ...snapshot, ...changes };
@@ -330,6 +384,18 @@ export function createPopupDownloadModel(
         !isStagePhaseBusy(progress.phase),
       downloading: base.jobs.some(isUnsettledJob),
       fileExtension: getFileExtension(base.options.mode),
+      recentRequests: base.jobs.map((job) => {
+        /** 도출한 표시 정보. */
+        const request = deriveRecentRequest(job, Date.now());
+
+        return {
+          ...request,
+          locked:
+            (request.action === 'retry' || request.action === 'rerequest') &&
+            isVideoInProgress(request.videoId, base.jobs),
+          pending: pendingRecentJobIds.has(job.jobId),
+        };
+      }),
       stageFilename: resolveStageFilename(
         base.options.filename,
         stageSource,
@@ -582,10 +648,72 @@ export function createPopupDownloadModel(
         });
       }
     },
+    openView(view) {
+      // 이전 화면에서 실패한 최근 요청 행동의 이유는 다른 화면으로 옮겨 가면 의미가 없다.
+      refresh({ recentActionResult: null, view });
+    },
     async returnToForm() {
       // 원본과 옵션은 그대로 두어 사용자가 설정만 고쳐 재요청할 수 있게 한다.
       dismissStageResult();
       refresh();
+    },
+    async runRecentRequestAction(jobId) {
+      /** 행동을 실행할 최근 요청. */
+      const request = snapshot.recentRequests.find((item) => item.jobId === jobId);
+      /** 그 요청의 원본 job. */
+      const job = snapshot.jobs.find((item) => item.jobId === jobId);
+
+      if (!request?.action || !job || request.locked || pendingRecentJobIds.has(jobId)) {
+        return;
+      }
+
+      pendingRecentJobIds.add(jobId);
+      refresh({ recentActionResult: null });
+
+      /** 행동이 실패한 이유. 성공하면 null이다. */
+      let failureMessage: string | null = null;
+      /** 재제출로 새로 생긴 job. */
+      let submittedJob: DownloadJob | null = null;
+
+      try {
+        if (request.action === 'redownload') {
+          // 보관 기간 안의 완료 파일은 재처리 없이 같은 주소에서 로컬 다운로드만 다시 시작한다.
+          await dependencies.downloads.startDownload(
+            job.downloadUrl ?? '',
+            buildDefaultLocalFilename(job) || undefined,
+          );
+        } else {
+          // 알림의 다시 시도와 같은 Background 제출 경로로, job의 원본·형식·품질과 기본 이름을 쓴다.
+          submittedJob = await dependencies.downloadJobs.submitJob({
+            apiBaseUrl: snapshot.options.apiBaseUrl,
+            localFilename: buildDefaultLocalFilename(job),
+            mode: job.type,
+            quality: job.quality,
+            sourceUrl: job.sourceUrl ?? '',
+          });
+        }
+      } catch (error) {
+        failureMessage =
+          error instanceof Error && error.message ? error.message : '요청을 처리하지 못했어요.';
+      }
+
+      pendingRecentJobIds.delete(jobId);
+
+      if (submittedJob) {
+        // 이번 Popup이 보낸 job이므로 무대 영상과 같으면 완료·실패 덮개까지 지켜본다.
+        observedJobIds.add(submittedJob.jobId);
+        knownJobIds.add(submittedJob.jobId);
+      }
+
+      refresh({
+        jobs: submittedJob && acceptJobUpdate(submittedJob) ? upsertJob(submittedJob) : snapshot.jobs,
+        recentActionResult: failureMessage
+          ? { kind: 'failed', message: failureMessage }
+          : {
+              kind: 'started',
+              message: request.action === 'redownload' ? '다운로드를 다시 시작했어요' : '다시 요청했어요',
+            },
+      });
     },
     subscribe(listener) {
       listeners.add(listener);
@@ -712,6 +840,16 @@ function resolveStageFilename(
   const sanitized = sanitizeFilenameStem(withoutExtension);
 
   return sanitized || sanitizeYoutubeOverlayFilename(stageSource.title ?? '', stageSource.videoId);
+}
+
+/** 최근 요청을 다시 받을 때 쓸 기본 파일명. 제목 기반 정리(실패 시 영상 ID)에 형식 확장자를 붙이고, 영상 ID를 모르면 서버 기본 이름을 쓰도록 비운다. */
+function buildDefaultLocalFilename(job: DownloadJob): string {
+  /** job 원본의 영상 ID. */
+  const videoId = getDownloadJobVideoId(job);
+
+  return videoId
+    ? `${sanitizeYoutubeOverlayFilename(job.title ?? '', videoId)}.${getFileExtension(job.type)}`
+    : '';
 }
 
 /** 로컬 저장에 넘길 파일명. 입력칸 옆에 보인 확장자를 그대로 붙인다. */

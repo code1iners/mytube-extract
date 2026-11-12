@@ -1,9 +1,9 @@
 import { type ChangeEvent, type FormEvent, type KeyboardEvent, type RefObject, useEffect, useRef, useState } from 'react';
-import { type DownloadJob } from '../domain/download-job/download-job';
 import { type DownloadMode, type FileExtension } from '../domain/download-options/download-options';
 import { getQualityOptions } from '../domain/download-options/quality-options';
-import { type StagePhase, type StageSource, hasStageVideo, isStagePhaseBusy, isStagePhaseProblem } from '../domain/popup-state/popup-state';
-import { type PopupDownloadModel, type PopupDownloadSnapshot, createChromePopupDownloadModel } from '../features/popup-download/popup-download-model';
+import { type PopupView, type StagePhase, type StageSource, hasStageVideo, isStagePhaseBusy, isStagePhaseProblem } from '../domain/popup-state/popup-state';
+import { type RecentRequestAction, type RecentRequestState, RECENT_REQUEST_STRIP_LIMIT } from '../domain/recent-request/recent-request';
+import { type PopupDownloadModel, type PopupDownloadSnapshot, type PopupRecentRequest, type RecentActionResult, createChromePopupDownloadModel } from '../features/popup-download/popup-download-model';
 import { type PopupIconName, PopupIcon } from './popup-icons';
 
 /** 추출 버튼에 표시할 아이콘과 접근 가능한 이름. */
@@ -22,6 +22,22 @@ const MODE_OPTIONS: ReadonlyArray<{ /** 다운로드 형식. */ mode: DownloadMo
   { icon: 'video', label: '비디오 MP4', mode: 'video' },
 ];
 
+/** 최근 요청 상태별 배지·상태 아이콘. 상태는 색만으로 구분하지 않도록 상태마다 다른 아이콘을 쓴다. */
+const RECENT_STATE_ICONS: Record<RecentRequestState, PopupIconName> = {
+  completed: 'check',
+  expired: 'clock-off',
+  failed: 'alert',
+  processing: 'loader',
+  queued: 'clock',
+};
+
+/** 최근 요청 행동별 아이콘과 접근 가능한 이름. */
+const RECENT_ACTION_VIEWS: Record<RecentRequestAction, { /** 행동 아이콘. */ icon: PopupIconName; /** 접근 가능한 이름. */ label: string }> = {
+  redownload: { icon: 'down', label: '다시 내려받기' },
+  rerequest: { icon: 'retry', label: '다시 요청' },
+  retry: { icon: 'retry', label: '다시 시도' },
+};
+
 /** 잘못된 주소의 이유 한 줄 element ID. 붙여넣기 칸이 aria-describedby로 가리킨다. */
 const SOURCE_URL_REASON_ID = 'source-url-reason';
 
@@ -33,6 +49,12 @@ export function PopupApp() {
   const modelRef = useRef<PopupDownloadModel | null>(null);
   /** 붙여넣기 칸의 주소 입력. 지우기 뒤 다시 붙여넣을 수 있게 포커스를 돌려준다. */
   const sourceInputRef = useRef<HTMLInputElement | null>(null);
+  /** 화면을 바꾼 뒤 포커스를 옮길 대상. 처음 그릴 때는 비어 있어 포커스를 건드리지 않는다. */
+  const pendingFocusRef = useRef<PopupView | null>(null);
+  /** recent 화면의 뒤로 버튼. 화면을 열면 여기로 포커스를 옮긴다. */
+  const backButtonRef = useRef<HTMLButtonElement | null>(null);
+  /** 무대 아래 최근 요청 더보기 버튼. 무대로 돌아오면 여기로 포커스를 돌려준다. */
+  const moreButtonRef = useRef<HTMLButtonElement | null>(null);
 
   // States.
 
@@ -105,7 +127,28 @@ export function PopupApp() {
     };
   }, []);
 
+  useEffect(function moveFocusAfterViewChange() {
+    // 화면이 통째로 바뀌면 포커스가 사라지므로 키보드 사용자가 이어 갈 자리로 옮긴다.
+    if (pendingFocusRef.current !== snapshot.view) {
+      return;
+    }
+
+    pendingFocusRef.current = null;
+    (snapshot.view === 'main' ? moreButtonRef.current : backButtonRef.current)?.focus();
+  }, [snapshot.view]);
+
   // Handlers.
+
+  /** Popup 안의 화면을 바꾸고, 바뀐 화면에서 포커스를 받을 자리를 기록한다. */
+  function handleOpenView(view: PopupView) {
+    pendingFocusRef.current = view;
+    getPopupModel().openView(view);
+  }
+
+  /** 최근 요청 항목의 행동을 실행한다. */
+  function handleRecentRequestAction(jobId: string) {
+    void getPopupModel().runRecentRequestAction(jobId);
+  }
 
   /** 붙여넣기 칸의 주소 입력을 모델에 반영한다. */
   function handleSourceUrlChange(event: ChangeEvent<HTMLInputElement>) {
@@ -139,7 +182,14 @@ export function PopupApp() {
     void getPopupModel().submitDownload();
   }
 
-  return <main className="popup-shell" data-phase={snapshot.stagePhase} data-stage={stageSource.kind} data-status={snapshot.status.kind}>
+  if (snapshot.view === 'recent') {
+    return <main className="popup-shell" data-view="recent">
+      <ViewBar backButtonRef={backButtonRef} title="최근 요청" onBack={() => handleOpenView('main')} />
+      <RecentRequestList result={snapshot.recentActionResult} requests={snapshot.recentRequests} onAction={handleRecentRequestAction} />
+    </main>;
+  }
+
+  return <main className="popup-shell" data-view="main" data-phase={snapshot.stagePhase} data-stage={stageSource.kind} data-status={snapshot.status.kind}>
     <PopupHeader />
     <form className="stage-form" onSubmit={handleSubmit}>
       {hasStageVideo(stageSource)
@@ -158,7 +208,7 @@ export function PopupApp() {
       </button>
       <p aria-live="polite" className="visually-hidden" role="status">{stageAnnouncement}</p>
     </form>
-    <RecentJobsList jobs={snapshot.jobs} />
+    {snapshot.recentRequests.length ? <RecentRequestStrip moreButtonRef={moreButtonRef} requests={snapshot.recentRequests} onOpen={() => handleOpenView('recent')} /> : null}
   </main>;
 }
 
@@ -346,50 +396,111 @@ function QualityBars(props: { /** 진행 중 잠금 여부. */ disabled: boolean
   </div>;
 }
 
-/** Popup에 표시할 최근 job 목록을 렌더링한다. */
-function RecentJobsList(props: { /** 최신순 최근 job 목록. */ jobs: DownloadJob[] }) {
-  return <section className="recent-jobs" aria-labelledby="recent-jobs-title">
-    <div className="recent-jobs__header"><h2 id="recent-jobs-title">최근 요청</h2><span>{props.jobs.length}건</span></div>
-    {props.jobs.length ? <ol className="recent-jobs__list">{props.jobs.map((job) => <RecentJobItem key={job.jobId} job={job} />)}</ol> : <p className="recent-jobs__empty">아직 보낸 요청이 없습니다.</p>}
-  </section>;
+/** recent·settings 화면 위쪽의 뒤로 버튼과 화면 제목. */
+function ViewBar(props: { /** 뒤로 버튼 ref. 화면을 열면 포커스를 받는다. */ backButtonRef: RefObject<HTMLButtonElement | null>; /** 화면 제목. */ title: string; /** 무대로 돌아가기. */ onBack: () => void }) {
+  return <header className="popup-header">
+    <button ref={props.backButtonRef} aria-label="뒤로" className="icon-button" type="button" onClick={props.onBack}><PopupIcon name="back" /></button>
+    <h1 className="popup-header__title">{props.title}</h1>
+  </header>;
 }
 
-/** 최근 job 하나의 상태와 요청 옵션을 표시한다. */
-function RecentJobItem(props: { /** 표시할 job. */ job: DownloadJob }) {
-  /** job 상태 표시 정보. */
-  const status = getRecentJobStatus(props.job);
-  /** 표시할 요청 형식과 화질. */
-  const optionLabel = props.job.type === 'audio' ? `오디오 · ${props.job.quality} kbps` : `비디오 · ${props.job.quality}p`;
+/** 무대 아래 최근 요청 줄. 최신 썸네일 몇 개와 더보기 버튼만 두고, 어느 쪽을 눌러도 recent 화면을 연다. */
+function RecentRequestStrip(props: { /** 최신순 최근 요청. */ requests: PopupRecentRequest[]; /** 더보기 버튼 ref. 무대로 돌아오면 포커스를 받는다. */ moreButtonRef: RefObject<HTMLButtonElement | null>; /** recent 화면 열기. */ onOpen: () => void }) {
+  return <nav aria-label="최근 요청" className="recent-strip">
+    <ul className="recent-strip__list">
+      {props.requests.slice(0, RECENT_REQUEST_STRIP_LIMIT).map((request) => <li key={request.jobId} className="recent-strip__item">
+        <button aria-label={`${request.title}, ${request.stateLabel}`} className="recent-strip__thumb" data-state={request.state} type="button" onClick={props.onOpen}>
+          <RecentThumbnail request={request} />
+          <span aria-hidden="true" className={`recent-badge recent-badge--${request.state}`}><PopupIcon className={request.state === 'processing' ? 'is-spinning' : undefined} name={RECENT_STATE_ICONS[request.state]} /></span>
+        </button>
+      </li>)}
+    </ul>
+    <button ref={props.moreButtonRef} aria-label="최근 요청 모두 보기" className="recent-strip__more" type="button" onClick={props.onOpen}><PopupIcon name="chevron" /></button>
+  </nav>;
+}
 
-  return <li className={`recent-job recent-job--${status.kind}`} data-job-id={props.job.jobId}>
-    <div className="recent-job__heading"><span className="recent-job__icon" aria-hidden="true">{status.icon}</span><strong>{status.label}</strong><span className="recent-job__option">{optionLabel}</span><time dateTime={props.job.createdAt}>{formatRecentJobTime(props.job.createdAt)}</time></div>
-    <p className="recent-job__message">{props.job.message}</p>
+/** 최근 요청 썸네일. 원본 정보가 없는 예전 job이나 이미지를 불러오지 못한 경우 중립 배경과 형식 아이콘을 그린다. */
+function RecentThumbnail(props: { /** 그릴 최근 요청. */ request: PopupRecentRequest }) {
+  /** 썸네일 로드 실패 여부. */
+  const [failed, setFailed] = useState(false);
+
+  return <span className="recent-thumb" data-thumbnail={props.request.thumbnailUrl && !failed ? 'image' : 'fallback'}>
+    {props.request.thumbnailUrl && !failed
+      ? <img alt="" className="recent-thumb__image" decoding="async" src={props.request.thumbnailUrl} onError={() => setFailed(true)} />
+      : <PopupIcon name={props.request.mode} />}
+  </span>;
+}
+
+/** recent 화면의 최근 요청 목록. 비어 있으면 빈 상자 아이콘만 보여준다. */
+function RecentRequestList(props: { /** 최신순 최근 요청. */ requests: PopupRecentRequest[]; /** 마지막 행동의 결과. */ result: RecentActionResult | null; /** 항목 행동 실행. */ onAction: (jobId: string) => void }) {
+  if (!props.requests.length) {
+    return <div className="recent-empty" role="status">
+      <PopupIcon name="inbox" />
+      <span className="visually-hidden">아직 보낸 요청이 없어요</span>
+    </div>;
+  }
+
+  return <>
+    {props.result?.kind === 'failed' ? <p className="stage-problem" role="alert"><PopupIcon name="alert" /><span>{props.result.message}</span></p> : null}
+    <p aria-live="polite" className="visually-hidden" role="status">{props.result?.kind === 'started' ? props.result.message : ''}</p>
+    <ul aria-label="최근 요청" className="recent-list">
+      {props.requests.map((request) => <RecentRequestRow key={request.jobId} request={request} onAction={props.onAction} />)}
+    </ul>
+  </>;
+}
+
+/** 최근 요청 한 줄: 썸네일, 제목, 형식·품질과 요청 시각, 상태, 행동 하나. */
+function RecentRequestRow(props: { /** 그릴 최근 요청. */ request: PopupRecentRequest; /** 항목 행동 실행. */ onAction: (jobId: string) => void }) {
+  /** 품질 표기. */
+  const qualityLabel = props.request.mode === 'audio' ? `${props.request.quality} kbps` : `${props.request.quality}p`;
+
+  return <li className="recent-row" data-job-id={props.request.jobId} data-state={props.request.state}>
+    <RecentThumbnail request={props.request} />
+    <div className="recent-row__meta">
+      <strong className="recent-row__title" title={props.request.title}>{props.request.title}</strong>
+      <span className="recent-row__option">
+        <PopupIcon name={props.request.mode} />
+        <span className="visually-hidden">{props.request.mode === 'audio' ? '오디오 MP3' : '비디오 MP4'}</span>
+        <span>{qualityLabel}</span>
+        <span aria-hidden="true">·</span>
+        <time dateTime={props.request.createdAt}>{formatRecentJobTime(props.request.createdAt)}</time>
+      </span>
+      <span className={`recent-row__state recent-row__state--${props.request.state}`}><PopupIcon name={RECENT_STATE_ICONS[props.request.state]} />{props.request.stateLabel}</span>
+    </div>
+    <RecentRequestActionButton request={props.request} onAction={props.onAction} />
   </li>;
 }
 
-/** 최근 job 상태의 텍스트·아이콘을 함께 만든다. */
-function getRecentJobStatus(job: DownloadJob): { icon: string; kind: DownloadJob['displayStatus']; label: string } {
-  if (job.displayStatus === 'expired') return { icon: '!', kind: 'expired', label: '만료됨' };
-  if (job.status === 'queued') return { icon: '○', kind: 'queued', label: '대기 중' };
-  if (job.status === 'processing') return { icon: '◌', kind: 'processing', label: '처리 중' };
-  if (job.status === 'completed') return { icon: '✓', kind: 'completed', label: '완료' };
-  return { icon: '!', kind: 'failed', label: '실패' };
+/** 최근 요청 행동 버튼. 대기·처리 중이거나 행동이 없으면 상태 아이콘만 둔다. */
+function RecentRequestActionButton(props: { /** 그릴 최근 요청. */ request: PopupRecentRequest; /** 항목 행동 실행. */ onAction: (jobId: string) => void }) {
+  if (!props.request.action) {
+    return props.request.state === 'queued' || props.request.state === 'processing'
+      ? <span aria-hidden="true" className={`recent-row__wait recent-row__wait--${props.request.state}`}><PopupIcon className={props.request.state === 'processing' ? 'is-spinning' : undefined} name={RECENT_STATE_ICONS[props.request.state]} /></span>
+      : <span aria-hidden="true" className="recent-row__wait" />;
+  }
+
+  /** 행동 아이콘과 이름. */
+  const action = RECENT_ACTION_VIEWS[props.request.action];
+
+  return <button aria-busy={props.request.pending || undefined} aria-label={action.label} className={props.request.action === 'redownload' ? 'recent-row__action' : 'recent-row__action is-retry'} disabled={props.request.pending || props.request.locked} type="button" onClick={() => props.onAction(props.request.jobId)}>
+    <PopupIcon className={props.request.pending ? 'is-spinning' : undefined} name={props.request.pending ? 'loader' : action.icon} />
+  </button>;
 }
 
-/** 최근 job 생성 시각을 popup에 맞는 짧은 형식으로 표시한다. */
+/** 최근 요청 시각을 한 줄에 들어가는 짧은 형식으로 표시한다. 오늘이면 시각(19:50), 아니면 날짜(11월 4일)만 쓴다. */
 function formatRecentJobTime(createdAt: string): string {
+  /** 요청 시각. */
   const date = new Date(createdAt);
 
   if (Number.isNaN(date.getTime())) {
     return '';
   }
 
-  return new Intl.DateTimeFormat('ko-KR', {
-    day: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-    month: 'numeric',
-  }).format(date);
+  if (date.toDateString() === new Date().toDateString()) {
+    return new Intl.DateTimeFormat('ko-KR', { hour: '2-digit', hourCycle: 'h23', minute: '2-digit' }).format(date);
+  }
+
+  return new Intl.DateTimeFormat('ko-KR', { day: 'numeric', month: 'long' }).format(date);
 }
 
 /** 추출 버튼의 아이콘과 접근 가능한 이름을 정한다. */
