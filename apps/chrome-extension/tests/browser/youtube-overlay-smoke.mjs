@@ -52,7 +52,35 @@ try {
       kind: 'job-accepted',
       ok: true,
     };
+    // Background가 기록하는 최근 job 목록 대신 쓰는 가짜 storage. 값을 바꾸면 onChanged를 그대로 흉내 낸다.
+    globalThis.__myTubeExtractStoredJobs = [];
+    globalThis.__myTubeExtractStorageListeners = [];
+    globalThis.__myTubeExtractSetStoredJobs = (jobs) => {
+      /** 이전 저장 값. */
+      const oldValue = globalThis.__myTubeExtractStoredJobs;
+
+      globalThis.__myTubeExtractStoredJobs = jobs;
+      globalThis.__myTubeExtractStorageListeners.forEach((listener) =>
+        listener({ recentDownloadJobs: { newValue: jobs, oldValue } }, 'local'),
+      );
+    };
     globalThis.chrome = {
+      storage: {
+        local: {
+          get(_keys, callback) {
+            setTimeout(() => callback({ recentDownloadJobs: globalThis.__myTubeExtractStoredJobs }), 0);
+          },
+        },
+        onChanged: {
+          addListener(listener) {
+            globalThis.__myTubeExtractStorageListeners.push(listener);
+          },
+          removeListener(listener) {
+            globalThis.__myTubeExtractStorageListeners =
+              globalThis.__myTubeExtractStorageListeners.filter((item) => item !== listener);
+          },
+        },
+      },
       runtime: {
         lastError: null,
         getURL(path) {
@@ -258,6 +286,120 @@ try {
   assertEqual(videoRequest.quality, 720, 'video request quality');
   assertEqual(videoRequest.title, 'Dynamic video title', 'video request title');
   assertEqual(videoRequest.videoId, 'dynam01_XYZ', 'video request video ID');
+
+  // 재시도 응답이 돌아와 동적 카드 조작이 다시 켜질 때까지 기다린다.
+  await page.waitForFunction(
+    () =>
+      [
+        ...(document
+          .querySelector('#dynamic-card [data-mytube-extract-overlay]')
+          ?.shadowRoot?.querySelectorAll('button') ?? []),
+      ].every((button) => !button.disabled),
+    null,
+    { timeout: 10000 },
+  );
+
+  // 저장된 job을 대기 → 처리 → 완료로 바꾸면 해당 카드 배지가 호버 없이 바뀐다.
+  await clickInToast(page, 'button[aria-label="닫기"]');
+  await page.mouse.move(0, 0);
+  await waitForOverlayVisible(page, '#video-card', false);
+  assertEqual((await readCardStatus(page, '#video-card')).state, '', 'no status before a stored job');
+
+  await setStoredJobs(page, [createStoredJob('video12_XYZ', 'queued')]);
+  await waitForCardStatus(page, '#video-card', 'queued');
+
+  const queuedStatus = await readCardStatus(page, '#video-card');
+
+  assertEqual(queuedStatus.name, '접수됨, 대기 중', 'queued status name');
+  assertEqual(queuedStatus.visible, true, 'queued status visible without hover');
+  assertEqual(queuedStatus.clock, true, 'queued status shows the clock');
+  assertEqual((await readCardStatus(page, '#audio-card')).state, '', 'other card has no status');
+  await saveScreenshot(page, 'overlay-status-queued.png');
+
+  await setStoredJobs(page, [createStoredJob('video12_XYZ', 'processing')]);
+  await waitForCardStatus(page, '#video-card', 'processing');
+
+  const processingStatus = await readCardStatus(page, '#video-card');
+
+  assertEqual(processingStatus.name, '처리 중', 'processing status name');
+  assertEqual(processingStatus.clock, false, 'processing status has no clock');
+  assertEqual(processingStatus.visibleText, '', 'processing ring has no number');
+
+  // 호버 UI가 열려도 상태 배지는 가려지지 않고 함께 보인다.
+  await page.hover('#video-card a#thumbnail');
+  await waitForOverlayVisible(page, '#video-card', true);
+  assertEqual(await readStatusOverlapsControls(page, '#video-card'), false, 'status beside hover UI');
+  await saveScreenshot(page, 'overlay-status-processing-hover.png');
+  await page.mouse.move(0, 0);
+
+  await setStoredJobs(page, [createStoredJob('video12_XYZ', 'completed')]);
+  await waitForCardStatus(page, '#video-card', 'completed');
+  assertEqual((await readCardStatus(page, '#video-card')).name, '다운로드 시작', 'completed status name');
+  await saveScreenshot(page, 'overlay-status-completed.png');
+  // 완료 배지는 몇 초 뒤 사라진다.
+  await waitForCardStatus(page, '#video-card', '');
+
+  // 실패 배지를 누르면 같은 형식·품질의 다운로드 메시지를 보낸다.
+  await setStoredJobs(page, [
+    createStoredJob('video12_XYZ', 'completed'),
+    createStoredJob('abc123_DEF0', 'failed', { quality: '320', type: 'audio' }),
+  ]);
+  await waitForCardStatus(page, '#audio-card', 'failed');
+  assertEqual((await readCardStatus(page, '#audio-card')).name, '실패, 다시 시도', 'failed status name');
+  await saveScreenshot(page, 'overlay-status-failed.png');
+
+  /** 재시도 전 전송된 요청 수. */
+  const requestCountBeforeRetry = await page.evaluate(
+    () => globalThis.__myTubeExtractOverlayRequests.length,
+  );
+
+  await clickInOverlay(page, '#audio-card', '.status button');
+  await page.waitForFunction(
+    (count) => globalThis.__myTubeExtractOverlayRequests.length === count + 1,
+    requestCountBeforeRetry,
+    { timeout: 10000 },
+  );
+
+  const retryRequest = await page.evaluate(
+    () => globalThis.__myTubeExtractOverlayRequests.at(-1),
+  );
+
+  assertEqual(retryRequest.type, 'youtube-overlay-download', 'status retry message type');
+  assertEqual(retryRequest.mode, 'audio', 'status retry mode');
+  assertEqual(retryRequest.quality, 320, 'status retry quality');
+  assertEqual(retryRequest.videoId, 'abc123_DEF0', 'status retry video ID');
+  assertEqual(retryRequest.title, 'Fixture audio title', 'status retry title');
+  assertEqual(page.url().endsWith('/'), true, 'status retry stays on the page');
+
+  // 무한 스크롤처럼 같은 영상 카드가 지워졌다가 다시 그려져도 현재 상태를 다시 표시한다.
+  await page.evaluate(() => {
+    document.querySelector('#audio-card')?.remove();
+
+    /** 다시 그려진 같은 영상 카드. */
+    const card = document.createElement('ytd-rich-item-renderer');
+
+    card.id = 'audio-card';
+    card.innerHTML =
+      '<a id="thumbnail" href="https://www.youtube.com/watch?v=abc123_DEF0"><div class="thumb"></div></a>' +
+      '<a id="video-title-link">Fixture audio title</a>';
+    document.querySelector('#cards')?.append(card);
+  });
+  await waitForCardStatus(page, '#audio-card', 'failed');
+
+  // YouTube가 카드 element를 다른 영상에 재사용하면 새 영상의 상태로 바꿔 그린다.
+  await setStoredJobs(page, [
+    createStoredJob('abc123_DEF0', 'failed', { quality: '320', type: 'audio' }),
+    createStoredJob('dynam01_XYZ', 'processing'),
+  ]);
+  await waitForCardStatus(page, '#dynamic-card', 'processing');
+  await page.evaluate(() => {
+    document
+      .querySelector('#dynamic-card a#thumbnail')
+      ?.setAttribute('href', 'https://www.youtube.com/watch?v=abc123_DEF0');
+    window.dispatchEvent(new Event('yt-navigate-finish'));
+  });
+  await waitForCardStatus(page, '#dynamic-card', 'failed');
+  await saveScreenshot(page, 'overlay-status-redrawn.png');
 } finally {
   await browser.close();
   await fixtureServer.close();
@@ -466,6 +608,98 @@ function readToast(page) {
       visibleSentence: /[가-힣]{2,}/.test(toast?.textContent ?? ''),
     };
   });
+}
+
+/** 검사용 최근 job 저장 값을 만든다. */
+function createStoredJob(videoId, status, overrides = {}) {
+  return {
+    createdAt: '2026-11-12T09:00:00.000Z',
+    displayStatus: status,
+    downloadUrl: null,
+    errorCode: null,
+    jobId: 'job-' + videoId,
+    message: '',
+    progress: null,
+    quality: '720',
+    retentionDays: 7,
+    sourceUrl: 'https://www.youtube.com/watch?v=' + videoId,
+    status,
+    title: 'Stored title',
+    type: 'video',
+    ...overrides,
+    // 같은 영상의 job이 여럿이면 최신 job을 쓰므로 검사마다 생성 시각을 늘린다.
+    ...(overrides.createdAt ? {} : { createdAt: new Date(Date.now()).toISOString() }),
+  };
+}
+
+/** 가짜 storage의 최근 job 목록을 바꾸고 변경 이벤트를 보낸다. */
+function setStoredJobs(page, jobs) {
+  return page.evaluate((nextJobs) => globalThis.__myTubeExtractSetStoredJobs(nextJobs), jobs);
+}
+
+/** 카드 상태 배지의 상태·이름·표시 여부를 읽는다. */
+function readCardStatus(page, cardSelector) {
+  return page.evaluate((selector) => {
+    /** 카드 상태 자리. */
+    const status = document
+      .querySelector(selector + ' [data-mytube-extract-overlay]')
+      ?.shadowRoot?.querySelector('[role="status"]');
+    /** 실패 배지 버튼. */
+    const button = status?.querySelector('button');
+    /** 상태 배지 화면 영역. */
+    const rect = status?.firstElementChild?.getBoundingClientRect();
+
+    return {
+      clock: Boolean(status?.querySelector('.icon circle')),
+      name: button?.getAttribute('aria-label') ?? status?.textContent ?? '',
+      state: status?.getAttribute('data-state') ?? '',
+      visible: Boolean(rect && rect.width > 0 && rect.height > 0),
+      visibleText: [...(status?.childNodes ?? [])]
+        .flatMap((node) => [...(node.childNodes ?? [])])
+        .filter((node) => node.nodeType === Node.TEXT_NODE)
+        .map((node) => node.textContent)
+        .join(''),
+    };
+  }, cardSelector);
+}
+
+/** 카드 상태 배지가 기대 상태가 될 때까지 기다린다. 빈 문자열이면 배지가 없어질 때까지 기다린다. */
+async function waitForCardStatus(page, cardSelector, expected) {
+  await page.waitForFunction(
+    ([selector, state]) =>
+      (document
+        .querySelector(selector + ' [data-mytube-extract-overlay]')
+        ?.shadowRoot?.querySelector('[role="status"]')
+        ?.getAttribute('data-state') ?? '') === state,
+    [cardSelector, expected],
+    { timeout: 10000 },
+  );
+}
+
+/** 상태 배지가 호버 UI의 조작 영역과 겹치는지 확인한다. */
+function readStatusOverlapsControls(page, cardSelector) {
+  return page.evaluate((selector) => {
+    /** 카드 Overlay Shadow Root. */
+    const root = document.querySelector(selector + ' [data-mytube-extract-overlay]')?.shadowRoot;
+    /** 상태 배지 화면 영역. */
+    const statusRect = root?.querySelector('[role="status"]')?.firstElementChild?.getBoundingClientRect();
+
+    if (!statusRect) {
+      throw new Error('Status badge is missing.');
+    }
+
+    return [...(root?.querySelectorAll('.overlay button') ?? [])].some((button) => {
+      /** 조작 버튼 화면 영역. */
+      const rect = button.getBoundingClientRect();
+
+      return (
+        rect.left < statusRect.right &&
+        statusRect.left < rect.right &&
+        rect.top < statusRect.bottom &&
+        statusRect.top < rect.bottom
+      );
+    });
+  }, cardSelector);
 }
 
 /** 기대값이 다르면 browser smoke를 실패시킨다. */

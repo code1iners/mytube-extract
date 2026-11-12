@@ -1,3 +1,4 @@
+import { createDownloadJobStorageAdapter } from '../../adapters/chrome/download-job-storage';
 import {
   getYoutubeThumbnailUrl,
   type DownloadMode,
@@ -8,6 +9,11 @@ import {
   type QualityOption,
 } from '../../domain/download-options/quality-options';
 import { parseStandardYoutubeWatchUrl } from './youtube-card-url';
+import {
+  createOverlayCardStatusTracker,
+  type OverlayCardStatus,
+  type OverlayCardStatusTracker,
+} from './youtube-overlay-card-status';
 import {
   type YoutubeOverlayDownloadRequest,
   type YoutubeOverlayDownloadResponse,
@@ -43,17 +49,29 @@ const MODE_LABELS: Record<DownloadMode, string> = {
   video: '비디오 MP4',
 };
 
+/** 카드 상태별 접근 가능한 이름. 승인 시안의 문장을 따른다. */
+const STATUS_LABELS: Record<OverlayCardStatus['state'], string> = {
+  completed: '다운로드 시작',
+  failed: '실패, 다시 시도',
+  processing: '처리 중',
+  queued: '접수됨, 대기 중',
+};
+
 /** Overlay에서 쓰는 선 아이콘 이름. 모양은 Popup 아이콘(승인 시안)과 같다. */
-type OverlayIconName = 'alert' | 'audio' | 'check' | 'retry' | 'video' | 'x';
+type OverlayIconName = 'alert' | 'audio' | 'check' | 'clock' | 'retry' | 'video' | 'x';
 
 /** SVG 도형 하나의 태그와 속성. */
-type OverlayIconShape = [tag: 'path' | 'rect', attributes: Record<string, string>];
+type OverlayIconShape = [tag: 'circle' | 'path' | 'rect', attributes: Record<string, string>];
 
 /** 아이콘별 SVG 도형. viewBox는 모두 `0 0 24 24`다. */
 const OVERLAY_ICON_SHAPES: Record<OverlayIconName, OverlayIconShape[]> = {
   alert: [['path', { d: 'M12 6v8M12 18.5v.01' }]],
   audio: [['path', { d: 'M4 10v4M8 6v12M12 3v18M16 8v8M20 10.5v3' }]],
   check: [['path', { d: 'M5 12.5l4.5 4.5L19 7' }]],
+  clock: [
+    ['circle', { cx: '12', cy: '12', r: '8.5' }],
+    ['path', { d: 'M12 7.5V12l3 2' }],
+  ],
   retry: [['path', { d: 'M4.5 12a7.5 7.5 0 1 0 2.2-5.3M4.5 4v4.5H9' }]],
   video: [
     ['rect', { height: '14', rx: '3', width: '18', x: '3', y: '5' }],
@@ -83,6 +101,10 @@ type OverlayPageState = {
   mode: DownloadMode;
   /** 형식이 바뀌면 다시 그릴 카드별 render 함수. */
   renderers: Set<() => void>;
+  /** 저장된 최근 job으로 고른 카드별 상태. */
+  statuses: OverlayCardStatusTracker;
+  /** 최근 job 목록이 바뀌면 다시 그릴 카드별 상태 render 함수. */
+  statusRenderers: Set<() => void>;
 };
 
 /** 페이지 전역 Toast controller. */
@@ -120,6 +142,8 @@ export function mountYoutubeOverlay(): void {
   const pageState: OverlayPageState = {
     mode: DEFAULT_OVERLAY_MODE,
     renderers: new Set(),
+    statuses: createOverlayCardStatusTracker(),
+    statusRenderers: new Set(),
   };
   /** 카드 변경을 감시하는 observer. */
   const observer = new MutationObserver(scheduleScan);
@@ -168,6 +192,55 @@ export function mountYoutubeOverlay(): void {
   window.addEventListener('yt-page-data-updated', scheduleScan);
 
   scanCards();
+  subscribeRecentJobs(pageState);
+}
+
+/**
+ * Popup과 같은 storage 변경 이벤트로 최근 job 목록을 구독해 카드 상태를 갱신한다.
+ * Background가 content script에 따로 메시지를 보내지 않으므로 최근 5건 보관 목록에 있는 job만 보인다.
+ */
+function subscribeRecentJobs(pageState: OverlayPageState): void {
+  // 검사용 페이지처럼 storage가 없는 환경에서는 호버 UI만 동작한다.
+  if (!chrome.storage?.local || !chrome.storage.onChanged) {
+    return;
+  }
+
+  /** 최근 job storage adapter. */
+  const storage = createDownloadJobStorageAdapter(chrome);
+  /** 완료 배지를 지우려고 예약한 timer. */
+  let expiryTimer: number | undefined;
+
+  /** 모든 카드의 상태 배지를 다시 그리고, 완료 배지가 사라질 때 한 번 더 그리도록 예약한다. */
+  function renderStatuses() {
+    pageState.statusRenderers.forEach((renderStatus) => renderStatus());
+
+    if (expiryTimer !== undefined) {
+      window.clearTimeout(expiryTimer);
+      expiryTimer = undefined;
+    }
+
+    /** 다음 완료 배지가 사라질 때까지 남은 시간. */
+    const delay = pageState.statuses.getNextChangeDelay(Date.now());
+
+    if (delay !== null) {
+      expiryTimer = window.setTimeout(renderStatuses, delay);
+    }
+  }
+
+  /** 받은 최근 job 목록을 반영한다. */
+  function applyJobs(jobs: Parameters<OverlayCardStatusTracker['update']>[0]) {
+    pageState.statuses.update(jobs, Date.now());
+    renderStatuses();
+  }
+
+  try {
+    storage.subscribeJobs(applyJobs);
+    storage.loadJobs().then(applyJobs, () => {
+      // 확장을 다시 불러와 연결이 끊긴 페이지에서는 상태 없이 호버 UI만 남긴다.
+    });
+  } catch {
+    // 연결이 끊긴 확장 context에서는 storage 호출 자체가 예외를 던진다.
+  }
 }
 
 /** YouTube 카드에서 표준 watch URL과 제목·썸네일을 읽는다. */
@@ -210,18 +283,23 @@ function mountCardOverlay(
   pageState: OverlayPageState,
   toast: ToastController,
 ): void {
-  if (
-    cardInfo.thumbnail.querySelector(
-      '[' + OVERLAY_MARKER_ATTRIBUTE + ']',
-    )
-  ) {
+  /** 이 썸네일에 이미 붙은 Overlay host. */
+  const existingHost = cardInfo.thumbnail.querySelector<HTMLElement>(
+    '[' + OVERLAY_MARKER_ATTRIBUTE + ']',
+  );
+
+  if (existingHost?.dataset.videoId === cardInfo.videoId) {
     return;
   }
+
+  // YouTube가 카드 element를 다른 영상에 재사용하면 이전 영상의 Overlay와 상태를 떼고 다시 붙인다.
+  existingHost?.remove();
 
   /** 썸네일 전체를 덮는 Overlay host. 빈 영역의 pointer는 YouTube 썸네일로 통과시킨다. */
   const host = document.createElement('span');
 
   host.setAttribute(OVERLAY_MARKER_ATTRIBUTE, 'true');
+  host.dataset.videoId = cardInfo.videoId;
   host.style.position = 'absolute';
   host.style.inset = '0';
   host.style.display = 'block';
@@ -242,6 +320,10 @@ function mountCardOverlay(
   const formats = document.createElement('div');
   /** 품질 막대 묶음. 누르면 바로 제출한다. */
   const levels = document.createElement('div');
+  /** 호버와 관계없이 보이는 job 상태 자리. 상태가 바뀌면 읽어 주도록 live region으로 둔다. */
+  const status = document.createElement('div');
+  /** 마지막으로 그린 상태 key. 같은 상태를 다시 그려 포커스나 낭독이 반복되지 않게 한다. */
+  let renderedStatusKey = '';
   /** 카드가 사라졌을 때 이 카드의 page 리스너를 한 번에 떼기 위한 controller. */
   const listeners = new AbortController();
   /** 형식별 원형 버튼. */
@@ -254,8 +336,10 @@ function mountCardOverlay(
   /** Background 응답을 기다리는 중인지 여부. */
   let pending = false;
 
-  shadowRoot.append(createOverlayStyle(), overlay);
+  shadowRoot.append(createOverlayStyle(), overlay, status);
   overlay.className = 'overlay';
+  status.className = 'status';
+  status.setAttribute('role', 'status');
   formats.className = 'formats';
   formats.setAttribute('role', 'group');
   formats.setAttribute('aria-label', '형식');
@@ -307,10 +391,89 @@ function mountCardOverlay(
     setControlsDisabled(pending);
   }
 
-  /** 이 카드의 page 리스너와 형식 render 구독을 해제한다. */
+  /** 저장된 최근 job 중 이 카드 영상의 상태를 썸네일 위에 그린다. */
+  function renderStatus() {
+    if (!host.isConnected) {
+      detach();
+      return;
+    }
+
+    /** 이 카드 영상의 현재 상태. */
+    const cardStatus = pageState.statuses.getStatus(cardInfo.videoId, Date.now());
+    /** 상태와 재시도 조건을 묶은 비교 key. */
+    const statusKey = cardStatus ? JSON.stringify(cardStatus) : '';
+
+    if (statusKey === renderedStatusKey) {
+      return;
+    }
+
+    renderedStatusKey = statusKey;
+
+    if (!cardStatus) {
+      status.replaceChildren();
+      status.removeAttribute('data-state');
+      return;
+    }
+
+    status.dataset.state = cardStatus.state;
+    status.replaceChildren(createStatusContent(cardStatus));
+  }
+
+  /** 상태별 배지를 만든다. 실패 배지만 누를 수 있다. */
+  function createStatusContent(cardStatus: OverlayCardStatus): HTMLElement {
+    /** 상태의 접근 가능한 이름. */
+    const label = STATUS_LABELS[cardStatus.state];
+
+    if (cardStatus.state === 'failed') {
+      /** 같은 형식·품질로 다시 제출하는 버튼 배지. */
+      const button = document.createElement('button');
+
+      button.className = 'status__badge status__retry';
+      button.type = 'button';
+      button.disabled = pending;
+      button.setAttribute('aria-label', label);
+      button.append(createIcon('retry'));
+      button.addEventListener('click', function handleStatusRetryClick(event) {
+        event.preventDefault();
+        event.stopPropagation();
+        startDownload(cardStatus.mode, cardStatus.quality);
+      });
+
+      return button;
+    }
+
+    /** 대기·처리 링 또는 완료 배지. 이름은 화면에 보이지 않는 문장으로 읽힌다. */
+    const badge = document.createElement('span');
+    /** 상태 이름. */
+    const text = document.createElement('span');
+
+    text.className = 'sr-only';
+    text.textContent = label;
+
+    if (cardStatus.state === 'completed') {
+      badge.className = 'status__badge status__done';
+      badge.append(createIcon('check'), text);
+      return badge;
+    }
+
+    // 대기는 시계와 회전 링, 처리는 숫자 없이 회전 링만 둔다.
+    badge.className = 'status__ring';
+    badge.append(createSpinnerRing());
+
+    if (cardStatus.state === 'queued') {
+      badge.append(createIcon('clock'));
+    }
+
+    badge.append(text);
+
+    return badge;
+  }
+
+  /** 이 카드의 page 리스너와 형식·상태 render 구독을 해제한다. */
   function detach() {
     listeners.abort();
     pageState.renderers.delete(render);
+    pageState.statusRenderers.delete(renderStatus);
   }
 
   /** 선택한 품질로 Background 다운로드를 시작한다. */
@@ -362,9 +525,9 @@ function mountCardOverlay(
     toast.showFailure(request, message, () => startDownload(request.mode, request.quality));
   }
 
-  /** 형식 버튼과 품질 막대의 disabled 상태를 일괄 변경한다. */
+  /** 형식 버튼·품질 막대·재시도 배지의 disabled 상태를 일괄 변경한다. */
   function setControlsDisabled(disabled: boolean) {
-    overlay
+    shadowRoot
       .querySelectorAll<HTMLButtonElement>('button')
       .forEach((button) => {
         button.disabled = disabled;
@@ -456,7 +619,40 @@ function mountCardOverlay(
   );
 
   pageState.renderers.add(render);
+  pageState.statusRenderers.add(renderStatus);
   render();
+  renderStatus();
+}
+
+/** 대기·처리 상태에 쓰는 흰 회전 링을 만든다. 진행률 숫자는 두지 않는다. */
+function createSpinnerRing(): SVGSVGElement {
+  /** 링 SVG element. */
+  const ring = document.createElementNS(SVG_NAMESPACE, 'svg');
+  /** 흐린 바탕 원. */
+  const track = document.createElementNS(SVG_NAMESPACE, 'circle');
+  /** 회전하는 짧은 호. */
+  const arc = document.createElementNS(SVG_NAMESPACE, 'circle');
+
+  ring.setAttribute('aria-hidden', 'true');
+  ring.setAttribute('class', 'ring');
+  ring.setAttribute('focusable', 'false');
+  ring.setAttribute('viewBox', '0 0 40 40');
+  [track, arc].forEach((circle) => {
+    circle.setAttribute('cx', '20');
+    circle.setAttribute('cy', '20');
+    circle.setAttribute('r', '17');
+    circle.setAttribute('fill', 'none');
+    circle.setAttribute('stroke-width', '3');
+  });
+  track.setAttribute('stroke', 'rgba(255, 255, 255, .25)');
+  arc.setAttribute('class', 'ring__arc');
+  arc.setAttribute('stroke', '#ffffff');
+  arc.setAttribute('stroke-linecap', 'round');
+  arc.setAttribute('pathLength', '100');
+  arc.setAttribute('stroke-dasharray', '22 78');
+  ring.append(track, arc);
+
+  return ring;
 }
 
 /** 페이지 전역 Toast를 만들고 상태 갱신 함수를 반환한다. */
@@ -638,7 +834,7 @@ function createOverlayStyle(): HTMLStyleElement {
 
   // 썸네일 위에 놓이므로 YouTube 테마와 상관없이 어두운 scrim 위 흰 아이콘을 쓴다.
   style.textContent = [
-    ':host { --overlay-primary: #e60012; --overlay-scrim: rgba(18, 18, 20, .74); --overlay-scrim-strong: rgba(0, 0, 0, .9); --overlay-bar: rgba(255, 255, 255, .4); --overlay-focus: #4b5cce; display: block; font-family: "Pretendard Variable", ui-sans-serif, system-ui, sans-serif; }',
+    ':host { --overlay-primary: #e60012; --overlay-scrim: rgba(18, 18, 20, .74); --overlay-scrim-strong: rgba(0, 0, 0, .9); --overlay-bar: rgba(255, 255, 255, .4); --overlay-focus: #4b5cce; --overlay-ok: #356b43; --overlay-bad: #c62828; display: block; font-family: "Pretendard Variable", ui-sans-serif, system-ui, sans-serif; }',
     createFontFaceRule(),
     '.overlay { position: absolute; top: 8px; right: 8px; display: flex; flex-direction: column; align-items: flex-end; gap: 8px; opacity: 0; pointer-events: none; transition: opacity .12s ease-out; }',
     '.overlay[data-visible] { opacity: 1; pointer-events: auto; }',
@@ -660,9 +856,22 @@ function createOverlayStyle(): HTMLStyleElement {
     'button:focus-visible { outline: 2px solid var(--overlay-focus); outline-offset: 2px; box-shadow: 0 0 0 2px #ffffff; }',
     '.format[aria-pressed="true"]:focus-visible { box-shadow: inset 0 0 0 2px #ffffff, 0 0 0 2px #ffffff; }',
     'button:disabled { cursor: not-allowed; opacity: .55; }',
+    // 상태 배지는 호버 UI(오른쪽 위)와 겹치지 않는 왼쪽 위에 고정한다. 호버에 따라 움직이면 재시도 배지를 누르려다 빗나간다.
+    '.status { position: absolute; top: 8px; left: 8px; }',
+    '.status__ring, .status__badge { position: relative; display: grid; width: 44px; height: 44px; place-items: center; border-radius: 9999px; color: #ffffff; }',
+    '.status__ring { background: var(--overlay-scrim); }',
+    '.ring { position: absolute; inset: 0; width: 44px; height: 44px; }',
+    '.ring__arc { transform-origin: 50% 50%; animation: mytube-spin 1.4s linear infinite; }',
+    '@keyframes mytube-spin { to { transform: rotate(360deg); } }',
+    '.status__ring .icon { width: 18px; height: 18px; }',
+    '.status__done { background: var(--overlay-ok); }',
+    '.status__done .icon { stroke-width: 2.6; }',
+    '.status__retry { background: var(--overlay-bad); pointer-events: auto; }',
+    '.status__retry:hover { background: #a61f1f; }',
+    '.sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }',
     // 사이드바처럼 짧은 썸네일(168×94)에서는 44px 조작 영역을 유지한 채 여백만 줄여 잘리지 않게 한다.
-    '@container (max-height: 130px) { .overlay { top: 2px; right: 2px; gap: 2px; } .formats { gap: 2px; } .levels { gap: 2px; padding: 0; border-radius: 8px; } .level { height: 44px; gap: 2px; padding-bottom: 3px; } .level:nth-child(1) i { height: 6px; } .level:nth-child(2) i { height: 11px; } .level:nth-child(3) i { height: 16px; } }',
-    '@media (prefers-reduced-motion: reduce) { .overlay { transition: none; } }',
+    '@container (max-height: 130px) { .status { top: 2px; left: 2px; } .overlay { top: 2px; right: 2px; gap: 2px; } .formats { gap: 2px; } .levels { gap: 2px; padding: 0; border-radius: 8px; } .level { height: 44px; gap: 2px; padding-bottom: 3px; } .level:nth-child(1) i { height: 6px; } .level:nth-child(2) i { height: 11px; } .level:nth-child(3) i { height: 16px; } }',
+    '@media (prefers-reduced-motion: reduce) { .overlay { transition: none; } .ring__arc { animation: none; } }',
   ].join('');
 
   return style;
