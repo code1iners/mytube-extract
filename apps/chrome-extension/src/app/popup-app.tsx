@@ -1,9 +1,9 @@
 import { type ChangeEvent, type FormEvent, type KeyboardEvent, type RefObject, useEffect, useRef, useState } from 'react';
 import { type DownloadJob } from '../domain/download-job/download-job';
-import { type DownloadMode } from '../domain/download-options/download-options';
+import { type DownloadMode, type FileExtension } from '../domain/download-options/download-options';
 import { getQualityOptions } from '../domain/download-options/quality-options';
 import { type StagePhase, type StageSource, hasStageVideo, isStagePhaseBusy, isStagePhaseProblem } from '../domain/popup-state/popup-state';
-import { type FileExtension, type PopupDownloadModel, type PopupDownloadSnapshot, createChromePopupDownloadModel } from '../features/popup-download/popup-download-model';
+import { type PopupDownloadModel, type PopupDownloadSnapshot, createChromePopupDownloadModel } from '../features/popup-download/popup-download-model';
 import { type PopupIconName, PopupIcon } from './popup-icons';
 
 /** 추출 버튼에 표시할 아이콘과 접근 가능한 이름. */
@@ -249,10 +249,17 @@ function FilenameLine(props: { /** 지금 저장될 파일명(확장자 제외).
 
   // Computed.
 
-  /** 편집 입력칸을 보여 주는지 여부. 진행이 시작되면 편집 중이던 입력도 닫는다. */
+  /** 편집 입력칸을 보여 주는지 여부. */
   const editing = draft !== null && !props.locked;
 
   // Effects.
+
+  useEffect(function discardDraftWhenLocked() {
+    // 진행이 시작되면 편집을 버린다. 남겨 두면 진행이 끝난 뒤 예전 입력이 저절로 다시 열린다.
+    if (props.locked) {
+      setDraft(null);
+    }
+  }, [props.locked]);
 
   useEffect(function returnFocusToEditButton() {
     // 확정·취소 뒤 키보드 사용자가 같은 자리에서 이어 갈 수 있게 연필로 포커스를 돌린다.
@@ -264,11 +271,16 @@ function FilenameLine(props: { /** 지금 저장될 파일명(확장자 제외).
 
   // Handlers.
 
+  /** 편집을 닫고 연필로 포커스를 돌려준다. */
+  function closeEditor() {
+    returnFocusRef.current = true;
+    setDraft(null);
+  }
+
   /** 입력값을 확정하고 제목 줄로 돌아간다. */
   function commit() {
     props.onCommit(draft ?? '');
-    returnFocusRef.current = true;
-    setDraft(null);
+    closeEditor();
   }
 
   /** Enter는 form 제출 대신 파일명 확정, Escape는 편집 취소로 쓴다. */
@@ -278,8 +290,7 @@ function FilenameLine(props: { /** 지금 저장될 파일명(확장자 제외).
       commit();
     } else if (event.key === 'Escape') {
       event.preventDefault();
-      returnFocusRef.current = true;
-      setDraft(null);
+      closeEditor();
     }
   }
 

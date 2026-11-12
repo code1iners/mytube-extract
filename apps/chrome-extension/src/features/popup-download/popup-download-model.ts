@@ -19,7 +19,9 @@ import {
 import {
   type DownloadMode,
   type DownloadOptions,
+  type FileExtension,
   DEFAULT_DOWNLOAD_OPTIONS,
+  getFileExtension,
   mergeStoredDownloadOptions,
   normalizeApiBaseUrl,
   normalizeSourceUrl,
@@ -46,7 +48,7 @@ import {
   isStagePhaseProblem,
   parseYoutubeTabTitle,
 } from '../../domain/popup-state/popup-state';
-import { sanitizeFilenameSegment } from '../../shared/sanitize-filename';
+import { sanitizeFilenameStem } from '../../shared/sanitize-filename';
 import { sanitizeYoutubeOverlayFilename } from '../youtube-overlay/youtube-overlay-download';
 
 /** Popup model dependency. */
@@ -96,9 +98,6 @@ export type PopupDownloadSnapshot = {
   /** YouTube 썸네일 Overlay 상태. */
   youtubeOverlay: YoutubeOverlaySnapshot;
 };
-
-/** 저장 파일 확장자. */
-export type FileExtension = 'mp3' | 'mp4';
 
 /** Popup model. */
 export type PopupDownloadModel = {
@@ -331,7 +330,11 @@ export function createPopupDownloadModel(
         !isStagePhaseBusy(progress.phase),
       downloading: base.jobs.some(isUnsettledJob),
       fileExtension: getFileExtension(base.options.mode),
-      stageFilename: resolveStageFilename(base.options.filename, stageSource),
+      stageFilename: resolveStageFilename(
+        base.options.filename,
+        stageSource,
+        getFileExtension(base.options.mode),
+      ),
       stagePhase: progress.phase,
       stageSource,
       status: derivePopupStatus(stageSource, progress),
@@ -693,25 +696,22 @@ function resolveJobQuality(options: DownloadOptions): DownloadQuality {
   return (options.mode === 'audio' ? options.bitrate : options.resolution) as DownloadQuality;
 }
 
-/** 형식에 맞는 저장 파일 확장자를 고른다. */
-function getFileExtension(mode: DownloadMode): FileExtension {
-  return mode === 'audio' ? 'mp3' : 'mp4';
-}
-
 /** 무대 영상의 저장 파일명(확장자 제외)을 정한다. 편집값을 정리해 쓰고, 비거나 상대 경로 표기만 남으면 제목 기반 기본 이름(실패 시 영상 ID)으로 돌아간다. */
-function resolveStageFilename(editedFilename: string, stageSource: StageSource): string {
+function resolveStageFilename(
+  editedFilename: string,
+  stageSource: StageSource,
+  extension: FileExtension,
+): string {
   if (!hasStageVideo(stageSource)) {
     return '';
   }
 
+  /** 입력칸 옆에 이미 보이는 확장자까지 입력했다면 떼어 내 확장자가 두 번 붙지 않게 한다. */
+  const withoutExtension = editedFilename.trim().replace(new RegExp(`\\.${extension}$`, 'i'), '');
   /** 경로 구분자·제어 문자를 정리한 편집값. */
-  const sanitized = sanitizeFilenameSegment(editedFilename);
+  const sanitized = sanitizeFilenameStem(withoutExtension);
 
-  if (sanitized && sanitized !== '.' && sanitized !== '..') {
-    return sanitized;
-  }
-
-  return sanitizeYoutubeOverlayFilename(stageSource.title ?? '', stageSource.videoId);
+  return sanitized || sanitizeYoutubeOverlayFilename(stageSource.title ?? '', stageSource.videoId);
 }
 
 /** 로컬 저장에 넘길 파일명. 입력칸 옆에 보인 확장자를 그대로 붙인다. */

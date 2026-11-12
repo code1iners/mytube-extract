@@ -1283,4 +1283,19 @@ describe('popup filename editing', () => {
 
     expect(model.getSnapshot()).toMatchObject({ stageFilename: '무대 영상', stagePhase: 'processing' });
   });
+
+  it('does not repeat the extension when the edited name already ends with it', async () => {
+    const { dependencies, model } = createStageModel();
+
+    await model.initialize();
+    await model.updateOption('filename', '내 곡.MP3');
+
+    expect(model.getSnapshot().stageFilename).toBe('내 곡');
+
+    await model.submitDownload();
+
+    expect(dependencies.downloadJobs.submitJob).toHaveBeenCalledWith(
+      expect.objectContaining({ localFilename: '내 곡.mp3' }),
+    );
+  });
 });

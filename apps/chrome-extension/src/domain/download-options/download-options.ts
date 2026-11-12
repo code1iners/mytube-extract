@@ -4,6 +4,14 @@ import { DEFAULT_QUALITY_OPTION, isQualityOption } from './quality-options';
 /** 지원하는 다운로드 모드. */
 export type DownloadMode = 'audio' | 'video';
 
+/** 저장 파일 확장자. 다운로드 모드와 1:1로 대응한다. */
+export type FileExtension = 'mp3' | 'mp4';
+
+/** 다운로드 모드에 맞는 저장 파일 확장자를 고른다. */
+export function getFileExtension(mode: DownloadMode): FileExtension {
+  return mode === 'audio' ? 'mp3' : 'mp4';
+}
+
 /** Popup form에서 관리하는 다운로드 옵션. */
 export type DownloadOptions = {
   /** 고정 MyTube Extract API base URL. */
