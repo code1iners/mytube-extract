@@ -117,7 +117,7 @@ try {
   assertEqual(audioHoverState.levelNumbers.join(','), '128,192,320', 'audio level numbers');
   assertEqual(
     audioHoverState.levelNames.join(','),
-    '128kbps 추출,192kbps 추출,320kbps 추출',
+    '128 kbps 추출,192 kbps 추출,320 kbps 추출',
     'audio level accessible names',
   );
   await saveScreenshot(page, 'overlay-hover-audio.png');

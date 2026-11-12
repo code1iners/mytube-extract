@@ -46,16 +46,24 @@ const MODE_LABELS: Record<DownloadMode, string> = {
 /** Overlay에서 쓰는 선 아이콘 이름. 모양은 Popup 아이콘(승인 시안)과 같다. */
 type OverlayIconName = 'alert' | 'audio' | 'check' | 'retry' | 'video' | 'x';
 
-/** 아이콘별 SVG 내용. viewBox는 모두 `0 0 24 24`다. */
-const OVERLAY_ICON_PATHS: Record<OverlayIconName, string> = {
-  alert: '<path d="M12 6v8M12 18.5v.01"/>',
-  audio: '<path d="M4 10v4M8 6v12M12 3v18M16 8v8M20 10.5v3"/>',
-  check: '<path d="M5 12.5l4.5 4.5L19 7"/>',
-  retry: '<path d="M4.5 12a7.5 7.5 0 1 0 2.2-5.3M4.5 4v4.5H9"/>',
-  video:
-    '<rect x="3" y="5" width="18" height="14" rx="3"/><path d="M10 9.2v5.6l4.8-2.8z" fill="currentColor"/>',
-  x: '<path d="M6 6l12 12M18 6L6 18"/>',
+/** SVG 도형 하나의 태그와 속성. */
+type OverlayIconShape = [tag: 'path' | 'rect', attributes: Record<string, string>];
+
+/** 아이콘별 SVG 도형. viewBox는 모두 `0 0 24 24`다. */
+const OVERLAY_ICON_SHAPES: Record<OverlayIconName, OverlayIconShape[]> = {
+  alert: [['path', { d: 'M12 6v8M12 18.5v.01' }]],
+  audio: [['path', { d: 'M4 10v4M8 6v12M12 3v18M16 8v8M20 10.5v3' }]],
+  check: [['path', { d: 'M5 12.5l4.5 4.5L19 7' }]],
+  retry: [['path', { d: 'M4.5 12a7.5 7.5 0 1 0 2.2-5.3M4.5 4v4.5H9' }]],
+  video: [
+    ['rect', { height: '14', rx: '3', width: '18', x: '3', y: '5' }],
+    ['path', { d: 'M10 9.2v5.6l4.8-2.8z', fill: 'currentColor' }],
+  ],
+  x: [['path', { d: 'M6 6l12 12M18 6L6 18' }]],
 };
+
+/** SVG element namespace. */
+const SVG_NAMESPACE = 'http://www.w3.org/2000/svg';
 
 /** YouTube 카드에서 읽은 Overlay 대상 정보. */
 type YoutubeCardInfo = {
@@ -85,7 +93,7 @@ type ToastController = {
     message: string,
     retry: () => void,
   ): void;
-  /** Background가 job을 접수했음을 표시한다. */
+  /** 품질 막대를 눌러 접수 요청을 보냈음을 바로 표시한다. */
   showAccepted(request: YoutubeOverlayDownloadRequest): void;
 };
 
@@ -288,18 +296,15 @@ function mountCardOverlay(
       modeButtons[buttonMode].setAttribute('aria-pressed', String(buttonMode === mode));
     });
 
-    levels.replaceChildren(
-      ...qualities.map((quality, index) => createLevelButton(mode, quality, index)),
-    );
-    fillLevels(qualities.indexOf(DEFAULT_QUALITY_OPTION[mode]));
-    setControlsDisabled(pending);
-  }
+    /** 기본 품질 막대의 순서. 승인 시안처럼 기본 품질 이하 막대를 채워 높낮이를 보여준다. */
+    const defaultLevel = qualities.indexOf(DEFAULT_QUALITY_OPTION[mode]);
 
-  /** 지정한 순서 이하의 막대를 채워 선택 수준을 보여준다. */
-  function fillLevels(level: number) {
-    levels.querySelectorAll('button').forEach((button, index) => {
-      button.toggleAttribute('data-filled', index <= level);
-    });
+    levels.replaceChildren(
+      ...qualities.map((quality, index) =>
+        createLevelButton(mode, quality, index <= defaultLevel),
+      ),
+    );
+    setControlsDisabled(pending);
   }
 
   /** 이 카드의 page 리스너와 형식 render 구독을 해제한다. */
@@ -396,7 +401,7 @@ function mountCardOverlay(
   function createLevelButton(
     mode: DownloadMode,
     quality: QualityOption,
-    index: number,
+    filled: boolean,
   ): HTMLButtonElement {
     /** 품질 막대 버튼. */
     const button = document.createElement('button');
@@ -407,17 +412,14 @@ function mountCardOverlay(
 
     button.className = 'level';
     button.type = 'button';
+    button.toggleAttribute('data-filled', filled);
     button.setAttribute(
       'aria-label',
-      String(quality) + (mode === 'audio' ? 'kbps' : 'p') + ' 추출',
+      String(quality) + (mode === 'audio' ? ' kbps' : 'p') + ' 추출',
     );
     bar.setAttribute('aria-hidden', 'true');
     value.textContent = String(quality);
     button.append(bar, value);
-    button.addEventListener('pointerenter', () => fillLevels(index));
-    button.addEventListener('focus', () => fillLevels(index));
-    button.addEventListener('pointerleave', resetLevels);
-    button.addEventListener('blur', resetLevels);
     button.addEventListener('click', function handleLevelButtonClick(event) {
       event.preventDefault();
       event.stopPropagation();
@@ -425,11 +427,6 @@ function mountCardOverlay(
     });
 
     return button;
-  }
-
-  /** 막대 채움을 형식의 기본 품질로 되돌린다. */
-  function resetLevels() {
-    fillLevels(getQualityOptions(pageState.mode).indexOf(DEFAULT_QUALITY_OPTION[pageState.mode]));
   }
 
   cardInfo.hoverTarget.addEventListener(
@@ -606,13 +603,21 @@ function createToastButton(
 /** 장식용 선 아이콘을 만든다. 의미는 감싼 control의 접근 가능한 이름이 전달한다. */
 function createIcon(name: OverlayIconName): SVGSVGElement {
   /** 아이콘 SVG element. */
-  const icon = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+  const icon = document.createElementNS(SVG_NAMESPACE, 'svg');
 
   icon.setAttribute('aria-hidden', 'true');
   icon.setAttribute('class', 'icon');
   icon.setAttribute('focusable', 'false');
   icon.setAttribute('viewBox', '0 0 24 24');
-  icon.innerHTML = OVERLAY_ICON_PATHS[name];
+
+  // YouTube의 Trusted Types 정책에 걸리지 않도록 innerHTML 대신 도형 element를 직접 만든다.
+  OVERLAY_ICON_SHAPES[name].forEach(([tag, attributes]) => {
+    /** 아이콘 도형 element. */
+    const shape = document.createElementNS(SVG_NAMESPACE, tag);
+
+    Object.entries(attributes).forEach(([key, value]) => shape.setAttribute(key, value));
+    icon.append(shape);
+  });
 
   return icon;
 }
@@ -642,7 +647,8 @@ function createOverlayStyle(): HTMLStyleElement {
     '.icon { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }',
     '.format { display: grid; width: 44px; height: 44px; place-items: center; border-radius: 9999px; background: var(--overlay-scrim); }',
     '.format:hover { background: var(--overlay-scrim-strong); }',
-    '.format[aria-pressed="true"] { background: var(--overlay-primary); }',
+    // 선택을 색만으로 전달하지 않도록 흰 테두리를 함께 둔다.
+    '.format[aria-pressed="true"] { background: var(--overlay-primary); box-shadow: inset 0 0 0 2px #ffffff; }',
     '.levels { display: flex; gap: 4px; padding: 4px; border-radius: 10px; background: var(--overlay-scrim); }',
     '.level { display: flex; flex-direction: column; align-items: center; justify-content: flex-end; gap: 3px; width: 44px; height: 48px; padding-bottom: 4px; border-radius: 6px; background: transparent; }',
     '.level:hover { background: rgba(255, 255, 255, .14); }',
@@ -650,11 +656,12 @@ function createOverlayStyle(): HTMLStyleElement {
     '.level:nth-child(1) i { height: 8px; } .level:nth-child(2) i { height: 15px; } .level:nth-child(3) i { height: 22px; }',
     '.level[data-filled] i { background: var(--overlay-primary); }',
     '.level span { font-size: 11px; font-weight: 600; line-height: 1.2; }',
-    // 어두운 scrim과 밝은 썸네일 어느 쪽에서도 보이도록 흰 안쪽 링과 파란 바깥 링을 겹친다.
-    'button:focus-visible { outline: 2px solid #ffffff; outline-offset: 0; box-shadow: 0 0 0 4px var(--overlay-focus); }',
+    // 밝은 썸네일 위에서도 보이도록 파란 outline 안쪽에 흰 띠를 둔다.
+    'button:focus-visible { outline: 2px solid var(--overlay-focus); outline-offset: 2px; box-shadow: 0 0 0 2px #ffffff; }',
+    '.format[aria-pressed="true"]:focus-visible { box-shadow: inset 0 0 0 2px #ffffff, 0 0 0 2px #ffffff; }',
     'button:disabled { cursor: not-allowed; opacity: .55; }',
-    // 사이드바처럼 짧은 썸네일에서는 control을 줄여 썸네일 밖으로 잘리지 않게 한다.
-    '@container (max-height: 130px) { .overlay { top: 4px; right: 4px; gap: 4px; } .formats { gap: 4px; } .format { width: 36px; height: 36px; } .icon { width: 18px; height: 18px; } .levels { gap: 2px; padding: 2px; border-radius: 8px; } .level { width: 36px; height: 40px; gap: 2px; padding-bottom: 3px; } .level:nth-child(1) i { height: 6px; } .level:nth-child(2) i { height: 11px; } .level:nth-child(3) i { height: 16px; } }',
+    // 사이드바처럼 짧은 썸네일(168×94)에서는 44px 조작 영역을 유지한 채 여백만 줄여 잘리지 않게 한다.
+    '@container (max-height: 130px) { .overlay { top: 2px; right: 2px; gap: 2px; } .formats { gap: 2px; } .levels { gap: 2px; padding: 0; border-radius: 8px; } .level { height: 44px; gap: 2px; padding-bottom: 3px; } .level:nth-child(1) i { height: 6px; } .level:nth-child(2) i { height: 11px; } .level:nth-child(3) i { height: 16px; } }',
     '@media (prefers-reduced-motion: reduce) { .overlay { transition: none; } }',
   ].join('');
 
