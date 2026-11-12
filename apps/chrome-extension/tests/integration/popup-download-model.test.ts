@@ -596,7 +596,7 @@ describe('popup download model', () => {
     expect(dependencies.downloadJobs.submitJob).toHaveBeenCalledWith(
       expect.objectContaining({
         apiBaseUrl: 'https://mytube-extract-api.codeliners.cc',
-        localFilename: '',
+        localFilename: 'abc123_DEF0.mp3',
         quality: '192',
         sourceUrl: 'https://www.youtube.com/watch?v=abc123_DEF0',
         mode: 'audio',
@@ -812,7 +812,7 @@ describe('popup download model', () => {
     );
     expect(dependencies.downloadJobs.submitJob).toHaveBeenCalledWith(
       expect.objectContaining({
-        localFilename: 'my clip',
+        localFilename: 'my clip.mp4',
         quality: '720',
         mode: 'video',
       }),
@@ -832,7 +832,7 @@ describe('popup download model', () => {
 
     expect(dependencies.downloadJobs.submitJob).toHaveBeenCalledWith(
       expect.objectContaining({
-        localFilename: '.. etc passwd',
+        localFilename: '.. etc passwd.mp3',
       }),
     );
   });
@@ -1169,5 +1169,133 @@ describe('popup stage progress and problems', () => {
     await model.initialize();
 
     expect(model.getSnapshot()).toMatchObject({ canDownload: true, stagePhase: 'idle' });
+  });
+});
+
+describe('popup filename editing', () => {
+  it('submits the edited filename sanitized with the extension of the chosen format', async () => {
+    const { dependencies, model } = createStageModel();
+
+    await model.initialize();
+    await model.updateOption('mode', 'video');
+    await model.updateOption('filename', '  ../공연/풀버전\r\n ');
+
+    expect(model.getSnapshot()).toMatchObject({ fileExtension: 'mp4', stageFilename: '.. 공연 풀버전' });
+
+    await model.submitDownload();
+
+    expect(dependencies.downloadJobs.submitJob).toHaveBeenCalledWith(
+      expect.objectContaining({ localFilename: '.. 공연 풀버전.mp4', mode: 'video' }),
+    );
+  });
+
+  it('falls back to the title-based default name when the edit is committed empty', async () => {
+    const { dependencies, model } = createStageModel({
+      tabs: { getCurrentTab: vi.fn().mockResolvedValue({ title: '서울/공연 풀버전 - YouTube', url: STAGE_VIDEO_URL }) },
+    });
+
+    await model.initialize();
+
+    expect(model.getSnapshot()).toMatchObject({ fileExtension: 'mp3', stageFilename: '서울 공연 풀버전' });
+
+    await model.updateOption('filename', '내 파일');
+    await model.updateOption('filename', '   ');
+
+    expect(model.getSnapshot().stageFilename).toBe('서울 공연 풀버전');
+
+    await model.submitDownload();
+
+    expect(dependencies.downloadJobs.submitJob).toHaveBeenCalledWith(
+      expect.objectContaining({ localFilename: '서울 공연 풀버전.mp3' }),
+    );
+  });
+
+  it('uses the video ID as the default name when the stage title is unknown', async () => {
+    const { dependencies, model } = createStageModel({
+      tabs: { getCurrentTab: vi.fn().mockResolvedValue({ title: '예시 페이지', url: 'https://example.com/' }) },
+    });
+
+    await model.initialize();
+    await model.updateOption('sourceUrl', 'https://youtu.be/abc123_DEF0');
+
+    expect(model.getSnapshot().stageFilename).toBe('abc123_DEF0');
+
+    await model.submitDownload();
+
+    expect(dependencies.downloadJobs.submitJob).toHaveBeenCalledWith(
+      expect.objectContaining({ localFilename: 'abc123_DEF0.mp3' }),
+    );
+  });
+
+  it('never stores the filename while still storing format and quality', async () => {
+    const { dependencies, model } = createStageModel();
+
+    await model.initialize();
+    await model.updateOption('filename', '내 파일');
+    await model.updateOption('mode', 'video');
+
+    expect(dependencies.storage.saveOptions).toHaveBeenCalledTimes(1);
+    expect(dependencies.storage.saveOptions).toHaveBeenCalledWith(expect.objectContaining({ mode: 'video' }));
+    expect(model.getSnapshot().stageFilename).toBe('내 파일');
+  });
+
+  it('ignores a filename stored by an earlier version', async () => {
+    const { dependencies, model } = createStageModel({
+      storage: { loadOptions: vi.fn().mockResolvedValue({ ...DEFAULT_DOWNLOAD_OPTIONS, filename: '예전 이름' }) },
+    });
+
+    await model.initialize();
+
+    expect(model.getSnapshot()).toMatchObject({ options: { filename: '' }, stageFilename: '무대 영상' });
+
+    await model.submitDownload();
+
+    expect(dependencies.downloadJobs.submitJob).toHaveBeenCalledWith(
+      expect.objectContaining({ localFilename: '무대 영상.mp3' }),
+    );
+  });
+
+  it('clears the edited filename when the stage video changes but keeps it for the same video', async () => {
+    const { model } = createStageModel();
+
+    await model.initialize();
+    await model.updateOption('filename', '내 파일');
+    // 같은 영상의 다른 주소 형식은 원본 영상이 바뀐 것이 아니다.
+    await model.updateOption('sourceUrl', 'https://youtu.be/abc123_DEF0');
+
+    expect(model.getSnapshot().stageFilename).toBe('내 파일');
+
+    await model.updateOption('sourceUrl', OTHER_VIDEO_URL);
+
+    expect(model.getSnapshot()).toMatchObject({ options: { filename: '' }, stageFilename: 'other_VID01' });
+
+    await model.updateOption('sourceUrl', STAGE_VIDEO_URL);
+
+    expect(model.getSnapshot().stageFilename).toBe('무대 영상');
+  });
+
+  it('does not change the filename while the stage video is in progress', async () => {
+    const { model, pushJobs } = createStageModel();
+
+    await model.initialize();
+    pushJobs([createJob({ status: 'processing' })]);
+    await model.updateOption('filename', '내 파일');
+
+    expect(model.getSnapshot()).toMatchObject({ stageFilename: '무대 영상', stagePhase: 'processing' });
+  });
+
+  it('does not repeat the extension when the edited name already ends with it', async () => {
+    const { dependencies, model } = createStageModel();
+
+    await model.initialize();
+    await model.updateOption('filename', '내 곡.MP3');
+
+    expect(model.getSnapshot().stageFilename).toBe('내 곡');
+
+    await model.submitDownload();
+
+    expect(dependencies.downloadJobs.submitJob).toHaveBeenCalledWith(
+      expect.objectContaining({ localFilename: '내 곡.mp3' }),
+    );
   });
 });

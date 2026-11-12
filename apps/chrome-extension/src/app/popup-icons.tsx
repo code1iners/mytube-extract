@@ -12,6 +12,7 @@ export type PopupIconName =
   | 'link'
   | 'link-off'
   | 'loader'
+  | 'pencil'
   | 'retry'
   | 'sliders'
   | 'video'
@@ -47,6 +48,7 @@ const ICON_PATHS: Record<PopupIconName, ReactNode> = {
     <path d="M15.66 14l3-3a4 4 0 0 0-5.66-5.66l-1 1M8.34 10l-3 3a4 4 0 0 0 5.66 5.66l1-1M4 4l16 16" />
   ),
   loader: <path d="M12 3a9 9 0 1 0 9 9" />,
+  pencil: <path d="M4 20h4L19 9l-4-4L4 16zM13.5 6.5l4 4" />,
   retry: <path d="M4.5 12a7.5 7.5 0 1 0 2.2-5.3M4.5 4v4.5H9" />,
   sliders: (
     <>

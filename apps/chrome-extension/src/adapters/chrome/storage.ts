@@ -33,7 +33,6 @@ export function createStorageAdapter(chromeApi: typeof chrome = chrome): Storage
         /** Chrome storage에 남길 non-sensitive option. */
         const storedOptions = {
           bitrate: options.bitrate,
-          filename: options.filename,
           mode: options.mode,
           resolution: options.resolution,
         };

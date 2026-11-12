@@ -91,7 +91,11 @@ button:disabled { cursor: not-allowed; }
 .paste-field.is-invalid .icon-button { color: var(--color-status-failed); }
 
 .stage-line { min-height: 44px; margin: 0; padding: 8px 4px; overflow: hidden; color: var(--color-text-primary); font-size: 16px; line-height: 1.75; text-overflow: ellipsis; white-space: nowrap; }
-.stage-line--title { font-weight: 600; }
+/* 제목 줄과 편집 입력은 같은 높이를 써서 편집을 열고 닫아도 아래 조작이 움직이지 않는다. */
+.stage-line--title, .stage-line--editing { display: flex; align-items: center; gap: 4px; padding: 0 0 0 4px; font-weight: 600; }
+.stage-line__text { flex: 1; min-width: 0; margin: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.stage-line__input { flex: 1; min-width: 0; min-height: 44px; padding: 0 12px; border: 1px solid var(--color-border); border-radius: 8px; background: var(--color-canvas); color: var(--color-text-primary); font-size: 16px; font-weight: 600; }
+.stage-line__extension { flex: none; color: var(--color-text-secondary); font-size: 14px; }
 .stage-line--error { color: var(--color-status-failed); font-size: 14px; font-weight: 600; white-space: normal; overflow-wrap: anywhere; }
 
 .stage-controls { display: flex; align-items: stretch; gap: 12px; }

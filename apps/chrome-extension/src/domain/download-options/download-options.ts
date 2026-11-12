@@ -4,13 +4,21 @@ import { DEFAULT_QUALITY_OPTION, isQualityOption } from './quality-options';
 /** 지원하는 다운로드 모드. */
 export type DownloadMode = 'audio' | 'video';
 
+/** 저장 파일 확장자. 다운로드 모드와 1:1로 대응한다. */
+export type FileExtension = 'mp3' | 'mp4';
+
+/** 다운로드 모드에 맞는 저장 파일 확장자를 고른다. */
+export function getFileExtension(mode: DownloadMode): FileExtension {
+  return mode === 'audio' ? 'mp3' : 'mp4';
+}
+
 /** Popup form에서 관리하는 다운로드 옵션. */
 export type DownloadOptions = {
   /** 고정 MyTube Extract API base URL. */
   apiBaseUrl: string;
   /** 오디오 bitrate option. */
   bitrate: string;
-  /** 다운로드 파일명 option. */
+  /** 사용자가 고친 저장 파일명. 영상별 session-only 값이며 비어 있으면 기본 이름을 쓴다. */
   filename: string;
   /** 다운로드 모드. */
   mode: DownloadMode;
@@ -22,7 +30,7 @@ export type DownloadOptions = {
 
 /** 저장소에서 읽은 다운로드 옵션. */
 export type StoredDownloadOptions = Partial<
-  Pick<DownloadOptions, 'bitrate' | 'filename' | 'mode' | 'resolution'>
+  Pick<DownloadOptions, 'bitrate' | 'mode' | 'resolution'>
 >;
 
 /** 기본 popup 다운로드 옵션. */
@@ -48,7 +56,6 @@ export function mergeStoredDownloadOptions(
   return {
     ...DEFAULT_DOWNLOAD_OPTIONS,
     bitrate: resolveStoredQualityOption('audio', storedOptions.bitrate),
-    filename: typeof storedOptions.filename === 'string' ? storedOptions.filename : '',
     resolution: resolveStoredQualityOption('video', storedOptions.resolution),
     mode: isDownloadMode(storedMode) ? storedMode : DEFAULT_DOWNLOAD_OPTIONS.mode,
   };

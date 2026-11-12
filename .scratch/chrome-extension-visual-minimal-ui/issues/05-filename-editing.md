@@ -4,9 +4,26 @@
 
 **Blocked by:** 03
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] model 통합 테스트: 편집한 파일명이 sanitize되어 제출에 쓰이고, 빈 값이면 기본 이름이 쓰인다.
-- [ ] model 통합 테스트: 파일명은 저장소에 저장되지 않고, 원본 영상이 바뀌면 비워진다. 예전에 저장된 파일명 값은 무시된다.
-- [ ] popup 브라우저 스모크가 연필 → 입력 → Enter 확정 → 제출 흐름을 키보드로 확인하도록 갱신되어 통과한다.
-- [ ] 확장 `lint`, `test`, `build`가 통과한다.
+- [x] model 통합 테스트: 편집한 파일명이 sanitize되어 제출에 쓰이고, 빈 값이면 기본 이름이 쓰인다.
+- [x] model 통합 테스트: 파일명은 저장소에 저장되지 않고, 원본 영상이 바뀌면 비워진다. 예전에 저장된 파일명 값은 무시된다.
+- [x] popup 브라우저 스모크가 연필 → 입력 → Enter 확정 → 제출 흐름을 키보드로 확인하도록 갱신되어 통과한다.
+- [x] 확장 `lint`, `test`, `build`가 통과한다.
+
+## Comments
+
+- 2026-11-12 구현(d900526, c71a471)
+  - 무대 아래 제목 줄이 파일명이다. 연필(44px)을 누르면 입력칸과 확장자 표시가 나오고, Enter·체크 버튼으로 확정한다.
+  - Escape로 편집을 취소하고, 확정·취소 뒤에는 포커스가 연필로 돌아간다.
+  - 진행 중에는 연필을 숨기고, model도 파일명 변경을 받지 않는다. 진행이 시작되면 편집 중이던 입력을 버린다.
+  - 파일명은 `STORAGE_KEYS`와 저장 대상에서 뺐다. 예전에 저장된 `filename`은 읽어도 버리고, 무대 영상 ID가 바뀌면 비운다.
+- 스펙에 명시되지 않아 판단한 점
+  - 제출 `localFilename`에 형식 확장자(`.mp3`/`.mp4`)를 붙인다. Overlay와 같은 규칙이다. 예전 popup은 확장자 없이 이름만 넘겼다.
+  - 빈 값이면 서버 기본 이름 대신 제목 기반 기본 이름(실패 시 영상 ID)을 쓴다. 시안의 "비우면 서버 기본값"보다 스펙을 우선했다.
+  - 입력 끝에 같은 확장자를 붙여 넣으면 떼어 내 확장자가 두 번 붙지 않게 했다.
+- 검증
+  - `lint` 통과, `test` 211/211 통과, `test:browser` 통과(popup·overlay·visibility 스모크).
+  - `apps/chrome-extension/.env`의 API 주소가 로컬(127.0.0.1:5011)이고 그 서버가 꺼져 있어, 이전 티켓처럼 `WXT_MEDIA_NEST_API_BASE_URL`을 운영 기본 주소로 맞춰 실행했다. 실제 서버에는 `/health` GET만 보냈고, 다운로드는 가짜 응답으로 처리했다.
+  - 로그: `/tmp/mytube-05/*.log`
+  - 대표 캡처: `/tmp/mytube-05/screens/popup-filename-editing-light.png`(편집 상태), `/tmp/mytube-05/screens/popup-stage-dark.png`(연필이 있는 제목 줄)
