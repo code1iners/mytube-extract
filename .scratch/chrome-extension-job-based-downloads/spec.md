@@ -2,6 +2,8 @@ Status: ready-for-agent
 
 # Chrome 확장 프로그램 job 기반 다운로드 전환
 
+> **대체된 결정 (2026-11-13)**: 아래 "오버레이 표시"(접수 Toast만), "팝업 레이아웃"(form 아래 목록 상시 표시), "자동 다운로드"(목록에 다운로드 버튼 없음) 결정은 `.scratch/chrome-extension-visual-minimal-ui/spec.md`가 대체했다. Overlay는 카드 위에 진행 상태를 남기고, Popup은 최근 요청 썸네일 줄과 별도 목록 화면을 쓰며, 완료 항목에 다시 내려받기가 있다. 나머지 결정은 유효하다. 현재 동작은 `docs/chrome-extension/current-implementation-prd.md`의 "결정 이력"을 따른다.
+
 ## Problem Statement
 
 Web 앱과 API는 이미 `POST /downloads` → 상태 조회 → 완료 파일 다운로드로 이어지는 job 기반 흐름을 지원하지만, Chrome 확장 프로그램(팝업과 YouTube 오버레이 썸네일 버튼)은 여전히 호환용 `/audio`, `/video` 직접 다운로드 API를 사용한다.
