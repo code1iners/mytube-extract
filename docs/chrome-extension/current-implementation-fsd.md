@@ -78,6 +78,7 @@ API base URL은 `WXT_MYTUBE_EXTRACT_API_BASE_URL` 환경 변수로 정하며 pop
 - Background의 job manager가 `GET /downloads/{jobId}`를 2.5초 간격으로 조회하고, 진행 중 job은 `chrome.storage.local` active record로 저장한다.
 - Service worker가 재시작되면 active record를 즉시 다시 조회하고, 완료된 job만 `GET /downloads/{jobId}/file`을 `chrome.downloads.download()`로 시작한다.
 - 완료·실패 job은 최근 요청 목록에 최대 5건 보관하고, 6번째 job이 추가되면 가장 오래된 완료·실패 job부터 제거한다. 대기·처리 중 job은 목록 상한을 넘겨도 유지한다. 실패 job은 데스크톱 알림에서 같은 입력으로 재시도할 수 있다.
+- 서버가 `displayStatus: expired`를 반환하거나 완료 URL이 없으면 성공 다운로드로 처리하지 않고 실패 상태·재시도 경로로 표시한다.
 - 확장 job 표현은 API 응답의 `sourceUrl`과 요청 영상 제목(`title`)을 보존하고, 영상 ID는 `sourceUrl`에서 도출한다. 이 값이 없는 예전 저장 job은 썸네일 대신 중립 배경과 형식 아이콘을 보여 준다.
 
 ### 최근 요청
@@ -96,7 +97,6 @@ API base URL은 `WXT_MYTUBE_EXTRACT_API_BASE_URL` 환경 변수로 정하며 pop
 - 테마 선호는 시스템·라이트·다크 세 칸(모니터·해·달 아이콘)이고 기존 저장 방식을 유지한다.
 - 썸네일 버튼 행: 꺼짐(스위치) → 켜기(권한 요청 중 회전 아이콘) → 켜짐(스위치 on), 거부·오류는 crimson 행·이유 한 줄·`권한 다시 요청` 버튼이다. 켜진 스위치를 끄면 YouTube optional host permission을 제거하고 이후 자동 주입이 멈춘다. 이미 열린 탭의 버튼은 다음 이동이나 새로고침 때 사라진다.
 - 저작권·플랫폼 정책 안내와 완료 파일 보관 기간(job의 `retentionDays`, 기본 7일) 안내를 보여 준다.
-- 서버가 `displayStatus: expired`를 반환하거나 완료 URL이 없으면 성공 다운로드로 처리하지 않고 실패 상태·재시도 경로로 표시한다.
 
 ### YouTube 썸네일 Overlay
 
