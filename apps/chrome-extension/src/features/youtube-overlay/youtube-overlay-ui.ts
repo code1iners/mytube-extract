@@ -209,6 +209,8 @@ function subscribeRecentJobs(pageState: OverlayPageState): void {
   const storage = createDownloadJobStorageAdapter(chrome);
   /** 완료 배지를 지우려고 예약한 timer. */
   let expiryTimer: number | undefined;
+  /** 변경 이벤트로 최신 목록을 이미 받았는지 여부. */
+  let receivedChange = false;
 
   /** 모든 카드의 상태 배지를 다시 그리고, 완료 배지가 사라질 때 한 번 더 그리도록 예약한다. */
   function renderStatuses() {
@@ -234,10 +236,21 @@ function subscribeRecentJobs(pageState: OverlayPageState): void {
   }
 
   try {
-    storage.subscribeJobs(applyJobs);
-    storage.loadJobs().then(applyJobs, () => {
-      // 확장을 다시 불러와 연결이 끊긴 페이지에서는 상태 없이 호버 UI만 남긴다.
+    storage.subscribeJobs((jobs) => {
+      receivedChange = true;
+      applyJobs(jobs);
     });
+    storage.loadJobs().then(
+      (jobs) => {
+        // 읽기가 끝나기 전에 변경 이벤트가 왔다면 그 목록이 더 최신이라 늦게 온 읽기 결과는 버린다.
+        if (!receivedChange) {
+          applyJobs(jobs);
+        }
+      },
+      () => {
+        // 확장을 다시 불러와 연결이 끊긴 페이지에서는 상태 없이 호버 UI만 남긴다.
+      },
+    );
   } catch {
     // 연결이 끊긴 확장 context에서는 storage 호출 자체가 예외를 던진다.
   }
@@ -644,9 +657,8 @@ function createSpinnerRing(): SVGSVGElement {
     circle.setAttribute('fill', 'none');
     circle.setAttribute('stroke-width', '3');
   });
-  track.setAttribute('stroke', 'rgba(255, 255, 255, .25)');
+  track.setAttribute('class', 'ring__track');
   arc.setAttribute('class', 'ring__arc');
-  arc.setAttribute('stroke', '#ffffff');
   arc.setAttribute('stroke-linecap', 'round');
   arc.setAttribute('pathLength', '100');
   arc.setAttribute('stroke-dasharray', '22 78');
@@ -834,7 +846,7 @@ function createOverlayStyle(): HTMLStyleElement {
 
   // 썸네일 위에 놓이므로 YouTube 테마와 상관없이 어두운 scrim 위 흰 아이콘을 쓴다.
   style.textContent = [
-    ':host { --overlay-primary: #e60012; --overlay-scrim: rgba(18, 18, 20, .74); --overlay-scrim-strong: rgba(0, 0, 0, .9); --overlay-bar: rgba(255, 255, 255, .4); --overlay-focus: #4b5cce; --overlay-ok: #356b43; --overlay-bad: #c62828; display: block; font-family: "Pretendard Variable", ui-sans-serif, system-ui, sans-serif; }',
+    ':host { --overlay-primary: #e60012; --overlay-scrim: rgba(18, 18, 20, .74); --overlay-scrim-strong: rgba(0, 0, 0, .9); --overlay-bar: rgba(255, 255, 255, .4); --overlay-focus: #4b5cce; --overlay-ok: #356b43; --overlay-bad: #c62828; --overlay-ring: #ffffff; --overlay-ring-track: rgba(255, 255, 255, .25); display: block; font-family: "Pretendard Variable", ui-sans-serif, system-ui, sans-serif; }',
     createFontFaceRule(),
     '.overlay { position: absolute; top: 8px; right: 8px; display: flex; flex-direction: column; align-items: flex-end; gap: 8px; opacity: 0; pointer-events: none; transition: opacity .12s ease-out; }',
     '.overlay[data-visible] { opacity: 1; pointer-events: auto; }',
@@ -861,13 +873,14 @@ function createOverlayStyle(): HTMLStyleElement {
     '.status__ring, .status__badge { position: relative; display: grid; width: 44px; height: 44px; place-items: center; border-radius: 9999px; color: #ffffff; }',
     '.status__ring { background: var(--overlay-scrim); }',
     '.ring { position: absolute; inset: 0; width: 44px; height: 44px; }',
-    '.ring__arc { transform-origin: 50% 50%; animation: mytube-spin 1.4s linear infinite; }',
+    '.ring__track { stroke: var(--overlay-ring-track); }',
+    '.ring__arc { stroke: var(--overlay-ring); transform-origin: 50% 50%; animation: mytube-spin 1.4s linear infinite; }',
     '@keyframes mytube-spin { to { transform: rotate(360deg); } }',
     '.status__ring .icon { width: 18px; height: 18px; }',
     '.status__done { background: var(--overlay-ok); }',
     '.status__done .icon { stroke-width: 2.6; }',
     '.status__retry { background: var(--overlay-bad); pointer-events: auto; }',
-    '.status__retry:hover { background: #a61f1f; }',
+    '.status__retry:hover { filter: brightness(.88); }',
     '.sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }',
     // 사이드바처럼 짧은 썸네일(168×94)에서는 44px 조작 영역을 유지한 채 여백만 줄여 잘리지 않게 한다.
     '@container (max-height: 130px) { .status { top: 2px; left: 2px; } .overlay { top: 2px; right: 2px; gap: 2px; } .formats { gap: 2px; } .levels { gap: 2px; padding: 0; border-radius: 8px; } .level { height: 44px; gap: 2px; padding-bottom: 3px; } .level:nth-child(1) i { height: 6px; } .level:nth-child(2) i { height: 11px; } .level:nth-child(3) i { height: 16px; } }',

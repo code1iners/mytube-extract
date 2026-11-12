@@ -58,22 +58,33 @@ describe('Overlay card status tracker', () => {
     expect(tracker.getStatus('abc123_DEF0', NOW)).toEqual({ state: 'queued' });
   });
 
-  it('ignores jobs outside the five most recent ones', () => {
+  it('shows nothing once the job leaves the stored recent list', () => {
     /** Overlay 카드 상태 tracker. */
     const tracker = createOverlayCardStatusTracker();
-    /** 최근 5건을 채우는 다른 영상 job. */
-    const newerJobs = ['vid0001_AAA', 'vid0002_AAA', 'vid0003_AAA', 'vid0004_AAA', 'vid0005_AAA'].map(
+
+    tracker.update([createJob({ status: 'failed' })], NOW);
+    // Background가 보관 정책으로 job을 지우면 카드 상태도 함께 사라진다.
+    tracker.update([createJob({ videoId: 'vid0001_AAA' })], NOW + 1000);
+
+    expect(tracker.getStatus('abc123_DEF0', NOW + 1000)).toBeNull();
+    expect(tracker.getStatus('vid0001_AAA', NOW + 1000)).toEqual({ state: 'queued' });
+  });
+
+  it('keeps in-progress jobs that Background retains beyond five', () => {
+    /** Overlay 카드 상태 tracker. */
+    const tracker = createOverlayCardStatusTracker();
+    /** 진행 중이라 5건을 넘어서도 보관된 job. */
+    const inProgressJobs = ['vid0001_AAA', 'vid0002_AAA', 'vid0003_AAA', 'vid0004_AAA', 'vid0005_AAA'].map(
       (videoId, index) =>
         createJob({ createdAt: '2026-11-12T09:5' + index + ':00.000Z', videoId }),
     );
 
     tracker.update(
-      [...newerJobs, createJob({ createdAt: '2026-11-12T09:00:00.000Z', status: 'failed' })],
+      [...inProgressJobs, createJob({ createdAt: '2026-11-12T09:00:00.000Z', status: 'processing' })],
       NOW,
     );
 
-    expect(tracker.getStatus('abc123_DEF0', NOW)).toBeNull();
-    expect(tracker.getStatus('vid0001_AAA', NOW)).toEqual({ state: 'queued' });
+    expect(tracker.getStatus('abc123_DEF0', NOW)).toEqual({ state: 'processing' });
   });
 
   it('shows nothing for an expired job instead of falling back to an older one', () => {
@@ -141,5 +152,16 @@ describe('Overlay card status tracker', () => {
 
     expect(tracker.getStatus('abc123_DEF0', NOW + 1000)).toBeNull();
     expect(tracker.getNextChangeDelay(NOW + 1000)).toBeNull();
+  });
+
+  it('shows the completed badge for a job that first appears already complete after the page loaded', () => {
+    /** Overlay 카드 상태 tracker. */
+    const tracker = createOverlayCardStatusTracker();
+
+    tracker.update([], NOW);
+    // 저장 사이에 대기·처리를 건너뛰고 바로 완료로 기록된 job도 새 완료로 본다.
+    tracker.update([createJob({ status: 'completed' })], NOW + 1000);
+
+    expect(tracker.getStatus('abc123_DEF0', NOW + 1000)).toEqual({ state: 'completed' });
   });
 });

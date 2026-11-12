@@ -2,7 +2,6 @@ import { type DownloadJob, getDownloadJobVideoId } from '../../domain/download-j
 import { type DownloadMode } from '../../domain/download-options/download-options';
 import { isQualityOption, type QualityOption } from '../../domain/download-options/quality-options';
 import { isDownloadJobExpired } from '../../domain/recent-request/recent-request';
-import { MAX_RECENT_DOWNLOAD_JOBS } from '../download-jobs/download-job-manager';
 
 /** 완료 배지를 썸네일 위에 남겨 두는 시간(ms). */
 export const OVERLAY_COMPLETED_BADGE_MS = 3000;
@@ -34,7 +33,7 @@ export type OverlayCardStatusTracker = {
 
 /** Overlay 카드 상태 tracker를 만든다. */
 export function createOverlayCardStatusTracker(): OverlayCardStatusTracker {
-  /** 영상 ID별 가장 최신 job. 최근 5건 안에 있는 job만 담는다. */
+  /** 영상 ID별 가장 최신 job. 저장된 최근 요청 목록에 있는 job만 담는다. */
   let latestJobByVideoId = new Map<string, DownloadJob>();
   /** 직전에 받은 job ID별 상태. 처음 받기 전에는 null이다. */
   let previousStatusByJobId: Map<string, DownloadJob['status']> | null = null;
@@ -53,10 +52,11 @@ export function createOverlayCardStatusTracker(): OverlayCardStatusTracker {
 
   return {
     update(jobs, now) {
-      /** 생성 시각 최신순으로 자른 최근 job. Background의 보관 정책과 같은 개수만 본다. */
-      const recentJobs = [...jobs]
-        .sort((left, right) => right.createdAt.localeCompare(left.createdAt))
-        .slice(0, MAX_RECENT_DOWNLOAD_JOBS);
+      // 저장된 목록이 곧 Background 보관 목록이다. 진행 중 job은 5건을 넘어서도 보관되므로 다시 자르지 않는다.
+      /** 생성 시각 최신순으로 정렬한 최근 job. */
+      const recentJobs = [...jobs].sort((left, right) =>
+        right.createdAt.localeCompare(left.createdAt),
+      );
 
       latestJobByVideoId = new Map();
       recentJobs.forEach((job) => {
@@ -68,20 +68,27 @@ export function createOverlayCardStatusTracker(): OverlayCardStatusTracker {
           latestJobByVideoId.set(videoId, job);
         }
 
-        // 페이지를 연 뒤 진행 중이던 job이 완료로 바뀐 때만 완료 배지를 띄운다.
+        // 페이지를 연 뒤 완료로 바뀌었거나 완료 상태로 처음 나타난 job에만 완료 배지를 띄운다.
         // 처음 읽은 목록의 완료 job은 이미 끝난 일이라 다시 알리지 않는다.
-        /** 직전 상태. */
+        /** 직전 상태. 직전 목록에 없던 job이면 undefined다. */
         const previousStatus = previousStatusByJobId?.get(job.jobId);
 
         if (
           job.status === 'completed' &&
-          previousStatus !== undefined &&
+          previousStatusByJobId !== null &&
           previousStatus !== 'completed'
         ) {
           completedAtByJobId.set(job.jobId, now);
         }
       });
       previousStatusByJobId = new Map(recentJobs.map((job) => [job.jobId, job.status]));
+
+      // 목록에서 빠진 job의 완료 시각은 더 쓰지 않으므로 지운다.
+      [...completedAtByJobId.keys()].forEach((jobId) => {
+        if (!previousStatusByJobId?.has(jobId)) {
+          completedAtByJobId.delete(jobId);
+        }
+      });
     },
     getStatus(videoId, now) {
       /** 카드 영상의 최신 job. */
