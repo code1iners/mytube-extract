@@ -1,5 +1,6 @@
 const fs = require('fs');
 const path = require('path');
+const { parseEnv } = require('util');
 
 /** 확장 프로그램 package root. */
 const packageRoot = process.cwd();
@@ -33,14 +34,47 @@ function assertIncludes(values, expectedValue, ownerPath) {
   }
 }
 
+/**
+ * production chrome build가 보는 env를 만든다.
+ * WXT `loadEnv`와 같은 파일 순서로 읽고, 셸에서 이미 정한 값이 파일 값보다 우선한다.
+ */
+function readBuildEnv() {
+  /** WXT production chrome build가 읽는 env 파일 목록. 뒤 파일이 앞 파일을 덮는다. */
+  const envFiles = [
+    '.env',
+    '.env.local',
+    '.env.production',
+    '.env.production.local',
+    '.env.chrome',
+    '.env.chrome.local',
+    '.env.production.chrome',
+    '.env.production.chrome.local',
+  ];
+  /** env 파일에서 읽은 값. */
+  const fileEnv = {};
+
+  envFiles.forEach((envFile) => {
+    /** package root 기준 env 파일 경로. */
+    const envFilePath = path.join(packageRoot, envFile);
+
+    if (fs.existsSync(envFilePath)) {
+      Object.assign(fileEnv, parseEnv(fs.readFileSync(envFilePath, 'utf8')));
+    }
+  });
+
+  return { ...fileEnv, ...process.env };
+}
+
 /** 환경 변수 기반 API host permission을 만든다. */
 function createExpectedApiHostPermission() {
+  /** build가 본 env. */
+  const buildEnv = readBuildEnv();
   /** 검증 대상 API 서버 주소. */
   const apiBaseUrl =
-    process.env.WXT_MYTUBE_EXTRACT_API_BASE_URL ??
-    process.env.MYTUBE_EXTRACT_API_BASE_URL ??
-    process.env.WXT_MEDIA_NEST_API_BASE_URL ??
-    process.env.MEDIA_NEST_API_BASE_URL ??
+    buildEnv.WXT_MYTUBE_EXTRACT_API_BASE_URL ??
+    buildEnv.MYTUBE_EXTRACT_API_BASE_URL ??
+    buildEnv.WXT_MEDIA_NEST_API_BASE_URL ??
+    buildEnv.MEDIA_NEST_API_BASE_URL ??
     DEFAULT_API_BASE_URL;
 
   try {

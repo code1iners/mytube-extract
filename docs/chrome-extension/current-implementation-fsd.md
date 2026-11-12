@@ -153,7 +153,7 @@ Chrome 확장 프로그램은 현재 `POST /downloads`와 job 상태·파일 end
 - `optional_host_permissions`는 `https://www.youtube.com/*` 하나만 선언한다. YouTube 권한은 사용자가 Popup에서 활성화 행동을 눌렀을 때만 요청한다.
 - `content_scripts` manifest 등록은 사용하지 않는다. WXT unlisted script 산출물은 Background의 `chrome.scripting.executeScript()`로 주입한다.
 - `web_accessible_resources`는 YouTube Shadow Root에서 기존 `public/fonts/PretendardVariable.woff2`를 사용할 수 있도록 YouTube match에 한해 노출한다.
-- `host_permissions`는 `WXT_MYTUBE_EXTRACT_API_BASE_URL`, `MYTUBE_EXTRACT_API_BASE_URL`, `WXT_MEDIA_NEST_API_BASE_URL`, `MEDIA_NEST_API_BASE_URL` 순서로 origin을 고르고, 값이 없거나 URL parsing에 실패하면 `https://mytube-extract-api.codeliners.cc/*`를 사용한다. 운영 build는 `https://mytube-extract-api.codeliners.cc/*`, 로컬 dev는 `http://127.0.0.1:5011/*`만 필요하다.
+- `host_permissions`는 `WXT_MYTUBE_EXTRACT_API_BASE_URL`, `MYTUBE_EXTRACT_API_BASE_URL`, `WXT_MEDIA_NEST_API_BASE_URL`, `MEDIA_NEST_API_BASE_URL` 순서로 origin을 고르고, 값이 없거나 URL parsing에 실패하면 `https://mytube-extract-api.codeliners.cc/*`를 사용한다. 값은 셸 환경 변수와 `apps/chrome-extension/.env*` 파일에서 읽고, 셸 값이 우선한다. WXT가 config module을 평가한 뒤에 `.env`를 적재하므로 `manifest`는 함수로 두어 runtime `import.meta.env`와 같은 주소를 보게 한다. `tools/verify-extension-package.js`도 같은 `.env*` 파일 순서로 기대값을 계산한다. 운영 build는 `https://mytube-extract-api.codeliners.cc/*`, 로컬 dev는 `http://127.0.0.1:5011/*`만 필요하다.
 - manifest 값은 `wxt.config.ts`와 WXT popup entrypoint에서 생성되며, production output은 `.output/chrome-mv3/manifest.json`에 생성된다.
 
 ### Popup

@@ -26,7 +26,9 @@ export function createApiHostPermission(
 /** WXT extension configuration. */
 export default defineConfig({
   modules: ['@wxt-dev/module-react'],
-  manifest: {
+  // WXT는 이 config module을 평가한 뒤에 .env 파일을 process.env로 옮긴다.
+  // host permission을 함수 안에서 계산해야 runtime(import.meta.env)과 같은 .env 주소를 읽는다.
+  manifest: () => ({
     name: 'MyTube Extract',
     description: 'YouTube 영상을 오디오 또는 비디오로 추출하는 보조 도구입니다.',
     permissions: ['storage', 'downloads', 'notifications', 'activeTab', 'scripting', 'alarms'],
@@ -38,5 +40,5 @@ export default defineConfig({
         resources: ['fonts/PretendardVariable.woff2'],
       },
     ],
-  },
+  }),
 });
