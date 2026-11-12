@@ -16,9 +16,13 @@ export type PopupIconName =
   | 'link'
   | 'link-off'
   | 'loader'
+  | 'monitor'
+  | 'moon'
   | 'pencil'
   | 'retry'
+  | 'shield'
   | 'sliders'
+  | 'sun'
   | 'video'
   | 'x';
 
@@ -61,13 +65,27 @@ const ICON_PATHS: Record<PopupIconName, ReactNode> = {
     <path d="M15.66 14l3-3a4 4 0 0 0-5.66-5.66l-1 1M8.34 10l-3 3a4 4 0 0 0 5.66 5.66l1-1M4 4l16 16" />
   ),
   loader: <path d="M12 3a9 9 0 1 0 9 9" />,
+  monitor: (
+    <>
+      <rect x="3" y="4" width="18" height="12" rx="2" />
+      <path d="M8 20h8M12 16v4" />
+    </>
+  ),
+  moon: <path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5z" />,
   pencil: <path d="M4 20h4L19 9l-4-4L4 16zM13.5 6.5l4 4" />,
   retry: <path d="M4.5 12a7.5 7.5 0 1 0 2.2-5.3M4.5 4v4.5H9" />,
+  shield: <path d="M12 3l7 3v5c0 4.5-3 8-7 10-4-2-7-5.5-7-10V6z" />,
   sliders: (
     <>
       <path d="M4 7h9M17 7h3M4 17h3M11 17h9" />
       <circle cx="15" cy="7" r="2" />
       <circle cx="9" cy="17" r="2" />
+    </>
+  ),
+  sun: (
+    <>
+      <circle cx="12" cy="12" r="4" />
+      <path d="M12 2.5v2M12 19.5v2M2.5 12h2M19.5 12h2M5.3 5.3l1.4 1.4M17.3 17.3l1.4 1.4M5.3 18.7l1.4-1.4M17.3 6.7l1.4-1.4" />
     </>
   ),
   video: (

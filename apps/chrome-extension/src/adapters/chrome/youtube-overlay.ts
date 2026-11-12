@@ -12,6 +12,8 @@ export type YoutubeOverlayAdapter = {
   isEnabled(): Promise<boolean>;
   /** 사용자 gesture에서 권한을 요청하고 현재 탭에 Overlay를 활성화한다. */
   requestAndEnable(): Promise<boolean>;
+  /** 선택 Host Permission을 해제한다. Chrome이 실제로 해제했으면 true다. 해제 뒤에는 Background가 새로 주입하지 않는다. */
+  disable(): Promise<boolean>;
 };
 
 /** Chrome YouTube Overlay 권한 adapter를 만든다. */
@@ -69,6 +71,21 @@ export function createYoutubeOverlayAdapter(
                 resolve(true);
               },
             );
+          },
+        );
+      });
+    },
+    disable() {
+      return new Promise((resolve, reject) => {
+        chromeApi.permissions.remove(
+          { origins: [YOUTUBE_HOST_PERMISSION] },
+          (removed) => {
+            if (chromeApi.runtime.lastError) {
+              reject(new Error('썸네일 버튼을 끄지 못했어요.'));
+              return;
+            }
+
+            resolve(removed);
           },
         );
       });

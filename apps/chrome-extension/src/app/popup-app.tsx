@@ -3,7 +3,8 @@ import { type DownloadMode, type FileExtension } from '../domain/download-option
 import { getQualityOptions } from '../domain/download-options/quality-options';
 import { type PopupView, type StagePhase, type StageSource, hasStageVideo, isStagePhaseBusy, isStagePhaseProblem } from '../domain/popup-state/popup-state';
 import { type RecentRequestAction, type RecentRequestState, RECENT_REQUEST_STRIP_LIMIT } from '../domain/recent-request/recent-request';
-import { type PopupDownloadModel, type PopupDownloadSnapshot, type PopupRecentRequest, type RecentActionResult, createChromePopupDownloadModel } from '../features/popup-download/popup-download-model';
+import { type PopupDownloadModel, type PopupDownloadSnapshot, type PopupRecentRequest, type RecentActionResult, type YoutubeOverlaySnapshot, type YoutubeOverlayStatus, createChromePopupDownloadModel } from '../features/popup-download/popup-download-model';
+import { type ThemePreference, getThemePreference, setThemePreference } from '../shared/theme-preference';
 import { type PopupIconName, PopupIcon } from './popup-icons';
 
 /** 추출 버튼에 표시할 아이콘과 접근 가능한 이름. */
@@ -38,6 +39,29 @@ const RECENT_ACTION_VIEWS: Record<RecentRequestAction, { /** 행동 아이콘. *
   retry: { icon: 'retry', label: '다시 시도' },
 };
 
+/** 테마 선호 세 칸. */
+const THEME_OPTIONS: ReadonlyArray<{ /** 테마 선호. */ preference: ThemePreference; /** 테마 아이콘. */ icon: PopupIconName; /** 접근 가능한 이름. */ label: string }> = [
+  { icon: 'monitor', label: '시스템 테마', preference: 'system' },
+  { icon: 'sun', label: '라이트 테마', preference: 'light' },
+  { icon: 'moon', label: '다크 테마', preference: 'dark' },
+];
+
+/** 헤더 격자 아이콘의 접근 가능한 이름. 점 색이 전하는 권한 상태를 이름으로도 전한다. */
+const OVERLAY_BUTTON_LABELS: Record<YoutubeOverlayStatus, string> = {
+  checking: '썸네일 버튼 권한 확인 중',
+  denied: '썸네일 버튼 권한 거부됨',
+  disabled: '썸네일 버튼 켜기',
+  enabled: '썸네일 버튼 켜짐',
+  error: '썸네일 버튼 오류',
+  requesting: '썸네일 버튼 권한 요청 중',
+};
+
+/** 화면을 바꾼 뒤 무대로 돌아올 때 포커스를 돌려줄 버튼. */
+type ReturnFocusTarget = 'more' | 'overlay' | 'settings';
+
+/** 썸네일 버튼 행 이름 element ID. 스위치가 aria-labelledby로 가리킨다. */
+const OVERLAY_SWITCH_LABEL_ID = 'overlay-switch-label';
+
 /** 잘못된 주소의 이유 한 줄 element ID. 붙여넣기 칸이 aria-describedby로 가리킨다. */
 const SOURCE_URL_REASON_ID = 'source-url-reason';
 
@@ -53,8 +77,14 @@ export function PopupApp() {
   const pendingFocusRef = useRef<PopupView | null>(null);
   /** recent 화면의 뒤로 버튼. 화면을 열면 여기로 포커스를 옮긴다. */
   const backButtonRef = useRef<HTMLButtonElement | null>(null);
-  /** 무대 아래 최근 요청 더보기 버튼. 무대로 돌아오면 여기로 포커스를 돌려준다. */
+  /** 무대 아래 최근 요청 더보기 버튼. recent 화면에서 무대로 돌아오면 여기로 포커스를 돌려준다. */
   const moreButtonRef = useRef<HTMLButtonElement | null>(null);
+  /** 헤더 격자(썸네일 버튼) 아이콘. 이 버튼으로 연 설정에서 돌아오면 포커스를 돌려준다. */
+  const overlayButtonRef = useRef<HTMLButtonElement | null>(null);
+  /** 헤더 설정 아이콘. 이 버튼으로 연 설정에서 돌아오면 포커스를 돌려준다. */
+  const settingsButtonRef = useRef<HTMLButtonElement | null>(null);
+  /** 무대로 돌아올 때 포커스를 돌려줄 버튼. 화면을 연 버튼이다. */
+  const returnFocusRef = useRef<ReturnFocusTarget>('more');
 
   // States.
 
@@ -134,15 +164,37 @@ export function PopupApp() {
     }
 
     pendingFocusRef.current = null;
-    (snapshot.view === 'main' ? moreButtonRef.current : backButtonRef.current)?.focus();
+
+    if (snapshot.view !== 'main') {
+      backButtonRef.current?.focus();
+      return;
+    }
+
+    /** 화면을 연 버튼별 ref. */
+    const returnTargets: Record<ReturnFocusTarget, RefObject<HTMLButtonElement | null>> = { more: moreButtonRef, overlay: overlayButtonRef, settings: settingsButtonRef };
+
+    returnTargets[returnFocusRef.current].current?.focus();
   }, [snapshot.view]);
 
   // Handlers.
 
-  /** Popup 안의 화면을 바꾸고, 바뀐 화면에서 포커스를 받을 자리를 기록한다. */
-  function handleOpenView(view: PopupView) {
+  /** Popup 안의 화면을 바꾸고, 바뀐 화면에서 포커스를 받을 자리를 기록한다. 무대를 떠날 때는 돌아와 포커스를 줄 버튼도 기록한다. */
+  function handleOpenView(view: PopupView, opener?: ReturnFocusTarget) {
     pendingFocusRef.current = view;
+
+    if (opener) {
+      returnFocusRef.current = opener;
+    }
+
     getPopupModel().openView(view);
+  }
+
+  /** 썸네일 버튼 스위치·권한 다시 요청을 처리한다. 켜져 있으면 끄고(권한 해제), 아니면 켠다(권한 요청). */
+  function handleToggleYoutubeOverlay() {
+    /** Popup model. */
+    const model = getPopupModel();
+
+    void (snapshot.youtubeOverlay.status === 'enabled' ? model.deactivateYoutubeOverlay() : model.activateYoutubeOverlay());
   }
 
   /** 최근 요청 항목의 행동을 실행한다. */
@@ -182,6 +234,13 @@ export function PopupApp() {
     void getPopupModel().submitDownload();
   }
 
+  if (snapshot.view === 'settings') {
+    return <main className="popup-shell" data-view="settings">
+      <ViewBar backButtonRef={backButtonRef} title="설정" onBack={() => handleOpenView('main')} />
+      <SettingsPanel retentionDays={snapshot.retentionDays} youtubeOverlay={snapshot.youtubeOverlay} onToggleYoutubeOverlay={handleToggleYoutubeOverlay} />
+    </main>;
+  }
+
   if (snapshot.view === 'recent') {
     return <main className="popup-shell" data-view="recent">
       <ViewBar backButtonRef={backButtonRef} title="최근 요청" onBack={() => handleOpenView('main')} />
@@ -190,7 +249,7 @@ export function PopupApp() {
   }
 
   return <main className="popup-shell" data-view="main" data-phase={snapshot.stagePhase} data-stage={stageSource.kind} data-status={snapshot.status.kind}>
-    <PopupHeader />
+    <PopupHeader overlayButtonRef={overlayButtonRef} settingsButtonRef={settingsButtonRef} youtubeOverlay={snapshot.youtubeOverlay} onOpenSettings={(opener) => handleOpenView('settings', opener)} />
     <form className="stage-form" onSubmit={handleSubmit}>
       {hasStageVideo(stageSource)
         ? <StageThumbnail key={stageSource.thumbnailUrl} phase={snapshot.stagePhase} thumbnailUrl={stageSource.thumbnailUrl} />
@@ -208,16 +267,19 @@ export function PopupApp() {
       </button>
       <p aria-live="polite" className="visually-hidden" role="status">{stageAnnouncement}</p>
     </form>
-    {snapshot.recentRequests.length ? <RecentRequestStrip moreButtonRef={moreButtonRef} requests={snapshot.recentRequests} onOpen={() => handleOpenView('recent')} /> : null}
+    {snapshot.recentRequests.length ? <RecentRequestStrip moreButtonRef={moreButtonRef} requests={snapshot.recentRequests} onOpen={() => handleOpenView('recent', 'more')} /> : null}
   </main>;
 }
 
-/** 로고와 썸네일 버튼·설정 아이콘을 둔 헤더. 두 아이콘의 동작은 설정 화면에서 연결한다. */
-function PopupHeader() {
+/** 로고와 썸네일 버튼·설정 아이콘을 둔 헤더. 격자 아이콘의 점이 썸네일 버튼 권한 상태를 보여주고, 두 아이콘 모두 설정 화면을 연다. */
+function PopupHeader(props: { /** 썸네일 버튼 권한 상태. */ youtubeOverlay: YoutubeOverlaySnapshot; /** 격자 아이콘 ref. */ overlayButtonRef: RefObject<HTMLButtonElement | null>; /** 설정 아이콘 ref. */ settingsButtonRef: RefObject<HTMLButtonElement | null>; /** 설정 화면 열기. 누른 버튼을 함께 넘긴다. */ onOpenSettings: (opener: ReturnFocusTarget) => void }) {
   return <header className="popup-header">
     <span aria-label="MyTube Extract" className="popup-logo" role="img"><PopupIcon name="down" /></span>
-    <button aria-label="썸네일 버튼" className="icon-button" disabled type="button"><PopupIcon name="grid" /></button>
-    <button aria-label="설정" className="icon-button" disabled type="button"><PopupIcon name="sliders" /></button>
+    <button ref={props.overlayButtonRef} aria-label={OVERLAY_BUTTON_LABELS[props.youtubeOverlay.status]} className="icon-button" data-overlay={props.youtubeOverlay.indicator} type="button" onClick={() => props.onOpenSettings('overlay')}>
+      <PopupIcon name="grid" />
+      <span aria-hidden="true" className={`overlay-dot overlay-dot--${props.youtubeOverlay.indicator}`} />
+    </button>
+    <button ref={props.settingsButtonRef} aria-label="설정" className="icon-button" type="button" onClick={() => props.onOpenSettings('settings')}><PopupIcon name="sliders" /></button>
   </header>;
 }
 
@@ -402,6 +464,66 @@ function ViewBar(props: { /** 뒤로 버튼 ref. 화면을 열면 포커스를 �
     <button ref={props.backButtonRef} aria-label="뒤로" className="icon-button" type="button" onClick={props.onBack}><PopupIcon name="back" /></button>
     <h1 className="popup-header__title">{props.title}</h1>
   </header>;
+}
+
+/** 설정 화면: 테마 세 칸, 썸네일 버튼 행, 정책 안내, 완료 파일 보관 기간 안내. */
+function SettingsPanel(props: { /** 썸네일 버튼 권한 상태. */ youtubeOverlay: YoutubeOverlaySnapshot; /** 완료 파일 보관 일수. */ retentionDays: number; /** 스위치·권한 다시 요청. */ onToggleYoutubeOverlay: () => void }) {
+  // States.
+
+  /** 테마 선호. 저장은 기존처럼 theme-preference가 맡고, 화면은 선택 표시만 따른다. */
+  const [themePreference, setThemePreferenceState] = useState<ThemePreference>(getThemePreference);
+
+  // Handlers.
+
+  /** 테마 선호를 저장하고 바로 적용한다. */
+  function handleThemeChange(preference: ThemePreference) {
+    setThemePreference(preference);
+    setThemePreferenceState(preference);
+  }
+
+  return <div className="settings">
+    <div aria-label="테마" className="settings-row" role="group">
+      <div className="theme-segments">
+        {THEME_OPTIONS.map((option) => <button key={option.preference} aria-label={option.label} aria-pressed={themePreference === option.preference} className="theme-segments__option" type="button" onClick={() => handleThemeChange(option.preference)}>
+          <PopupIcon name={option.icon} />
+        </button>)}
+      </div>
+    </div>
+    <OverlayPermissionRow youtubeOverlay={props.youtubeOverlay} onToggle={props.onToggleYoutubeOverlay} />
+    <div className="settings-row">
+      <PopupIcon name="shield" />
+      <p className="settings-row__note">저작권과 플랫폼 정책을 지켜 사용하세요.</p>
+    </div>
+    <p className="settings-fine">완료 파일은 {props.retentionDays}일 뒤 만료돼요.</p>
+  </div>;
+}
+
+/** 썸네일 버튼 행. 꺼짐·켜짐은 스위치, 권한 요청 중은 회전 아이콘, 거부·오류는 crimson 행과 이유 한 줄·권한 다시 요청 버튼이다. 끄지 못했으면 켜진 스위치 아래에 이유 한 줄을 둔다. */
+function OverlayPermissionRow(props: { /** 썸네일 버튼 권한 상태. */ youtubeOverlay: YoutubeOverlaySnapshot; /** 스위치·권한 다시 요청. */ onToggle: () => void }) {
+  /** 권한 상태. */
+  const status = props.youtubeOverlay.status;
+
+  if (props.youtubeOverlay.indicator === 'problem') {
+    return <>
+      <div className="settings-row is-problem" data-overlay-status={status}>
+        <PopupIcon className="settings-row__warn" name="grid" />
+        <span className="settings-row__name">썸네일 버튼</span>
+        <button aria-label="권한 다시 요청" className="settings-row__retry" type="button" onClick={props.onToggle}><PopupIcon name="retry" /></button>
+      </div>
+      <p className="stage-problem settings-problem" role="alert"><PopupIcon name="alert" /><span>{props.youtubeOverlay.message}</span></p>
+    </>;
+  }
+
+  return <>
+    <div className="settings-row" data-overlay-status={status}>
+      <PopupIcon name="grid" />
+      <span className="settings-row__name" id={OVERLAY_SWITCH_LABEL_ID}>썸네일 버튼</span>
+      {status === 'requesting'
+        ? <span aria-label="권한 요청 중" className="settings-row__wait" role="img"><PopupIcon className="is-spinning" name="loader" /></span>
+        : <button aria-checked={status === 'enabled'} aria-labelledby={OVERLAY_SWITCH_LABEL_ID} className="switch" disabled={status === 'checking'} role="switch" type="button" onClick={props.onToggle} />}
+    </div>
+    {props.youtubeOverlay.turnOffError ? <p className="stage-problem settings-problem" role="alert"><PopupIcon name="alert" /><span>{props.youtubeOverlay.turnOffError}</span></p> : null}
+  </>;
 }
 
 /** 무대 아래 최근 요청 줄. 최신 썸네일 몇 개와 더보기 버튼만 두고, 어느 쪽을 눌러도 recent 화면을 연다. */
