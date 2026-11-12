@@ -1,5 +1,8 @@
 import { type DownloadJob } from '../../domain/download-job/download-job';
-import { type MyTubeExtractClient } from '../../services/mytube-extract/mytube-extract-client';
+import {
+  type MyTubeExtractClient,
+  ServerUnreachableError,
+} from '../../services/mytube-extract/mytube-extract-client';
 import {
   type DownloadJobManager,
   type SubmitDownloadJobInput,
@@ -29,7 +32,12 @@ export function createDownloadJobSubmitHandler(
     try {
       await dependencies.myTubeExtractClient.assertServerAvailable(request.apiBaseUrl);
     } catch (error) {
-      return { message: getErrorMessage(error, 'Server is unavailable.'), ok: false };
+      // health check는 서버에 닿았는지만 보므로 어떤 실패든 연결 문제로 알린다.
+      return {
+        failure: 'unreachable',
+        message: getErrorMessage(error, '서버에 연결할 수 없어요.'),
+        ok: false,
+      };
     }
 
     return new Promise<DownloadJobSubmitResponse>((resolve) => {
@@ -60,7 +68,8 @@ export function createDownloadJobSubmitHandler(
 
         responded = true;
         resolve({
-          message: getErrorMessage(error, 'Could not create the download job.'),
+          failure: error instanceof ServerUnreachableError ? 'unreachable' : 'rejected',
+          message: getErrorMessage(error, '추출 요청을 만들지 못했어요.'),
           ok: false,
         });
       });

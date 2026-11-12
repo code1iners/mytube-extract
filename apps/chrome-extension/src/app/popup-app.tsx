@@ -2,7 +2,7 @@ import { type ChangeEvent, type FormEvent, type RefObject, useEffect, useRef, us
 import { type DownloadJob } from '../domain/download-job/download-job';
 import { type DownloadMode } from '../domain/download-options/download-options';
 import { getQualityOptions } from '../domain/download-options/quality-options';
-import { type StageSource, hasStageVideo } from '../domain/popup-state/popup-state';
+import { type StagePhase, type StageSource, hasStageVideo, isStagePhaseBusy, isStagePhaseProblem } from '../domain/popup-state/popup-state';
 import { type PopupDownloadModel, type PopupDownloadSnapshot, createChromePopupDownloadModel } from '../features/popup-download/popup-download-model';
 import { type PopupIconName, PopupIcon } from './popup-icons';
 
@@ -45,6 +45,10 @@ export function PopupApp() {
   const stageSource = snapshot.stageSource;
   /** 추출 버튼 표시. */
   const extractButton = getExtractButtonView(snapshot);
+  /** 진행 중이라 형식·품질을 잠그는지 여부. */
+  const controlsLocked = isStagePhaseBusy(snapshot.stagePhase);
+  /** 진행 단계 live region 문장(서버 확인 중·대기 중·처리 중·다운로드를 시작했어요). 실패 문장은 오류 줄의 alert가 전한다. */
+  const stageAnnouncement = controlsLocked || snapshot.stagePhase === 'done' ? snapshot.status.message : '';
 
   // Functions.
 
@@ -130,21 +134,22 @@ export function PopupApp() {
     void getPopupModel().submitDownload();
   }
 
-  return <main className="popup-shell" data-stage={stageSource.kind} data-status={snapshot.status.kind}>
+  return <main className="popup-shell" data-phase={snapshot.stagePhase} data-stage={stageSource.kind} data-status={snapshot.status.kind}>
     <PopupHeader />
     <form className="stage-form" onSubmit={handleSubmit}>
       {hasStageVideo(stageSource)
-        ? <StageThumbnail key={stageSource.thumbnailUrl} thumbnailUrl={stageSource.thumbnailUrl} />
+        ? <StageThumbnail key={stageSource.thumbnailUrl} phase={snapshot.stagePhase} thumbnailUrl={stageSource.thumbnailUrl} />
         : <PasteField inputRef={sourceInputRef} invalid={stageSource.kind === 'invalid'} sourceUrl={snapshot.options.sourceUrl} onChange={handleSourceUrlChange} onClear={handleClearSourceUrl} />}
       <StageLine reason={snapshot.status.message} stageSource={stageSource} />
+      <StageProblemLine snapshot={snapshot} />
       <div className="stage-controls">
-        <ModeToggle mode={snapshot.options.mode} onChange={handleModeChange} />
-        <QualityBars mode={snapshot.options.mode} value={snapshot.options.mode === 'audio' ? snapshot.options.bitrate : snapshot.options.resolution} onChange={handleQualityChange} />
+        <ModeToggle disabled={controlsLocked} mode={snapshot.options.mode} onChange={handleModeChange} />
+        <QualityBars disabled={controlsLocked} mode={snapshot.options.mode} value={snapshot.options.mode === 'audio' ? snapshot.options.bitrate : snapshot.options.resolution} onChange={handleQualityChange} />
       </div>
       <button aria-label={extractButton.label} className={extractButton.busy ? 'extract-button is-busy' : 'extract-button'} disabled={!snapshot.canDownload} type="submit">
         <PopupIcon className={extractButton.busy ? 'is-spinning' : undefined} name={extractButton.icon} />
       </button>
-      <RequestStatusFeedback snapshot={snapshot} />
+      <p aria-live="polite" className="visually-hidden" role="status">{stageAnnouncement}</p>
     </form>
     <RecentJobsList jobs={snapshot.jobs} />
   </main>;
@@ -159,8 +164,8 @@ function PopupHeader() {
   </header>;
 }
 
-/** 무대의 16:9 썸네일. 이미지를 불러오지 못하면 중립 배경과 비디오 아이콘으로 바꾼다. */
-function StageThumbnail(props: { /** YouTube 썸네일 주소. */ thumbnailUrl: string }) {
+/** 무대의 16:9 썸네일. 이미지를 불러오지 못하면 중립 배경과 비디오 아이콘으로 바꾼다. 진행·문제 단계는 그 위에 덮개로 얹는다. */
+function StageThumbnail(props: { /** 무대 진행 단계. */ phase: StagePhase; /** YouTube 썸네일 주소. */ thumbnailUrl: string }) {
   /** 썸네일 로드 실패 여부. 영상이 바뀌면 key로 새로 시작한다. */
   const [failed, setFailed] = useState(false);
 
@@ -168,7 +173,46 @@ function StageThumbnail(props: { /** YouTube 썸네일 주소. */ thumbnailUrl: 
     {failed
       ? <span className="stage__fallback"><PopupIcon name="video" /></span>
       : <img alt="" className="stage__image" decoding="async" src={props.thumbnailUrl} onError={() => setFailed(true)} />}
+    <StageVeil phase={props.phase} />
   </figure>;
+}
+
+/** 무대 위 덮개. 의미는 live region과 오류 줄이 전하므로 덮개 자체는 장식이다. */
+function StageVeil(props: { /** 무대 진행 단계. */ phase: StagePhase }) {
+  if (props.phase === 'idle') {
+    return null;
+  }
+
+  return <div aria-hidden="true" className={`stage-veil stage-veil--${props.phase}`} data-veil={props.phase}>
+    {isStagePhaseBusy(props.phase) ? <StageRing /> : null}
+    {props.phase === 'queued' ? <PopupIcon className="stage-veil__icon stage-veil__icon--inner" name="clock" /> : null}
+    {props.phase === 'done' ? <PopupIcon className="stage-veil__icon" name="check" /> : null}
+    {props.phase === 'failed' ? <PopupIcon className="stage-veil__icon" name="alert" /> : null}
+    {props.phase === 'unreachable' ? <PopupIcon className="stage-veil__icon" name="cloud-off" /> : null}
+  </div>;
+}
+
+/** 숫자 없는 흰 회전 링. API 진행률은 실제 값이 아니라서 호만 돌린다. */
+function StageRing() {
+  return <svg aria-hidden="true" className="stage-ring" focusable="false" viewBox="0 0 40 40">
+    <circle className="stage-ring__track" cx="20" cy="20" r="17" />
+    <circle className="stage-ring__arc" cx="20" cy="20" pathLength="100" r="17" />
+  </svg>;
+}
+
+/** 실패·서버 연결 실패·설정 저장 실패를 무대 아래 한 줄로 알린다. */
+function StageProblemLine(props: { /** 현재 popup snapshot. */ snapshot: PopupDownloadSnapshot }) {
+  /** 표시할 오류 문장. */
+  const message = isStagePhaseProblem(props.snapshot.stagePhase) || props.snapshot.status.kind === 'options-save-failed' ? props.snapshot.status.message : '';
+
+  if (!message) {
+    return null;
+  }
+
+  return <p className="stage-problem" role="alert">
+    <PopupIcon name={props.snapshot.stagePhase === 'unreachable' ? 'cloud-off' : 'alert'} />
+    <span>{message}</span>
+  </p>;
 }
 
 /** 무대 자리의 붙여넣기 칸. 붙여넣기와 타이핑 모두 받는 실제 주소 입력이다. */
@@ -200,17 +244,17 @@ function StageLine(props: { /** 무대 원본. */ stageSource: StageSource; /** 
 }
 
 /** 오디오·비디오 형식 아이콘 두 칸. */
-function ModeToggle(props: { /** 선택 형식. */ mode: DownloadMode; /** 형식 변경. */ onChange: (event: ChangeEvent<HTMLInputElement>) => void }) {
+function ModeToggle(props: { /** 진행 중 잠금 여부. */ disabled: boolean; /** 선택 형식. */ mode: DownloadMode; /** 형식 변경. */ onChange: (event: ChangeEvent<HTMLInputElement>) => void }) {
   return <div aria-label="형식" className="mode-toggle" role="radiogroup">
     {MODE_OPTIONS.map((option) => <label key={option.mode} className="mode-toggle__option">
-      <input aria-label={option.label} checked={props.mode === option.mode} className="visually-hidden-input" name="mode" type="radio" value={option.mode} onChange={props.onChange} />
+      <input aria-label={option.label} checked={props.mode === option.mode} disabled={props.disabled} className="visually-hidden-input" name="mode" type="radio" value={option.mode} onChange={props.onChange} />
       <PopupIcon name={option.icon} />
     </label>)}
   </div>;
 }
 
 /** 높이가 다른 품질 막대 세 개. 선택한 값 이하의 막대를 채운다. */
-function QualityBars(props: { /** 현재 형식. */ mode: DownloadMode; /** 선택 품질 값. */ value: string; /** 품질 변경. */ onChange: (event: ChangeEvent<HTMLInputElement>) => void }) {
+function QualityBars(props: { /** 진행 중 잠금 여부. */ disabled: boolean; /** 현재 형식. */ mode: DownloadMode; /** 선택 품질 값. */ value: string; /** 품질 변경. */ onChange: (event: ChangeEvent<HTMLInputElement>) => void }) {
   /** 현재 형식의 고정 품질 선택지. */
   const options = getQualityOptions(props.mode);
   /** 선택 품질의 순서. */
@@ -220,38 +264,11 @@ function QualityBars(props: { /** 현재 형식. */ mode: DownloadMode; /** 선�
 
   return <div aria-label="품질" className="quality-bars" role="radiogroup">
     {options.map((option, index) => <label key={option} className={index <= selectedIndex ? 'quality-bars__option is-filled' : 'quality-bars__option'}>
-      <input aria-label={`${option}${unit}`} checked={index === selectedIndex} className="visually-hidden-input" name="quality" type="radio" value={String(option)} onChange={props.onChange} />
+      <input aria-label={`${option}${unit}`} checked={index === selectedIndex} disabled={props.disabled} className="visually-hidden-input" name="quality" type="radio" value={String(option)} onChange={props.onChange} />
       <i aria-hidden="true" className="quality-bars__bar" />
       <span aria-hidden="true" className="quality-bars__value">{option}</span>
     </label>)}
   </div>;
-}
-
-/** 서버 확인 또는 최신 job 상태를 버튼 아래에 짧게 안내한다. */
-function RequestStatusFeedback(props: { /** 현재 popup snapshot. */ snapshot: PopupDownloadSnapshot }) {
-  const visibleStatuses = new Set([
-    'checking-server',
-    'job-queued',
-    'job-processing',
-    'download-started',
-    'download-failed',
-  ]);
-
-  if (!visibleStatuses.has(props.snapshot.status.kind)) {
-    return null;
-  }
-
-  /** 서버 확인 중인지 또는 오류인지 여부. */
-  const isAlert = props.snapshot.status.kind === 'download-failed';
-  /** 상태에 맞는 CSS tone. */
-  const tone =
-    props.snapshot.status.kind === 'download-failed'
-      ? 'danger'
-      : props.snapshot.status.kind === 'download-started'
-        ? 'success'
-        : 'info';
-
-  return <p className={`request-status request-status--${tone}`} role={isAlert ? 'alert' : 'status'} aria-live="polite"><span aria-hidden="true" className="request-status__icon">{tone === 'danger' ? '!' : tone === 'success' ? '✓' : '…'}</span><span>{props.snapshot.status.message}</span></p>;
 }
 
 /** Popup에 표시할 최근 job 목록을 렌더링한다. */
@@ -302,7 +319,9 @@ function formatRecentJobTime(createdAt: string): string {
 
 /** 추출 버튼의 아이콘과 접근 가능한 이름을 정한다. */
 function getExtractButtonView(snapshot: PopupDownloadSnapshot): ExtractButtonView {
-  if (snapshot.submitting || snapshot.status.kind === 'checking-server') return { busy: true, icon: 'loader', label: '서버 확인 중' };
-  if (snapshot.status.kind === 'download-failed' && snapshot.canDownload) return { busy: false, icon: 'retry', label: '다시 시도' };
+  if (snapshot.stagePhase === 'checking') return { busy: true, icon: 'loader', label: '서버 확인 중' };
+  if (snapshot.stagePhase === 'queued') return { busy: true, icon: 'loader', label: '대기 중' };
+  if (snapshot.stagePhase === 'processing') return { busy: true, icon: 'loader', label: '처리 중' };
+  if (isStagePhaseProblem(snapshot.stagePhase)) return { busy: false, icon: 'retry', label: '다시 시도' };
   return { busy: false, icon: 'down', label: '추출 시작' };
 }

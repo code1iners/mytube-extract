@@ -25,7 +25,7 @@ export function createYoutubeOverlayAdapter(
           { origins: [YOUTUBE_HOST_PERMISSION] },
           (granted) => {
             if (chromeApi.runtime.lastError) {
-              reject(new Error('Could not read YouTube permission state.'));
+              reject(new Error('YouTube 권한 상태를 확인하지 못했어요.'));
               return;
             }
 
@@ -40,7 +40,7 @@ export function createYoutubeOverlayAdapter(
           { origins: [YOUTUBE_HOST_PERMISSION] },
           (granted) => {
             if (chromeApi.runtime.lastError) {
-              reject(new Error('Could not request YouTube permission.'));
+              reject(new Error('YouTube 권한을 요청하지 못했어요.'));
               return;
             }
 
@@ -53,14 +53,14 @@ export function createYoutubeOverlayAdapter(
               { type: YOUTUBE_OVERLAY_ENABLE_MESSAGE_TYPE },
               (response: YoutubeOverlayEnableResponse | undefined) => {
                 if (chromeApi.runtime.lastError) {
-                  reject(new Error('Could not activate YouTube thumbnail buttons.'));
+                  reject(new Error('썸네일 버튼을 켜지 못했어요.'));
                   return;
                 }
 
                 if (!response?.ok) {
                   reject(
                     new Error(
-                      response?.message ?? 'Could not activate YouTube thumbnail buttons.',
+                      response?.message ?? '썸네일 버튼을 켜지 못했어요.',
                     ),
                   );
                   return;

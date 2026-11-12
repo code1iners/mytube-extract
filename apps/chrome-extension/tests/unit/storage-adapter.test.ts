@@ -47,7 +47,7 @@ describe('Chrome storage adapter', () => {
     const adapter = createStorageAdapter(chromeApi);
 
     await expect(adapter.loadOptions()).rejects.toThrow(
-      'Could not load extension settings.',
+      '확장 설정을 불러오지 못했어요.',
     );
   });
 
@@ -90,7 +90,7 @@ describe('Chrome storage adapter', () => {
         resolution: '',
         sourceUrl: 'https://www.youtube.com/watch?v=abc123_DEF0',
       }),
-    ).rejects.toThrow('Could not save extension settings.');
+    ).rejects.toThrow('확장 설정을 저장하지 못했어요.');
   });
 });
 

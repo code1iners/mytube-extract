@@ -193,7 +193,7 @@ export function createDownloadNotificationsAdapter(
         [RETRYABLE_DOWNLOAD_NOTIFICATIONS_STORAGE_KEY],
         (items) => {
           if (chromeApi.runtime.lastError) {
-            reject(new Error('Could not load the download notification retry inputs.'));
+            reject(new Error('알림의 다시 시도 정보를 불러오지 못했어요.'));
             return;
           }
 
@@ -218,7 +218,7 @@ export function createDownloadNotificationsAdapter(
         { [RETRYABLE_DOWNLOAD_NOTIFICATIONS_STORAGE_KEY]: retryInputsByNotificationId },
         () => {
           if (chromeApi.runtime.lastError) {
-            reject(new Error('Could not save the download notification retry inputs.'));
+            reject(new Error('알림의 다시 시도 정보를 저장하지 못했어요.'));
             return;
           }
 
@@ -248,7 +248,7 @@ function createNotification(
   return new Promise((resolve, reject) => {
     chromeApi.notifications.create(notificationId, options, () => {
       if (chromeApi.runtime.lastError) {
-        reject(new Error('Could not show the download notification.'));
+        reject(new Error('다운로드 알림을 표시하지 못했어요.'));
         return;
       }
 

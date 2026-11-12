@@ -104,7 +104,7 @@ describe('download URL behavior', () => {
 
   it('rejects unsupported API protocols and invalid download inputs', () => {
     expect(() => normalizeApiBaseUrl('ftp://127.0.0.1')).toThrow(
-      'API base URL must use http or https',
+      'API 주소는 http 또는 https여야 해요.',
     );
     expect(() =>
       buildDownloadUrl({
@@ -115,18 +115,18 @@ describe('download URL behavior', () => {
         resolution: '',
         sourceUrl: 'not-a-url',
       }),
-    ).toThrow('A valid source URL is required');
+    ).toThrow('올바른 원본 주소가 필요해요.');
     expect(() => normalizeSourceUrl('ftp://www.youtube.com/watch?v=abc123_DEF0')).toThrow(
-      'YouTube watch URL is required',
+      '지원하는 YouTube 영상 주소가 필요해요.',
     );
     expect(() => normalizeSourceUrl('https://example.com/watch?v=abc123_DEF0')).toThrow(
-      'YouTube watch URL is required',
+      '지원하는 YouTube 영상 주소가 필요해요.',
     );
     expect(() => normalizeSourceUrl('https://youtu.be/invalid')).toThrow(
-      'YouTube watch URL is required',
+      '지원하는 YouTube 영상 주소가 필요해요.',
     );
     expect(() => normalizeSourceUrl('https://www.youtube.com/shorts/invalid')).toThrow(
-      'YouTube watch URL is required',
+      '지원하는 YouTube 영상 주소가 필요해요.',
     );
   });
 });

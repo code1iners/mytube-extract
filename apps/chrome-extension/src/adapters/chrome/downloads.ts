@@ -16,7 +16,7 @@ export function createDownloadsAdapter(chromeApi: typeof chrome = chrome): Downl
 
         chromeApi.downloads.download(downloadOptions, (downloadId) => {
           if (chromeApi.runtime.lastError || !downloadId) {
-            reject(new Error('Could not start the download.'));
+            reject(new Error('다운로드를 시작하지 못했어요.'));
             return;
           }
 

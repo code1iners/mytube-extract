@@ -1,6 +1,9 @@
 import { describe, expect, it, vi } from 'vitest';
 import { type DownloadJob } from '../../src/domain/download-job/download-job';
-import { DownloadJobRequestError } from '../../src/services/mytube-extract/mytube-extract-client';
+import {
+  DownloadJobRequestError,
+  ServerUnreachableError,
+} from '../../src/services/mytube-extract/mytube-extract-client';
 import { DOWNLOAD_JOB_SUBMIT_MESSAGE_TYPE, type DownloadJobSubmitRequest } from '../../src/features/download-jobs/download-job-message';
 import {
   type DownloadJobSubmitHandlerDependencies,
@@ -77,24 +80,25 @@ describe('download job submit handler', () => {
         submitJob: vi.fn(),
       },
       myTubeExtractClient: {
-        assertServerAvailable: vi.fn().mockRejectedValue(new Error('Server is unavailable.')),
+        assertServerAvailable: vi.fn().mockRejectedValue(new ServerUnreachableError()),
       },
     };
     /** job 제출 handler. */
     const handleSubmit = createDownloadJobSubmitHandler(dependencies);
 
     await expect(handleSubmit(createRequest())).resolves.toEqual({
-      message: 'Server is unavailable.',
+      failure: 'unreachable',
+      message: '서버에 연결할 수 없어요.',
       ok: false,
     });
     expect(dependencies.jobManager.submitJob).not.toHaveBeenCalled();
   });
 
-  it('reports a job creation failure that happens before any status change', async () => {
+  it('reports a network failure while creating the job as an unreachable server', async () => {
     /** handler 의존성. */
     const dependencies: DownloadJobSubmitHandlerDependencies = {
       jobManager: {
-        submitJob: vi.fn().mockRejectedValue(new Error('Could not reach the server.')),
+        submitJob: vi.fn().mockRejectedValue(new ServerUnreachableError()),
       },
       myTubeExtractClient: {
         assertServerAvailable: vi.fn().mockResolvedValue(undefined),
@@ -104,7 +108,8 @@ describe('download job submit handler', () => {
     const handleSubmit = createDownloadJobSubmitHandler(dependencies);
 
     await expect(handleSubmit(createRequest())).resolves.toEqual({
-      message: 'Could not reach the server.',
+      failure: 'unreachable',
+      message: '서버에 연결할 수 없어요.',
       ok: false,
     });
   });
@@ -125,6 +130,7 @@ describe('download job submit handler', () => {
     const handleSubmit = createDownloadJobSubmitHandler(dependencies);
 
     await expect(handleSubmit(createRequest())).resolves.toEqual({
+      failure: 'rejected',
       message: 'quality is not supported',
       ok: false,
     });

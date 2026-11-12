@@ -9,7 +9,9 @@ export type PopupStatusKind =
   | 'job-queued'
   | 'job-processing'
   | 'download-started'
-  | 'download-failed';
+  | 'download-failed'
+  | 'server-unreachable'
+  | 'options-save-failed';
 
 /** Popup 상태 메시지. */
 export type PopupStatus = {
@@ -31,33 +33,41 @@ export const INVALID_SOURCE_URL_STATUS: PopupStatus = {
   message: '지원하는 YouTube URL을 입력하세요.',
 };
 
-/** 서버 확인 상태. */
+/** 서버 확인 상태. 메시지는 진행 단계 live region 문장이다. */
 export const CHECKING_SERVER_STATUS: PopupStatus = {
   kind: 'checking-server',
-  message: 'API 서버를 확인하고 있습니다.',
+  message: '서버 확인 중',
+};
+
+/** job 대기 중 상태. */
+export const JOB_QUEUED_STATUS: PopupStatus = {
+  kind: 'job-queued',
+  message: '대기 중',
+};
+
+/** job 처리 중 상태. 실제 진행률이 없어 숫자를 싣지 않는다. */
+export const JOB_PROCESSING_STATUS: PopupStatus = {
+  kind: 'job-processing',
+  message: '처리 중',
 };
 
 /** 다운로드 시작 상태. */
 export const DOWNLOAD_STARTED_STATUS: PopupStatus = {
   kind: 'download-started',
-  message: '추출 요청을 시작했습니다.',
+  message: '다운로드를 시작했어요',
 };
 
-/** job 대기 중 상태를 만든다. */
-export function createJobQueuedStatus(message: string): PopupStatus {
-  return {
-    kind: 'job-queued',
-    message,
-  };
-}
+/** 서버 연결 실패 상태. 서버 메시지 대신 고정 문장을 보여준다. */
+export const SERVER_UNREACHABLE_STATUS: PopupStatus = {
+  kind: 'server-unreachable',
+  message: '서버에 연결할 수 없어요',
+};
 
-/** job 처리 중 상태를 만든다. */
-export function createJobProcessingStatus(message: string): PopupStatus {
-  return {
-    kind: 'job-processing',
-    message,
-  };
-}
+/** 형식·품질 저장 실패 상태. 무대 단계와 무관하게 알리기만 한다. */
+export const OPTIONS_SAVE_FAILED_STATUS: PopupStatus = {
+  kind: 'options-save-failed',
+  message: '설정을 저장하지 못했어요.',
+};
 
 /** 원본 URL 준비 상태를 만든다. */
 export function createReadyStatus(): PopupStatus {
@@ -105,6 +115,26 @@ export type StageSource =
       /** 사용자가 넣은 주소 원문. */
       input: string;
     };
+
+/** 무대 위 진행 단계. 현재 무대 영상의 최신 job과 이번 Popup의 제출 결과에서 도출한다. */
+export type StagePhase =
+  | 'idle' // ready
+  | 'checking' // checking-server 또는 submitting
+  | 'queued' // job-queued
+  | 'processing' // job-processing (숫자 없음)
+  | 'done' // download-started, 잠시 뒤 idle로 복귀
+  | 'failed' // job 실패 또는 서버가 거부한 접수
+  | 'unreachable'; // 서버 연결 실패
+
+/** 무대가 진행 중이라 같은 영상의 제출을 잠그는 단계인지 확인한다. */
+export function isStagePhaseBusy(phase: StagePhase): boolean {
+  return phase === 'checking' || phase === 'queued' || phase === 'processing';
+}
+
+/** 무대가 실패를 보여 주고 있어 추출 버튼이 다시 시도가 되는 단계인지 확인한다. */
+export function isStagePhaseProblem(phase: StagePhase): boolean {
+  return phase === 'failed' || phase === 'unreachable';
+}
 
 /** 활성 탭에서 읽은 YouTube 영상. */
 export type TabVideo = {

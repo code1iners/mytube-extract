@@ -21,6 +21,9 @@ export type DownloadJobSubmitRequest = {
   sourceUrl: string;
 };
 
+/** job 제출 실패 원인. 서버에 닿지 못했으면 `unreachable`, 서버나 확장이 요청을 받아 주지 않았으면 `rejected`다. */
+export type DownloadJobSubmitFailure = 'unreachable' | 'rejected';
+
 /** Background의 job 제출 처리 결과. */
 export type DownloadJobSubmitResponse =
   | {
@@ -34,6 +37,8 @@ export type DownloadJobSubmitResponse =
       ok: false;
       /** 사용자에게 전달할 실패 메시지. */
       message: string;
+      /** 실패 원인. 이 필드가 생기기 전 응답은 없을 수 있어 `rejected`로 읽는다. */
+      failure?: DownloadJobSubmitFailure;
     };
 
 /** 알 수 없는 runtime message가 job 제출 요청인지 확인한다. */

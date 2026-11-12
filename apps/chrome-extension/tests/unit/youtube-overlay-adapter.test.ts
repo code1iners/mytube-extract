@@ -61,7 +61,7 @@ describe('YouTube overlay adapter', () => {
     const adapter = createYoutubeOverlayAdapter(chromeApi);
 
     await expect(adapter.isEnabled()).rejects.toThrow(
-      'Could not read YouTube permission state.',
+      'YouTube 권한 상태를 확인하지 못했어요.',
     );
   });
 
@@ -76,7 +76,7 @@ describe('YouTube overlay adapter', () => {
     const adapter = createYoutubeOverlayAdapter(chromeApi);
 
     await expect(adapter.requestAndEnable()).rejects.toThrow(
-      'Could not request YouTube permission.',
+      'YouTube 권한을 요청하지 못했어요.',
     );
   });
 

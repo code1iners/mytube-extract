@@ -20,7 +20,7 @@ export function createStorageAdapter(chromeApi: typeof chrome = chrome): Storage
       return new Promise((resolve, reject) => {
         chromeApi.storage.local.get([...STORAGE_KEYS], (items) => {
           if (chromeApi.runtime.lastError) {
-            reject(new Error('Could not load extension settings.'));
+            reject(new Error('확장 설정을 불러오지 못했어요.'));
             return;
           }
 
@@ -40,7 +40,7 @@ export function createStorageAdapter(chromeApi: typeof chrome = chrome): Storage
 
         chromeApi.storage.local.set(storedOptions, () => {
           if (chromeApi.runtime.lastError) {
-            reject(new Error('Could not save extension settings.'));
+            reject(new Error('확장 설정을 저장하지 못했어요.'));
             return;
           }
 

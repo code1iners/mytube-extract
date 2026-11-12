@@ -55,10 +55,10 @@ describe('download jobs bridge', () => {
     );
   });
 
-  it('rejects submitJob with the background failure message', async () => {
+  it('rejects submitJob with the background failure message and cause', async () => {
     /** 테스트용 Chrome API. */
     const chromeApi = createChromeApi({
-      sendMessageResponse: { message: 'Server is unavailable.', ok: false },
+      sendMessageResponse: { failure: 'unreachable', message: '서버에 연결할 수 없어요.', ok: false },
     });
     /** download jobs bridge. */
     const bridge = createDownloadJobsBridge(chromeApi, createStorage());
@@ -71,7 +71,7 @@ describe('download jobs bridge', () => {
         quality: '192',
         sourceUrl: 'https://www.youtube.com/watch?v=abc123_DEF0',
       }),
-    ).rejects.toThrow('Server is unavailable.');
+    ).rejects.toMatchObject({ failure: 'unreachable', message: '서버에 연결할 수 없어요.' });
   });
 
   it('rejects submitJob when chrome.runtime.lastError is set', async () => {
@@ -91,7 +91,10 @@ describe('download jobs bridge', () => {
         quality: '192',
         sourceUrl: 'https://www.youtube.com/watch?v=abc123_DEF0',
       }),
-    ).rejects.toThrow('Could not reach the extension background.');
+    ).rejects.toMatchObject({
+      failure: 'rejected',
+      message: '확장 프로그램 내부 연결에 실패했어요. 다시 시도해 주세요.',
+    });
   });
 
   it('reads the latest job from the storage adapter', async () => {

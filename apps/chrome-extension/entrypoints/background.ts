@@ -162,7 +162,7 @@ export default defineBackground(() => {
 /** Popup 활성화 요청 이후 현재 활성 탭에 Overlay를 주입한다. */
 async function activateCurrentYoutubeTab(): Promise<void> {
   if (!(await youtubeOverlay.isEnabled())) {
-    throw new Error('YouTube permission is not granted.');
+    throw new Error('YouTube 권한이 허용되지 않았어요.');
   }
 
   /** 현재 활성 탭 목록. */
@@ -232,7 +232,7 @@ function queryActiveTabs(): Promise<chrome.tabs.Tab[]> {
   return new Promise((resolve, reject) => {
     chrome.tabs.query({ active: true, lastFocusedWindow: true }, (tabs) => {
       if (chrome.runtime.lastError) {
-        reject(new Error('Could not read the current browser tab.'));
+        reject(new Error('현재 탭을 읽지 못했어요.'));
         return;
       }
 
@@ -251,7 +251,7 @@ async function handleOverlayDownload(
     senderTabId === undefined ||
     !isSupportedYoutubePageUrl(senderTabUrl)
   ) {
-    throw new Error('A YouTube tab is required for overlay downloads.');
+    throw new Error('YouTube 탭에서만 썸네일 버튼으로 추출할 수 있어요.');
   }
 
   /** 오버레이 요청을 공용 job manager 입력으로 변환한다. */

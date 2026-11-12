@@ -22,6 +22,13 @@
   --color-status-completed: #356b43;
   --color-status-failed: #c62828;
   --color-focus: #4b5cce;
+  /* 무대 덮개는 썸네일 위에 얹혀 테마와 무관하게 어두운 바탕이라 두 테마가 같은 값을 쓴다. */
+  --color-scrim: rgba(18, 18, 20, 0.74);
+  --color-scrim-strong: rgba(18, 18, 20, 0.8);
+  --color-scrim-completed: rgba(53, 107, 67, 0.86);
+  --color-on-scrim: #ffffff;
+  --color-on-scrim-track: rgba(255, 255, 255, 0.25);
+  --color-on-scrim-failed: #ff8a80;
   --shadow-soft: rgba(0, 0, 0, 0.07) 0px 2px 8px 0px;
   color: var(--color-text-primary);
   background: var(--color-canvas);
@@ -70,6 +77,7 @@ button:disabled { cursor: not-allowed; }
 .stage-form { display: grid; gap: 0; }
 /* 무대와 붙여넣기 칸은 같은 16:9 자리를 차지해 원본이 바뀌어도 아래 조작 위치가 그대로다. */
 .stage, .paste-field { width: 100%; margin: 0; aspect-ratio: 16 / 9; overflow: hidden; border-radius: 12px; background: var(--color-surface-alt); }
+.stage { position: relative; }
 .stage__image { display: block; width: 100%; height: 100%; object-fit: cover; }
 .stage__fallback { display: grid; width: 100%; height: 100%; place-items: center; color: var(--color-text-secondary); }
 .stage__fallback .icon { width: 48px; height: 48px; stroke-width: 1.6; }
@@ -104,16 +112,27 @@ button:disabled { cursor: not-allowed; }
 .quality-bars__option:has(input:checked) .quality-bars__value { color: var(--color-text-primary); text-decoration: underline; text-underline-offset: 3px; }
 .mode-toggle__option:has(input:focus-visible), .quality-bars__option:has(input:focus-visible) { outline: 2px solid var(--color-focus); outline-offset: 2px; }
 
+/* 무대 덮개: 진행은 어두운 scrim 위 흰 링, 완료는 초록 덮개, 실패는 어두운 덮개 위 crimson 아이콘이다. */
+.stage-veil { position: absolute; inset: 0; display: grid; place-items: center; background: var(--color-scrim); color: var(--color-on-scrim); animation: stage-veil-in 160ms ease-out; }
+.stage-veil > * { grid-area: 1 / 1; }
+.stage-veil--done { background: var(--color-scrim-completed); }
+.stage-veil--failed, .stage-veil--unreachable { background: var(--color-scrim-strong); color: var(--color-on-scrim-failed); }
+.stage-veil__icon { width: 52px; height: 52px; stroke-width: 2.2; }
+.stage-veil__icon--inner { width: 30px; height: 30px; }
+.stage-ring { width: 88px; height: 88px; animation: popup-spin 1.4s linear infinite; }
+.stage-ring circle { fill: none; stroke-width: 3; }
+.stage-ring__track { stroke: var(--color-on-scrim-track); }
+.stage-ring__arc { stroke: var(--color-on-scrim); stroke-dasharray: 22 78; stroke-linecap: round; }
+@keyframes stage-veil-in { from { opacity: 0; } }
+.stage-problem { display: flex; align-items: flex-start; gap: 8px; margin: 0 0 12px; padding: 0 4px; color: var(--color-status-failed); font-size: 14px; font-weight: 600; line-height: 1.45; overflow-wrap: anywhere; }
+.stage-problem .icon { width: 16px; height: 16px; margin-top: 2px; stroke-width: 2.6; }
+.visually-hidden { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+.mode-toggle__option:has(input:disabled), .quality-bars__option:has(input:disabled) { cursor: not-allowed; opacity: 0.55; }
+.quality-bars__option:has(input:disabled):hover { background: transparent; }
 .extract-button { display: grid; width: 100%; height: 56px; margin-top: 12px; place-items: center; border: 0; border-radius: 12px; background: var(--color-primary); color: var(--color-on-primary); }
 .extract-button .icon { width: 28px; height: 28px; stroke-width: 2.4; }
 .extract-button:disabled { background: var(--color-surface-alt); color: var(--color-text-disabled); }
 .extract-button.is-busy:disabled { color: var(--color-status-processing); }
-.stage-form > .request-status { margin-top: 12px; }
-.request-status { display: flex; align-items: flex-start; gap: 8px; margin: 0; padding: 8px; border: 1px solid var(--color-border); border-radius: 8px; background: var(--color-surface-alt); color: var(--color-text-secondary); font-size: 12px; line-height: 1.45; overflow-wrap: anywhere; }
-.request-status__icon { display: inline-grid; width: 16px; height: 16px; flex: 0 0 16px; place-items: center; border-radius: 9999px; font-size: 11px; font-weight: 600; }
-.request-status--info { border-color: var(--color-status-processing); color: var(--color-status-processing); }
-.request-status--success { border-color: var(--color-status-completed); color: var(--color-status-completed); }
-.request-status--danger { border-color: var(--color-status-failed); color: var(--color-status-failed); }
 .recent-jobs { display: grid; gap: 8px; padding: 8px; border: 1px solid var(--color-border); border-radius: 12px; background: var(--color-surface); box-shadow: var(--shadow-soft); }
 .recent-jobs__header { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
 .recent-jobs__header h2 { margin: 0; color: var(--color-text-primary); font-size: 16px; font-weight: 600; }

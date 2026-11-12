@@ -36,7 +36,7 @@ export function createDownloadJobStorageAdapter(
           [RECENT_DOWNLOAD_JOBS_STORAGE_KEY, LATEST_DOWNLOAD_JOB_STORAGE_KEY],
           (items) => {
             if (chromeApi.runtime.lastError) {
-              reject(new Error('Could not load recent download jobs.'));
+              reject(new Error('최근 요청을 불러오지 못했어요.'));
               return;
             }
 
@@ -62,7 +62,7 @@ export function createDownloadJobStorageAdapter(
           { [RECENT_DOWNLOAD_JOBS_STORAGE_KEY]: [...jobs] },
           () => {
             if (chromeApi.runtime.lastError) {
-              reject(new Error('Could not save recent download jobs.'));
+              reject(new Error('최근 요청을 저장하지 못했어요.'));
               return;
             }
 
@@ -114,7 +114,7 @@ export function createDownloadJobStorageAdapter(
       return new Promise((resolve, reject) => {
         chromeApi.storage.local.get([LATEST_DOWNLOAD_JOB_STORAGE_KEY], (items) => {
           if (chromeApi.runtime.lastError) {
-            reject(new Error('Could not load the latest download job.'));
+            reject(new Error('마지막 요청을 불러오지 못했어요.'));
             return;
           }
 
@@ -129,7 +129,7 @@ export function createDownloadJobStorageAdapter(
       return new Promise((resolve, reject) => {
         chromeApi.storage.local.set({ [LATEST_DOWNLOAD_JOB_STORAGE_KEY]: job }, () => {
           if (chromeApi.runtime.lastError) {
-            reject(new Error('Could not save the latest download job.'));
+            reject(new Error('마지막 요청을 저장하지 못했어요.'));
             return;
           }
 

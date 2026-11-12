@@ -26,10 +26,18 @@ export type MyTubeExtractClient = {
   getDownloadJob(apiBaseUrl: string, jobId: string): Promise<DownloadJob>;
 };
 
+/** 서버에 닿지 못한 오류. 네트워크 실패와 health check 실패를 묶어 서버 연결 문제로 구분한다. */
+export class ServerUnreachableError extends Error {
+  constructor() {
+    super('서버에 연결할 수 없어요.');
+    this.name = 'ServerUnreachableError';
+  }
+}
+
 /** 다운로드 job 요청 HTTP 오류. 호출자가 상태 코드와 서버 안내 메시지로 원인을 구분할 수 있게 한다. */
 export class DownloadJobRequestError extends Error {
   constructor(responseStatus: number, responseMessage: string | undefined) {
-    super(responseMessage || 'Download job request failed.');
+    super(responseMessage || '서버가 요청을 처리하지 못했어요.');
     this.name = 'DownloadJobRequestError';
     this.responseStatus = responseStatus;
     this.responseMessage = responseMessage;
@@ -55,7 +63,6 @@ export function createMyTubeExtractClient(
   async function requestDownloadJob(
     url: string,
     init: RequestInit | undefined,
-    networkErrorMessage: string,
   ): Promise<RawDownloadJobResponse> {
     /** job 요청 응답. */
     let response: Response;
@@ -63,7 +70,7 @@ export function createMyTubeExtractClient(
     try {
       response = await fetchImplementation(url, init);
     } catch {
-      throw new Error(networkErrorMessage);
+      throw new ServerUnreachableError();
     }
 
     if (!response.ok) {
@@ -84,18 +91,18 @@ export function createMyTubeExtractClient(
       try {
         response = await fetchImplementation(buildHealthUrl(apiBaseUrl));
       } catch {
-        throw new Error('Server is unavailable.');
+        throw new ServerUnreachableError();
       }
 
       if (!response.ok) {
-        throw new Error('Server is unavailable.');
+        throw new ServerUnreachableError();
       }
 
       /** API 서버 health payload. */
       const payload = (await response.json()) as { ok?: boolean };
 
       if (payload?.ok !== true) {
-        throw new Error('Server health check failed.');
+        throw new ServerUnreachableError();
       }
     },
 
@@ -116,7 +123,6 @@ export function createMyTubeExtractClient(
           headers: { 'Content-Type': 'application/json' },
           method: 'POST',
         },
-        'Could not reach the server to create the download job.',
       );
 
       return toDownloadJob(raw, apiBaseUrl);
@@ -129,7 +135,6 @@ export function createMyTubeExtractClient(
       const raw = await requestDownloadJob(
         buildDownloadJobUrl(normalizedApiBaseUrl, jobId),
         undefined,
-        'Could not reach the server to check the download job.',
       );
 
       return toDownloadJob(raw, normalizedApiBaseUrl);

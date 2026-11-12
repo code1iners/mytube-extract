@@ -28,7 +28,7 @@ describe('Chrome downloads adapter', () => {
 
     await expect(
       adapter.startDownload('https://api.example/audio'),
-    ).rejects.toThrow('Could not start the download.');
+    ).rejects.toThrow('다운로드를 시작하지 못했어요.');
   });
 
   it('rejects when chrome does not return a download ID', async () => {
@@ -39,7 +39,7 @@ describe('Chrome downloads adapter', () => {
 
     await expect(
       adapter.startDownload('https://api.example/audio'),
-    ).rejects.toThrow('Could not start the download.');
+    ).rejects.toThrow('다운로드를 시작하지 못했어요.');
   });
 
   it('passes a suggested filename through to chrome.downloads.download', async () => {
