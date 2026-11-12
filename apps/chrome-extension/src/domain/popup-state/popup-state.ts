@@ -136,6 +136,9 @@ export function isStagePhaseProblem(phase: StagePhase): boolean {
   return phase === 'failed' || phase === 'unreachable';
 }
 
+/** Popup 안의 화면. 라우트가 아니라 Popup 내부 상태이고, Popup을 다시 열면 항상 `main`(무대)에서 시작한다. */
+export type PopupView = 'main' | 'recent' | 'settings';
+
 /** 활성 탭에서 읽은 YouTube 영상. */
 export type TabVideo = {
   /** YouTube 영상 ID. */
