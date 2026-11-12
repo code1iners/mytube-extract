@@ -1,4 +1,8 @@
-import { type DownloadJob } from '../../domain/download-job/download-job';
+import {
+  type DownloadJob,
+  type StoredDownloadJob,
+  restoreStoredDownloadJob,
+} from '../../domain/download-job/download-job';
 
 /** 진행 중(대기/처리 중) download job을 저장하는 chrome.storage.local key. */
 export const ACTIVE_DOWNLOAD_JOBS_STORAGE_KEY = 'activeDownloadJobs';
@@ -93,7 +97,11 @@ export function createActiveDownloadJobsStorageAdapter(
 
   return {
     async loadActiveJobs() {
-      return Object.values(await loadRecordsByJobId());
+      return Object.values(await loadRecordsByJobId()).map((record) => ({
+        ...record,
+        // 업데이트 전부터 추적 중이던 job도 원본 주소·제목을 null로 채워 현재 job 모양으로 돌려준다.
+        job: restoreStoredDownloadJob(record.job as StoredDownloadJob),
+      }));
     },
     saveActiveJob(record) {
       return enqueueStorageMutation(async (recordsByJobId) => ({

@@ -19,7 +19,9 @@ function createJob(overrides: Partial<DownloadJob> = {}): DownloadJob {
     progress: 0,
     quality: '192',
     retentionDays: 7,
+    sourceUrl: 'https://www.youtube.com/watch?v=abc123_DEF0',
     status: 'queued',
+    title: null,
     type: 'audio',
     ...overrides,
   };

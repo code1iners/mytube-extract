@@ -18,7 +18,9 @@ function createJob(overrides: Partial<DownloadJob> = {}): DownloadJob {
     progress: 50,
     quality: '192',
     retentionDays: 7,
+    sourceUrl: 'https://www.youtube.com/watch?v=abc123_DEF0',
     status: 'processing',
+    title: null,
     type: 'audio',
     ...overrides,
   };
@@ -47,6 +49,23 @@ describe('active download jobs storage adapter', () => {
       [ACTIVE_DOWNLOAD_JOBS_STORAGE_KEY],
       expect.any(Function),
     );
+  });
+
+  it('restores a tracked job saved without source URL and title as empty values', async () => {
+    /** 원본 주소·제목 필드가 생기기 전 버전이 저장한 job. */
+    const { sourceUrl: _sourceUrl, title: _title, ...legacyJob } = createJob();
+    /** 테스트용 Chrome API. */
+    const chromeApi = createChromeApi({
+      storedItems: {
+        [ACTIVE_DOWNLOAD_JOBS_STORAGE_KEY]: { 'job-1': { ...createRecord(), job: legacyJob } },
+      },
+    });
+    /** active jobs storage adapter. */
+    const adapter = createActiveDownloadJobsStorageAdapter(chromeApi);
+
+    await expect(adapter.loadActiveJobs()).resolves.toEqual([
+      createRecord({ job: createJob({ sourceUrl: null, title: null }) }),
+    ]);
   });
 
   it('saves a record under its jobId and loads it back', async () => {
