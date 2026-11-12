@@ -1041,8 +1041,8 @@ describe('popup settings and thumbnail button permission', () => {
   it.each([
     ['Chrome keeps the permission', vi.fn().mockResolvedValue(false)],
     ['Chrome fails to remove the permission', vi.fn().mockRejectedValue(new Error('썸네일 버튼을 끄지 못했어요.'))],
-  ])('shows an error row when %s on turning off', async (_case, disable) => {
-    /** Popup download model. */
+  ])('keeps the switch on with a reason line when %s on turning off', async (_case, disable) => {
+    /** Popup download model. 권한이 그대로 남아 있다. */
     const model = createPopupDownloadModel(
       createDependencies({
         youtubeOverlay: {
@@ -1055,11 +1055,31 @@ describe('popup settings and thumbnail button permission', () => {
     await model.initialize();
     await model.deactivateYoutubeOverlay();
 
+    // 권한이 남아 자동 주입이 계속되므로 켜짐(초록 점)으로 두고, 끄지 못한 이유만 알린다.
     expect(model.getSnapshot().youtubeOverlay).toMatchObject({
-      indicator: 'problem',
-      message: '썸네일 버튼을 끄지 못했어요. 다시 시도해 보세요.',
-      status: 'error',
+      indicator: 'on',
+      status: 'enabled',
+      turnOffError: '썸네일 버튼을 끄지 못했어요. 다시 시도해 보세요.',
     });
+  });
+
+  it('shows off when Chrome reports a removal failure but the permission is actually gone', async () => {
+    /** 권한 상태 확인. 처음엔 켜져 있고, 해제 실패 응답 뒤 다시 읽으면 꺼져 있다. */
+    const isEnabled = vi.fn().mockResolvedValueOnce(true).mockResolvedValue(false);
+    /** Popup download model. */
+    const model = createPopupDownloadModel(
+      createDependencies({
+        youtubeOverlay: {
+          disable: vi.fn().mockRejectedValue(new Error('썸네일 버튼을 끄지 못했어요.')),
+          isEnabled,
+        },
+      }),
+    );
+
+    await model.initialize();
+    await model.deactivateYoutubeOverlay();
+
+    expect(model.getSnapshot().youtubeOverlay).toMatchObject({ indicator: 'off', status: 'disabled', turnOffError: null });
   });
 
   it('tells the completed file retention days from the latest job, defaulting to 7 days', async () => {

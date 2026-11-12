@@ -105,7 +105,7 @@ export default defineBackground(() => {
 
   chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     if (isYoutubeOverlayEnableRequest(message)) {
-      void youtubeOverlayInjector.activateActiveYoutubeTabs()
+      void youtubeOverlayInjector.injectActiveYoutubeTabsOrThrow()
         .then<YoutubeOverlayEnableResponse>(() => ({ ok: true }))
         .catch((error: unknown) => ({
           message: getErrorMessage(

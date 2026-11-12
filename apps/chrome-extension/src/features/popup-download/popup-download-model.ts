@@ -84,6 +84,8 @@ export type YoutubeOverlaySnapshot = {
   indicator: YoutubeOverlayIndicator;
   /** 권한 상태 문장. 거부·오류면 설정 화면의 이유 한 줄로 보인다. */
   message: string;
+  /** 스위치를 끄지 못한 이유. 권한이 남아 있어 켜짐 상태 그대로 이 한 줄만 알린다. 다음 권한 변경 때 비운다. */
+  turnOffError: string | null;
 };
 
 /** 권한 상태별 기본 문장. */
@@ -111,6 +113,7 @@ function createYoutubeOverlaySnapshot(
     indicator: status === 'enabled' ? 'on' : status === 'denied' || status === 'error' ? 'problem' : 'off',
     message,
     status,
+    turnOffError: null,
   };
 }
 
@@ -662,15 +665,31 @@ export function createPopupDownloadModel(
 
       try {
         /** Chrome이 권한을 실제로 해제했는지 여부. */
-        const removed = await dependencies.youtubeOverlay.disable();
+        let removed = false;
+
+        try {
+          removed = await dependencies.youtubeOverlay.disable();
+        } catch {
+          removed = false;
+        }
+
+        if (removed) {
+          refresh({ youtubeOverlay: createYoutubeOverlaySnapshot('disabled') });
+          return;
+        }
+
+        // 해제 실패를 '오류'로 보이면 권한이 남아 자동 주입이 계속되는데도 켜기 요청만 남는다.
+        // 실제 권한 상태를 다시 읽어 그대로 보여 주고, 남아 있으면 끄지 못한 이유만 알린다.
+        /** 해제 실패 뒤의 실제 권한 상태. */
+        const stillEnabled = await dependencies.youtubeOverlay.isEnabled();
 
         refresh({
-          youtubeOverlay: removed
-            ? createYoutubeOverlaySnapshot('disabled')
-            : createYoutubeOverlaySnapshot('error', YOUTUBE_OVERLAY_DISABLE_FAILED_MESSAGE),
+          youtubeOverlay: stillEnabled
+            ? { ...createYoutubeOverlaySnapshot('enabled'), turnOffError: YOUTUBE_OVERLAY_DISABLE_FAILED_MESSAGE }
+            : createYoutubeOverlaySnapshot('disabled'),
         });
       } catch {
-        refresh({ youtubeOverlay: createYoutubeOverlaySnapshot('error', YOUTUBE_OVERLAY_DISABLE_FAILED_MESSAGE) });
+        refresh({ youtubeOverlay: createYoutubeOverlaySnapshot('error') });
       } finally {
         isChangingYoutubeOverlay = false;
       }

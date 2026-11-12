@@ -59,6 +59,9 @@ const OVERLAY_BUTTON_LABELS: Record<YoutubeOverlayStatus, string> = {
 /** 화면을 바꾼 뒤 무대로 돌아올 때 포커스를 돌려줄 버튼. */
 type ReturnFocusTarget = 'more' | 'overlay' | 'settings';
 
+/** 썸네일 버튼 행 이름 element ID. 스위치가 aria-labelledby로 가리킨다. */
+const OVERLAY_SWITCH_LABEL_ID = 'overlay-switch-label';
+
 /** 잘못된 주소의 이유 한 줄 element ID. 붙여넣기 칸이 aria-describedby로 가리킨다. */
 const SOURCE_URL_REASON_ID = 'source-url-reason';
 
@@ -495,12 +498,12 @@ function SettingsPanel(props: { /** 썸네일 버튼 권한 상태. */ youtubeOv
   </div>;
 }
 
-/** 썸네일 버튼 행. 꺼짐·켜짐은 스위치, 권한 요청 중은 회전 아이콘, 거부·오류는 crimson 행과 이유 한 줄·권한 다시 요청 버튼이다. */
+/** 썸네일 버튼 행. 꺼짐·켜짐은 스위치, 권한 요청 중은 회전 아이콘, 거부·오류는 crimson 행과 이유 한 줄·권한 다시 요청 버튼이다. 끄지 못했으면 켜진 스위치 아래에 이유 한 줄을 둔다. */
 function OverlayPermissionRow(props: { /** 썸네일 버튼 권한 상태. */ youtubeOverlay: YoutubeOverlaySnapshot; /** 스위치·권한 다시 요청. */ onToggle: () => void }) {
   /** 권한 상태. */
   const status = props.youtubeOverlay.status;
 
-  if (status === 'denied' || status === 'error') {
+  if (props.youtubeOverlay.indicator === 'problem') {
     return <>
       <div className="settings-row is-problem" data-overlay-status={status}>
         <PopupIcon className="settings-row__warn" name="grid" />
@@ -511,13 +514,16 @@ function OverlayPermissionRow(props: { /** 썸네일 버튼 권한 상태. */ yo
     </>;
   }
 
-  return <div className="settings-row" data-overlay-status={status}>
-    <PopupIcon name="grid" />
-    <span className="settings-row__name" id="overlay-switch-label">썸네일 버튼</span>
-    {status === 'requesting'
-      ? <span aria-label="권한 요청 중" className="settings-row__wait" role="img"><PopupIcon className="is-spinning" name="loader" /></span>
-      : <button aria-checked={status === 'enabled'} aria-labelledby="overlay-switch-label" className="switch" disabled={status === 'checking'} role="switch" type="button" onClick={props.onToggle} />}
-  </div>;
+  return <>
+    <div className="settings-row" data-overlay-status={status}>
+      <PopupIcon name="grid" />
+      <span className="settings-row__name" id={OVERLAY_SWITCH_LABEL_ID}>썸네일 버튼</span>
+      {status === 'requesting'
+        ? <span aria-label="권한 요청 중" className="settings-row__wait" role="img"><PopupIcon className="is-spinning" name="loader" /></span>
+        : <button aria-checked={status === 'enabled'} aria-labelledby={OVERLAY_SWITCH_LABEL_ID} className="switch" disabled={status === 'checking'} role="switch" type="button" onClick={props.onToggle} />}
+    </div>
+    {props.youtubeOverlay.turnOffError ? <p className="stage-problem settings-problem" role="alert"><PopupIcon name="alert" /><span>{props.youtubeOverlay.turnOffError}</span></p> : null}
+  </>;
 }
 
 /** 무대 아래 최근 요청 줄. 최신 썸네일 몇 개와 더보기 버튼만 두고, 어느 쪽을 눌러도 recent 화면을 연다. */

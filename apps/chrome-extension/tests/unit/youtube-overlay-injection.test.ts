@@ -56,7 +56,7 @@ describe('YouTube overlay injection', () => {
     /** 테스트 환경. */
     const { injectScript, injector } = createInjectionEnvironment({ permissionGranted: false });
 
-    await expect(injector.activateActiveYoutubeTabs()).rejects.toThrow('YouTube 권한이 허용되지 않았어요.');
+    await expect(injector.injectActiveYoutubeTabsOrThrow()).rejects.toThrow('YouTube 권한이 허용되지 않았어요.');
     expect(injectScript).not.toHaveBeenCalled();
   });
 });

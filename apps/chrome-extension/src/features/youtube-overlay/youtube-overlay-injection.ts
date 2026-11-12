@@ -4,7 +4,7 @@ import { isSupportedYoutubePageUrl } from './youtube-page';
 /** Background가 YouTube 탭에 Overlay를 주입할지 판단하고 주입하는 창구. */
 export type YoutubeOverlayInjector = {
   /** Popup의 켜기 요청 직후 현재 활성 YouTube 탭에 주입한다. 권한이 없으면 실패한다. */
-  activateActiveYoutubeTabs(): Promise<void>;
+  injectActiveYoutubeTabsOrThrow(): Promise<void>;
   /** service worker 시작 때 권한이 있으면 현재 활성 YouTube 탭에 주입한다. */
   injectActiveYoutubeTabs(): Promise<void>;
   /** 탭 이동·새로고침 때 권한이 있으면 그 탭에 주입한다. 권한을 해제했다면 주입하지 않는다. */
@@ -41,7 +41,7 @@ export function createYoutubeOverlayInjector(
   }
 
   return {
-    async activateActiveYoutubeTabs() {
+    async injectActiveYoutubeTabsOrThrow() {
       if (!(await dependencies.permission.isEnabled())) {
         throw new Error('YouTube 권한이 허용되지 않았어요.');
       }
