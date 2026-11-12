@@ -28,6 +28,11 @@ const realApiBaseUrl =
   'https://mytube-extract-api.codeliners.cc';
 /** Built popup에 주입되는 MyTube Extract API origin. */
 const expectedApiOrigin = new URL(realApiBaseUrl).origin;
+/** 가짜 YouTube 썸네일 응답으로 쓸 PNG. 스모크가 실제 YouTube 이미지 서버를 부르지 않게 한다. */
+const fakeThumbnailPng = fs.readFileSync(path.resolve('public/icon-128.png'));
+/** 지정하면 상태별 Popup 스크린샷을 라이트·다크로 이 폴더에 남긴다. */
+const screenshotDirectory =
+  process.env.MYTUBE_EXTRACT_POPUP_SCREENSHOT_DIR ?? process.env.MEDIA_NEST_POPUP_SCREENSHOT_DIR ?? '';
 
 if (!['production', 'dev'].includes(smokeMode)) {
   throw new Error(`Unsupported popup smoke mode: ${smokeMode}`);
@@ -64,12 +69,16 @@ const staticServer = await createStaticServer(extensionOutputRoot);
   try {
     await verifyLoadUnpackedPopup(extensionOutputRoot);
     console.error('[popup-smoke] load unpacked popup ok');
-    await verifyYoutubeOverlayActivationFlow(staticServer.origin);
-    console.error('[popup-smoke] YouTube overlay activation flow ok');
-    await verifyMissingSourceUrlFlow(staticServer.origin);
-    console.error('[popup-smoke] missing source URL flow ok');
-    await verifyCurrentTabImportFlow(staticServer.origin);
-    console.error('[popup-smoke] current tab import flow ok');
+    await verifyStageFromSupportedTabFlow(staticServer.origin);
+    console.error('[popup-smoke] stage from supported tab flow ok');
+    await verifyPasteFieldFlow(staticServer.origin);
+    console.error('[popup-smoke] paste field and invalid address flow ok');
+
+    if (screenshotDirectory) {
+      await captureStageScreenshots(staticServer.origin, screenshotDirectory);
+      console.error(`[popup-smoke] screenshots saved to ${screenshotDirectory}`);
+    }
+
     /** 서버 실패 flow에서 수집한 fake API 요청. */
     const unavailableFakeApiRequests = await verifyServerUnavailableFlow(staticServer.origin);
   console.error('[popup-smoke] server unavailable flow ok');
@@ -143,8 +152,9 @@ async function verifyLoadUnpackedPopup(outputRoot) {
       timeout: 10000,
       waitUntil: 'domcontentloaded',
     });
-    await popupPage.getByRole('heading', { name: 'MyTube Extract' }).waitFor({ timeout: 10000 });
-    await popupPage.getByText('영상 추출 도구').waitFor({ timeout: 10000 });
+    await popupPage.getByRole('img', { name: 'MyTube Extract' }).waitFor({ timeout: 10000 });
+    // 확장 페이지 자체가 활성 탭이므로 YouTube 영상이 아니고, 무대 자리에 붙여넣기 칸이 나온다.
+    await popupPage.getByLabel('YouTube 주소').waitFor({ timeout: 10000 });
   } finally {
     await closeBrowserContext(context);
   }
@@ -171,94 +181,162 @@ function launchExtensionContext(userDataDir, outputRoot) {
   });
 }
 
-/** Built popup에서 YouTube Overlay 최초 활성화 흐름을 확인한다. */
-async function verifyYoutubeOverlayActivationFlow(origin) {
+/** 지원 YouTube 탭에서 열면 그 영상이 무대에 바로 올라오는지 확인한다. */
+async function verifyStageFromSupportedTabFlow(origin) {
   /** Browser instance. */
   const browser = await chromium.launch();
-  /** Browser page. */
-  const page = await browser.newPage();
 
   try {
+    /** 썸네일을 불러오는 page. */
+    const page = await browser.newPage({ viewport: { width: 360, height: 600 } });
+
+    await routeYoutubeThumbnails(page, { available: true });
     await installFakeChromeApi(page, {
-      storedOptions: {},
-      youtubePermissionGranted: false,
-    });
-    await page.goto(`${origin}/popup.html`, { timeout: 10000, waitUntil: 'domcontentloaded' });
-
-    await page.getByRole('button', { name: 'YouTube 썸네일 버튼 활성화' }).click();
-    await expectStatusText(page, 'YouTube 썸네일 버튼이 활성화되어 있습니다.');
-    await page.getByText('추출할 URL을 입력하세요.').waitFor({ timeout: 10000 });
-  } finally {
-    await browser.close();
-  }
-}
-
-/** Built popup에서 source URL 미입력 상태를 확인한다. */
-async function verifyMissingSourceUrlFlow(origin) {
-  /** Browser instance. */
-  const browser = await chromium.launch();
-  /** Browser page. */
-  const page = await browser.newPage();
-
-  try {
-    await installFakeChromeApi(page, {
-      storedOptions: {},
-    });
-    await page.goto(`${origin}/popup.html`, { timeout: 10000, waitUntil: 'domcontentloaded' });
-
-    await expectDownloadButtonDisabled(page, true);
-    await expectStatusText(page, '추출할 URL을 입력하세요.');
-
-    await page.getByLabel('추출 URL').fill('not-a-url');
-    await expectStatusText(page, '지원하는 YouTube URL을 입력하세요.');
-
-    /** 잘못된 URL 입력의 접근성 오류 상태. */
-    const invalidState = await page.getByLabel('추출 URL').getAttribute('aria-invalid');
-
-    if (invalidState !== 'true') {
-      throw new Error(`Expected invalid URL input state, got ${invalidState}`);
-    }
-  } finally {
-    await browser.close();
-  }
-}
-
-/** Built popup에서 현재 탭 URL 가져오기 흐름을 확인한다. */
-async function verifyCurrentTabImportFlow(origin) {
-  /** Browser instance. */
-  const browser = await chromium.launch();
-  /** Browser page. */
-  const page = await browser.newPage();
-
-  try {
-    await installFakeChromeApi(page, {
+      currentTabTitle: '(2) 브라우저 스모크 영상 - YouTube',
       currentTabUrl: 'https://youtu.be/abc123_DEF0',
       storedOptions: {},
     });
     await page.goto(`${origin}/popup.html`, { timeout: 10000, waitUntil: 'domcontentloaded' });
 
-    await page.getByRole('button', { name: '현재 탭 사용' }).click();
+    await page.locator('figure.stage[data-thumbnail="image"]').waitFor({ timeout: 10000 });
+    await page.getByText('브라우저 스모크 영상', { exact: true }).waitFor({ timeout: 10000 });
     await expectDownloadButtonDisabled(page, false);
+    await expectNoHorizontalOverflow(page);
 
-    /** 현재 탭에서 가져온 source URL 입력값. */
-    const sourceUrl = await page.getByLabel('추출 URL').inputValue();
+    /** 무대 썸네일이 실제로 그려졌는지 여부. */
+    const thumbnailLoaded = await page
+      .locator('.stage__image')
+      .evaluate((image) => image.complete && image.naturalWidth > 0);
 
-    if (sourceUrl !== 'https://www.youtube.com/watch?v=abc123_DEF0') {
-      throw new Error(`Unexpected imported source URL: ${sourceUrl}`);
+    if (!thumbnailLoaded) {
+      throw new Error('Expected the stage thumbnail image to load.');
     }
 
-    await page.evaluate(() => {
-      globalThis.__myTubeExtractCurrentTabUrl = 'https://example.com/watch?v=abc123_DEF0';
+    if ((await page.getByLabel('YouTube 주소').count()) !== 0) {
+      throw new Error('Expected no paste field while a tab video is on the stage.');
+    }
+
+    // 무대에 영상이 있어도 입력칸 밖에서 붙여넣으면 원본을 바꾼다.
+    await dispatchDocumentPaste(page, 'https://vimeo.com/76979871');
+    await page.getByLabel('YouTube 주소').waitFor({ timeout: 10000 });
+    await expectDownloadButtonDisabled(page, true);
+
+    await page.close();
+
+    /** 썸네일 로드에 실패하는 page. */
+    const fallbackPage = await browser.newPage({ viewport: { width: 360, height: 600 } });
+
+    await routeYoutubeThumbnails(fallbackPage, { available: false });
+    await installFakeChromeApi(fallbackPage, {
+      currentTabTitle: 'YouTube',
+      currentTabUrl: 'https://www.youtube.com/shorts/abc123_DEF0',
+      storedOptions: {},
     });
-    await page.getByRole('button', { name: '현재 탭 사용' }).click();
-    await expectStatusText(page, '현재 탭에서 지원하는 YouTube URL을 찾을 수 없습니다.');
+    await fallbackPage.goto(`${origin}/popup.html`, { timeout: 10000, waitUntil: 'domcontentloaded' });
+
+    await fallbackPage.locator('figure.stage[data-thumbnail="fallback"]').waitFor({ timeout: 10000 });
+    // 탭 제목에서 영상 제목을 얻지 못하면 영상 ID를 보여준다.
+    await fallbackPage.getByText('abc123_DEF0', { exact: true }).waitFor({ timeout: 10000 });
+    await expectDownloadButtonDisabled(fallbackPage, false);
+  } finally {
+    await browser.close();
+  }
+}
+
+/** YouTube가 아닌 탭에서 붙여넣기 칸·잘못된 주소 칸·지우기·유효한 주소 입력을 확인한다. */
+async function verifyPasteFieldFlow(origin) {
+  /** Browser instance. */
+  const browser = await chromium.launch();
+  /** Browser page. */
+  const page = await browser.newPage({ viewport: { width: 360, height: 600 } });
+
+  try {
+    await routeYoutubeThumbnails(page, { available: true });
+    await installFakeChromeApi(page, {
+      currentTabTitle: '예시 페이지',
+      currentTabUrl: 'https://example.com/',
+      storedOptions: {},
+    });
+    await page.goto(`${origin}/popup.html`, { timeout: 10000, waitUntil: 'domcontentloaded' });
+
+    /** 붙여넣기 칸의 주소 입력. */
+    const sourceInput = page.getByLabel('YouTube 주소');
+
+    await sourceInput.waitFor({ timeout: 10000 });
+    await expectDownloadButtonDisabled(page, true);
+
+    await sourceInput.fill('https://vimeo.com/76979871');
+    await expectStatusText(page, '지원하는 YouTube URL을 입력하세요.');
+    await expectDownloadButtonDisabled(page, true);
+    await expectNoHorizontalOverflow(page);
+
+    if ((await sourceInput.getAttribute('aria-invalid')) !== 'true') {
+      throw new Error('Expected the paste field to be marked invalid.');
+    }
+
+    await page.getByRole('button', { name: '주소 지우기' }).click();
+
+    if ((await sourceInput.inputValue()) !== '' || (await sourceInput.getAttribute('aria-invalid')) !== null) {
+      throw new Error('Expected the clear button to empty the paste field.');
+    }
+
+    /** 지우기 뒤 포커스가 붙여넣기 칸에 있는지 여부. */
+    const sourceInputFocused = await sourceInput.evaluate((input) => document.activeElement === input);
+
+    if (!sourceInputFocused) {
+      throw new Error('Expected focus to return to the paste field after clearing.');
+    }
+
+    // 키보드 타이핑으로도 원본을 지정할 수 있어야 한다.
+    await page.keyboard.type('https://youtu.be/xyz789_GHI1');
+    await page.locator('figure.stage').waitFor({ timeout: 10000 });
+    await page.getByText('xyz789_GHI1', { exact: true }).waitFor({ timeout: 10000 });
     await expectDownloadButtonDisabled(page, false);
+  } finally {
+    await browser.close();
+  }
+}
 
-    /** 유효한 기존 URL은 현재 탭 가져오기 실패로 오류 입력이 되지 않는다. */
-    const invalidState = await page.getByLabel('추출 URL').getAttribute('aria-invalid');
+/** 상태별 Popup을 라이트·다크 360px 폭으로 캡처한다. */
+async function captureStageScreenshots(origin, outputDirectory) {
+  fs.mkdirSync(outputDirectory, { recursive: true });
 
-    if (invalidState !== null) {
-      throw new Error(`Expected valid source URL input state, got ${invalidState}`);
+  /** Browser instance. */
+  const browser = await chromium.launch();
+
+  try {
+    for (const theme of ['light', 'dark']) {
+      for (const state of ['stage', 'paste', 'invalid']) {
+        /** 캡처할 page. */
+        const page = await browser.newPage({ viewport: { width: 360, height: 600 } });
+
+        await routeYoutubeThumbnails(page, { available: true });
+        await page.addInitScript((selectedTheme) => {
+          window.localStorage.setItem('mytube-extract-popup-theme-preference', selectedTheme);
+        }, theme);
+        await installFakeChromeApi(page, {
+          currentTabTitle: '라이브 세트 풀버전 · 서울 공연에서 아주 길게 붙인 제목 - YouTube',
+          currentTabUrl: state === 'stage' ? 'https://www.youtube.com/watch?v=abc123_DEF0' : 'https://example.com/',
+          storedOptions: { mode: 'video', resolution: '720' },
+        });
+        await page.goto(`${origin}/popup.html`, { timeout: 10000, waitUntil: 'domcontentloaded' });
+
+        if (state === 'stage') {
+          await page.locator('figure.stage[data-thumbnail="image"]').waitFor({ timeout: 10000 });
+        } else {
+          await page.getByLabel('YouTube 주소').waitFor({ timeout: 10000 });
+        }
+
+        if (state === 'invalid') {
+          await page.getByLabel('YouTube 주소').fill('https://vimeo.com/76979871/very/long/path/that/keeps/going');
+          await expectStatusText(page, '지원하는 YouTube URL을 입력하세요.');
+          await page.locator('body').click({ position: { x: 1, y: 1 } });
+        }
+
+        await expectNoHorizontalOverflow(page);
+        await page.screenshot({ fullPage: true, path: path.join(outputDirectory, `popup-${state}-${theme}.png`) });
+        await page.close();
+      }
     }
   } finally {
     await browser.close();
@@ -279,6 +357,7 @@ async function verifyServerUnavailableFlow(origin) {
       requests,
       healthOk: false,
     });
+    await routeYoutubeThumbnails(page, { available: true });
     await installFakeChromeApi(page, {
       storedOptions: {
         mode: 'audio',
@@ -286,10 +365,12 @@ async function verifyServerUnavailableFlow(origin) {
     });
     await page.goto(`${origin}/popup.html`, { timeout: 10000, waitUntil: 'domcontentloaded' });
 
-    await page.getByLabel('추출 URL').fill('https://www.youtube.com/watch?v=abc123_DEF0');
+    await page.locator('figure.stage').waitFor({ timeout: 10000 });
     await page.getByRole('button', { name: '추출 시작' }).click();
     await expectStatusText(page, 'Server is unavailable.');
-    await page.getByLabel('추출 URL').waitFor({ timeout: 10000 });
+    // 같은 자리의 추출 버튼이 같은 조건 재시도로 바뀐다.
+    await page.getByRole('button', { name: '다시 시도' }).waitFor({ timeout: 10000 });
+    await page.locator('figure.stage').waitFor({ timeout: 10000 });
 
     /** Fake Chrome downloads API가 요청한 URL. */
     const downloadUrl = await page.evaluate(() => globalThis.__myTubeExtractDownloadUrl);
@@ -312,27 +393,43 @@ async function verifyDownloadFlow(origin) {
   const page = await browser.newPage({ viewport: { width: 360, height: 600 } });
   /** Fake API 요청 목록. */
   const requests = [];
+  /** Fake API가 받은 요청 본문 목록. */
+  const requestBodies = [];
 
   try {
     await routeMyTubeExtractApi(page, {
+      requestBodies,
       requests,
       healthOk: true,
     });
+    await routeYoutubeThumbnails(page, { available: true });
     await installFakeChromeApi(page, {
+      currentTabTitle: '브라우저 스모크 영상 - YouTube',
       storedOptions: {
         mode: 'audio',
       },
     });
     await page.goto(`${origin}/popup.html`, { timeout: 10000, waitUntil: 'domcontentloaded' });
 
-    await page.getByLabel('추출 URL').fill('https://www.youtube.com/watch?v=abc123_DEF0');
-    await page.getByLabel('파일명').fill('browser smoke');
-    await page.getByLabel('최대 비트레이트').selectOption('192');
+    await page.locator('figure.stage').waitFor({ timeout: 10000 });
+    await page.getByRole('radio', { name: '192 kbps' }).waitFor({ timeout: 10000 });
+    // 형식 아이콘을 바꾸면 품질 막대가 해상도 값으로 바뀐다.
+    await page.getByRole('radio', { name: '비디오 MP4' }).check();
+    await page.getByRole('radio', { name: '1080p' }).check();
+    await expectRadioChecked(page, '비디오 MP4');
+    await expectRadioChecked(page, '1080p');
+
+    /** 형식·품질 선택 뒤 저장된 옵션. */
+    const storedOptions = await page.evaluate(() => globalThis.__myTubeExtractStoredOptions);
+
+    if (storedOptions.mode !== 'video' || storedOptions.resolution !== '1080' || 'sourceUrl' in storedOptions) {
+      throw new Error(`Unexpected stored options: ${JSON.stringify(storedOptions)}`);
+    }
+
     await expectDownloadButtonDisabled(page, false);
     await expectDownloadButtonVisibleInViewport(page);
     await page.getByRole('button', { name: '추출 시작' }).click();
     await expectStatusText(page, '추출 요청을 시작했습니다.');
-    await page.getByLabel('추출 URL').waitFor({ timeout: 10000 });
     await page.getByRole('heading', { name: '최근 요청' }).waitFor({ timeout: 10000 });
 
     /** 완료된 job 목록 항목 수. */
@@ -351,8 +448,20 @@ async function verifyDownloadFlow(origin) {
       throw new Error(`Unexpected download URL: ${downloadUrl}`);
     }
 
-    if (downloadFilename !== 'browser smoke') {
+    // 파일명 편집이 없으면 로컬 파일명을 덮어쓰지 않고 서버 기본 이름을 쓴다.
+    if (downloadFilename !== null) {
       throw new Error(`Unexpected download filename: ${downloadFilename}`);
+    }
+
+    /** 가짜 API가 받은 job 생성 요청 본문. */
+    const createdJobBody = requestBodies.find((body) => body.path === '/downloads');
+
+    if (
+      createdJobBody?.body.type !== 'video' ||
+      createdJobBody.body.quality !== '1080' ||
+      createdJobBody.body.url !== 'https://www.youtube.com/watch?v=abc123_DEF0'
+    ) {
+      throw new Error(`Unexpected job create body: ${JSON.stringify(createdJobBody)}`);
     }
 
     return requests;
@@ -362,7 +471,7 @@ async function verifyDownloadFlow(origin) {
 }
 
 /** Production API 요청을 browser smoke 안에서 fake 응답으로 처리한다. */
-async function routeMyTubeExtractApi(page, { requests, healthOk }) {
+async function routeMyTubeExtractApi(page, { requestBodies = [], requests, healthOk }) {
   await page.route(`${expectedApiOrigin}/**`, async (route) => {
     /** 가로챈 production API 요청. */
     const request = route.request();
@@ -387,6 +496,8 @@ async function routeMyTubeExtractApi(page, { requests, healthOk }) {
     if (request.method() === 'POST' && requestUrl.pathname === '/downloads') {
       /** job 생성 요청 본문. */
       const body = request.postDataJSON();
+
+      requestBodies.push({ body, path: requestUrl.pathname });
 
       await route.fulfill({
         status: 201,
@@ -455,6 +566,7 @@ async function installFakeChromeApi(page, options) {
       chromeOptions.youtubePermissionGranted ?? false;
     globalThis.__myTubeExtractCurrentTabUrl =
       chromeOptions.currentTabUrl ?? 'https://www.youtube.com/watch?v=abc123_DEF0';
+    globalThis.__myTubeExtractCurrentTabTitle = chromeOptions.currentTabTitle ?? 'YouTube';
 
     /** storage 값을 쓰고 onChanged listener에게 알린다. */
     function setStorageItems(items) {
@@ -593,6 +705,7 @@ async function installFakeChromeApi(page, options) {
             {
               active: true,
               id: 1,
+              title: globalThis.__myTubeExtractCurrentTabTitle,
               url: globalThis.__myTubeExtractCurrentTabUrl,
             },
           ]);
@@ -609,6 +722,55 @@ async function installFakeChromeApi(page, options) {
       },
     };
   }, options);
+}
+
+/** YouTube 썸네일 요청을 가짜 이미지 또는 실패로 처리한다. */
+async function routeYoutubeThumbnails(page, { available }) {
+  await page.route('https://i.ytimg.com/**', async (route) => {
+    if (!available) {
+      await route.abort('failed');
+      return;
+    }
+
+    await route.fulfill({
+      body: fakeThumbnailPng,
+      headers: { 'Content-Type': 'image/png' },
+      status: 200,
+    });
+  });
+}
+
+/** 입력칸 밖(document)에서 글자를 붙여넣은 것처럼 paste event를 보낸다. */
+async function dispatchDocumentPaste(page, text) {
+  await page.evaluate((pastedText) => {
+    /** 붙여넣을 clipboard 내용. */
+    const clipboardData = new DataTransfer();
+
+    clipboardData.setData('text/plain', pastedText);
+    document.body.dispatchEvent(
+      new ClipboardEvent('paste', { bubbles: true, cancelable: true, clipboardData }),
+    );
+  }, text);
+}
+
+/** 이름이 같은 radio가 선택돼 있는지 확인한다. */
+async function expectRadioChecked(page, name) {
+  if (!(await page.getByRole('radio', { name }).isChecked())) {
+    throw new Error(`Expected radio "${name}" to be checked.`);
+  }
+}
+
+/** 360px 폭에서 가로로 넘치는 내용이 없는지 확인한다. */
+async function expectNoHorizontalOverflow(page) {
+  /** 문서 폭과 viewport 폭. */
+  const widths = await page.evaluate(() => ({
+    scrollWidth: document.documentElement.scrollWidth,
+    viewportWidth: window.innerWidth,
+  }));
+
+  if (widths.scrollWidth > widths.viewportWidth) {
+    throw new Error(`Expected no horizontal overflow, got ${JSON.stringify(widths)}`);
+  }
 }
 
 /** load unpacked extension ID를 Chrome profile에서 읽는다. */

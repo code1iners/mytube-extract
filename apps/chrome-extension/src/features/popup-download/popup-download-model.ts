@@ -19,6 +19,7 @@ import {
   mergeStoredDownloadOptions,
   normalizeApiBaseUrl,
   normalizeSourceUrl,
+  parseYoutubeVideoId,
 } from '../../domain/download-options/download-options';
 import {
   CHECKING_SERVER_STATUS,
@@ -26,8 +27,11 @@ import {
   INVALID_SOURCE_URL_STATUS,
   MISSING_SOURCE_URL_STATUS,
   type PopupStatus,
+  type StageSource,
+  type TabVideo,
   createDownloadFailedStatus,
-  createInvalidSourceUrlStatus,
+  deriveStageSource,
+  parseYoutubeTabTitle,
   createJobProcessingStatus,
   createJobQueuedStatus,
   createReadyStatus,
@@ -70,6 +74,8 @@ export type PopupDownloadSnapshot = {
   options: DownloadOptions;
   /** 현재 상태. */
   status: PopupStatus;
+  /** 무대에 올릴 원본. 원본 URL과 활성 탭 영상에서 도출한다. */
+  stageSource: StageSource;
   /** YouTube 썸네일 Overlay 상태. */
   youtubeOverlay: YoutubeOverlaySnapshot;
 };
@@ -82,8 +88,6 @@ export type PopupDownloadModel = {
   initialize(): Promise<void>;
   /** YouTube 썸네일 Overlay를 활성화한다. */
   activateYoutubeOverlay(): Promise<void>;
-  /** 현재 탭 URL을 source URL 입력값으로 가져온다. */
-  importCurrentTabUrl(): Promise<void>;
   /** 처리 결과 화면에서 요청 설정 화면으로 돌아간다. */
   returnToForm(): Promise<void>;
   /** Snapshot 변경 구독을 등록한다. */
@@ -105,6 +109,7 @@ const INITIAL_SNAPSHOT: PopupDownloadSnapshot = {
   jobs: [],
   options: DEFAULT_DOWNLOAD_OPTIONS,
   status: MISSING_SOURCE_URL_STATUS,
+  stageSource: { kind: 'empty' },
   youtubeOverlay: {
     enabled: false,
     message: 'YouTube 썸네일 버튼 권한을 확인하고 있습니다.',
@@ -150,10 +155,16 @@ export function createPopupDownloadModel(
   const listeners = new Set<() => void>();
   /** 비동기 초기화가 사용자의 이미 입력한 값·제출 상태를 덮어쓰지 않게 한다. */
   let hasUserInteracted = false;
+  /** Popup을 열 때 활성 탭에서 읽은 YouTube 영상. YouTube 영상 탭이 아니면 null이다. */
+  let tabVideo: TabVideo | null = null;
 
   /** Snapshot을 갱신하고 listener에게 알린다. */
   function setSnapshot(nextSnapshot: PopupDownloadSnapshot) {
-    snapshot = nextSnapshot;
+    // 무대 원본은 모든 갱신 경로에서 원본 URL로 다시 도출해 입력값과 어긋나지 않게 한다.
+    snapshot = {
+      ...nextSnapshot,
+      stageSource: deriveStageSource(nextSnapshot.options.sourceUrl, tabVideo),
+    };
     listeners.forEach((listener) => listener());
   }
 
@@ -307,9 +318,27 @@ export function createPopupDownloadModel(
         };
       }
 
+      /** 활성 탭에서 자동 지정할 원본 URL. YouTube 영상 탭이 아니거나 읽지 못하면 비운다. */
+      let tabSourceUrl = '';
+
+      try {
+        /** 현재 활성 탭. */
+        const currentTab = await dependencies.tabs.getCurrentTab();
+        /** 활성 탭 주소의 YouTube 영상 ID. */
+        const videoId = parseYoutubeVideoId(currentTab.url);
+
+        if (videoId) {
+          tabSourceUrl = normalizeSourceUrl(currentTab.url);
+          tabVideo = { title: parseYoutubeTabTitle(currentTab.title), videoId };
+        }
+      } catch {
+        // 탭을 읽지 못하면 원본 없이 붙여넣기 칸에서 시작한다.
+      }
+
+      // 원본 URL은 저장하지 않으므로 저장된 값 대신 활성 탭에서 매번 새로 정한다.
       options = {
         ...options,
-        sourceUrl: '',
+        sourceUrl: tabSourceUrl,
       };
 
       /** Background가 저장해 둔 최근 job 목록. */
@@ -392,36 +421,6 @@ export function createPopupDownloadModel(
             message: 'YouTube 썸네일 버튼을 활성화하지 못했습니다. 다시 시도하세요.',
             status: 'error',
           },
-        });
-      }
-    },
-    async importCurrentTabUrl() {
-      hasUserInteracted = true;
-
-      try {
-        /** 현재 활성 탭 URL. */
-        const currentTabUrl = await dependencies.tabs.getCurrentTabUrl();
-        /** API에 전달할 정규화된 source URL. */
-        const sourceUrl = normalizeSourceUrl(currentTabUrl);
-
-        setSnapshot(
-          renderReadyState({
-            ...snapshot,
-            options: {
-              ...snapshot.options,
-              sourceUrl,
-            },
-          }),
-        );
-      } catch {
-        /** 현재 입력값 기준으로 재시도 가능 여부를 보존한 snapshot. */
-        const fallbackSnapshot = renderReadyState(snapshot);
-
-        setSnapshot({
-          ...fallbackSnapshot,
-          status: createInvalidSourceUrlStatus(
-            '현재 탭에서 지원하는 YouTube URL을 찾을 수 없습니다.',
-          ),
         });
       }
     },

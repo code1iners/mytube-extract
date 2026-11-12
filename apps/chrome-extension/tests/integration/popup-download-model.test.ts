@@ -77,8 +77,11 @@ function createDependencies(
       subscribeLatestJob: vi.fn().mockReturnValue(() => {}),
       ...overrides.downloadJobs,
     },
+    // 기본 활성 탭은 YouTube가 아닌 페이지다. 현재 탭 자동 지정이 필요한 테스트만 YouTube 탭을 주입한다.
     tabs: {
-      getCurrentTabUrl: vi.fn().mockResolvedValue('https://youtu.be/abc123_DEF0'),
+      getCurrentTab: vi
+        .fn()
+        .mockResolvedValue({ title: '예시 페이지', url: 'https://example.com/' }),
       ...overrides.tabs,
     },
     youtubeOverlay: {
@@ -140,9 +143,61 @@ describe('popup download model', () => {
     });
   });
 
-  it('starts with source URL input required instead of active tab detection', async () => {
+  it.each([
+    ['watch', 'https://www.youtube.com/watch?v=abc123_DEF0&t=30s', 'https://www.youtube.com/watch?v=abc123_DEF0&t=30s'],
+    ['Shorts', 'https://www.youtube.com/shorts/abc123_DEF0', 'https://www.youtube.com/watch?v=abc123_DEF0'],
+    ['youtu.be', 'https://youtu.be/abc123_DEF0', 'https://www.youtube.com/watch?v=abc123_DEF0'],
+  ])('puts the active %s tab video on the stage as the source when the popup opens', async (_format, tabUrl, sourceUrl) => {
     /** Popup model dependency. */
-    const dependencies = createDependencies();
+    const dependencies = createDependencies({
+      tabs: {
+        getCurrentTab: vi.fn().mockResolvedValue({ title: '(3) 서울 공연 풀버전 - YouTube', url: tabUrl }),
+      },
+    });
+    /** Popup download model. */
+    const model = createPopupDownloadModel(dependencies);
+
+    await model.initialize();
+
+    expect(model.getSnapshot()).toMatchObject({
+      canDownload: true,
+      options: { sourceUrl },
+      stageSource: {
+        kind: 'tab',
+        thumbnailUrl: 'https://i.ytimg.com/vi/abc123_DEF0/hqdefault.jpg',
+        title: '서울 공연 풀버전',
+        videoId: 'abc123_DEF0',
+      },
+      status: { kind: 'ready' },
+    });
+  });
+
+  it('leaves the stage title unknown when the YouTube tab title has nothing but the suffix', async () => {
+    /** Popup model dependency. */
+    const dependencies = createDependencies({
+      tabs: {
+        getCurrentTab: vi
+          .fn()
+          .mockResolvedValue({ title: 'YouTube', url: 'https://www.youtube.com/watch?v=abc123_DEF0' }),
+      },
+    });
+    /** Popup download model. */
+    const model = createPopupDownloadModel(dependencies);
+
+    await model.initialize();
+
+    expect(model.getSnapshot().stageSource).toMatchObject({ kind: 'tab', title: null });
+  });
+
+  it('shows an empty paste stage and locks submit on a tab that is not a YouTube video', async () => {
+    /** Popup model dependency. */
+    const dependencies = createDependencies({
+      tabs: {
+        getCurrentTab: vi
+          .fn()
+          .mockResolvedValue({ title: 'YouTube', url: 'https://www.youtube.com/feed/subscriptions' }),
+      },
+    });
     /** Popup download model. */
     const model = createPopupDownloadModel(dependencies);
 
@@ -150,11 +205,163 @@ describe('popup download model', () => {
 
     expect(model.getSnapshot()).toMatchObject({
       canDownload: false,
-      status: {
-        kind: 'missing-source-url',
-        message: '추출할 URL을 입력하세요.',
+      options: { sourceUrl: '' },
+      stageSource: { kind: 'empty' },
+      status: { kind: 'missing-source-url' },
+    });
+  });
+
+  it('falls back to the empty paste stage when the active tab cannot be read', async () => {
+    /** Popup model dependency. */
+    const dependencies = createDependencies({
+      tabs: {
+        getCurrentTab: vi.fn().mockRejectedValue(new Error('탭을 읽지 못했습니다.')),
       },
     });
+    /** Popup download model. */
+    const model = createPopupDownloadModel(dependencies);
+
+    await model.initialize();
+
+    expect(model.getSnapshot()).toMatchObject({
+      canDownload: false,
+      stageSource: { kind: 'empty' },
+      status: { kind: 'missing-source-url' },
+    });
+  });
+
+  it('marks a pasted address that is not a supported YouTube video as invalid and locks submit', async () => {
+    /** Popup model dependency. */
+    const dependencies = createDependencies();
+    /** Popup download model. */
+    const model = createPopupDownloadModel(dependencies);
+
+    await model.initialize();
+    await model.updateOption('sourceUrl', 'https://vimeo.com/76979871');
+
+    expect(model.getSnapshot()).toMatchObject({
+      canDownload: false,
+      stageSource: { input: 'https://vimeo.com/76979871', kind: 'invalid' },
+      status: { kind: 'invalid-source-url' },
+    });
+  });
+
+  it('puts a valid pasted address on the stage with the video ID standing in for the unknown title', async () => {
+    /** Popup model dependency. */
+    const dependencies = createDependencies();
+    /** Popup download model. */
+    const model = createPopupDownloadModel(dependencies);
+
+    await model.initialize();
+    await model.updateOption('sourceUrl', 'https://youtu.be/xyz789_GHI1');
+
+    expect(model.getSnapshot()).toMatchObject({
+      canDownload: true,
+      stageSource: {
+        kind: 'pasted',
+        thumbnailUrl: 'https://i.ytimg.com/vi/xyz789_GHI1/hqdefault.jpg',
+        title: null,
+        videoId: 'xyz789_GHI1',
+      },
+    });
+  });
+
+  it('replaces the tab video on the stage when a different video address is pasted', async () => {
+    /** Popup model dependency. */
+    const dependencies = createDependencies({
+      tabs: {
+        getCurrentTab: vi
+          .fn()
+          .mockResolvedValue({ title: '탭 영상 - YouTube', url: 'https://www.youtube.com/watch?v=abc123_DEF0' }),
+      },
+    });
+    /** Popup download model. */
+    const model = createPopupDownloadModel(dependencies);
+
+    await model.initialize();
+    await model.updateOption('sourceUrl', 'https://www.youtube.com/watch?v=xyz789_GHI1');
+
+    expect(model.getSnapshot().stageSource).toMatchObject({
+      kind: 'pasted',
+      title: null,
+      videoId: 'xyz789_GHI1',
+    });
+  });
+
+  it('keeps an address the user already entered when the active tab read finishes later', async () => {
+    /** 활성 탭 읽기를 늦추는 resolve 함수. */
+    let resolveTab: (tab: { title: string; url: string }) => void = () => {};
+    /** Popup model dependency. */
+    const dependencies = createDependencies({
+      tabs: {
+        getCurrentTab: vi.fn(
+          () =>
+            new Promise<{ title: string; url: string }>((resolve) => {
+              resolveTab = resolve;
+            }),
+        ),
+      },
+    });
+    /** Popup download model. */
+    const model = createPopupDownloadModel(dependencies);
+
+    const initialize = model.initialize();
+
+    await model.updateOption('sourceUrl', 'https://www.youtube.com/watch?v=xyz789_GHI1');
+    await vi.waitFor(() => expect(dependencies.tabs.getCurrentTab).toHaveBeenCalled());
+    resolveTab({ title: '탭 영상 - YouTube', url: 'https://www.youtube.com/watch?v=abc123_DEF0' });
+    await initialize;
+
+    expect(model.getSnapshot()).toMatchObject({
+      options: { sourceUrl: 'https://www.youtube.com/watch?v=xyz789_GHI1' },
+      stageSource: { kind: 'pasted', videoId: 'xyz789_GHI1' },
+    });
+  });
+
+  it('does not store the source URL picked from the tab while still storing format and quality', async () => {
+    /** Popup model dependency. */
+    const dependencies = createDependencies({
+      tabs: {
+        getCurrentTab: vi
+          .fn()
+          .mockResolvedValue({ title: '탭 영상 - YouTube', url: 'https://www.youtube.com/watch?v=abc123_DEF0' }),
+      },
+    });
+    /** Popup download model. */
+    const model = createPopupDownloadModel(dependencies);
+
+    await model.initialize();
+    await model.updateOption('sourceUrl', 'https://www.youtube.com/watch?v=xyz789_GHI1');
+
+    expect(dependencies.storage.saveOptions).not.toHaveBeenCalled();
+
+    await model.updateOption('mode', 'video');
+    await model.updateOption('resolution', '1080');
+
+    expect(dependencies.storage.saveOptions).toHaveBeenLastCalledWith(
+      expect.objectContaining({ mode: 'video', resolution: '1080' }),
+    );
+  });
+
+  it('submits the tab video picked on open without any extra step', async () => {
+    /** Popup model dependency. */
+    const dependencies = createDependencies({
+      tabs: {
+        getCurrentTab: vi
+          .fn()
+          .mockResolvedValue({ title: '탭 영상 - YouTube', url: 'https://youtu.be/abc123_DEF0' }),
+      },
+    });
+    /** Popup download model. */
+    const model = createPopupDownloadModel(dependencies);
+
+    await model.initialize();
+    await model.submitDownload();
+
+    expect(dependencies.downloadJobs.submitJob).toHaveBeenCalledWith(
+      expect.objectContaining({ sourceUrl: 'https://www.youtube.com/watch?v=abc123_DEF0' }),
+    );
+    expect(model.getSnapshot().status).toMatchObject({ kind: 'download-started' });
   });
 
   it('enables download when a valid source URL is entered on any page', async () => {
@@ -213,58 +420,6 @@ describe('popup download model', () => {
       status: {
         kind: 'invalid-source-url',
         message: '지원하는 YouTube URL을 입력하세요.',
-      },
-    });
-  });
-
-  it('imports a supported current tab URL without persisting it', async () => {
-    /** Popup model dependency. */
-    const dependencies = createDependencies({
-      tabs: {
-        getCurrentTabUrl: vi.fn().mockResolvedValue('https://www.youtube.com/shorts/abc123_DEF0'),
-      },
-    });
-    /** Popup download model. */
-    const model = createPopupDownloadModel(dependencies);
-
-    await model.initialize();
-    await model.importCurrentTabUrl();
-
-    expect(dependencies.storage.saveOptions).not.toHaveBeenCalled();
-    expect(model.getSnapshot()).toMatchObject({
-      canDownload: true,
-      options: {
-        sourceUrl: 'https://www.youtube.com/watch?v=abc123_DEF0',
-      },
-      status: {
-        kind: 'ready',
-        message: '추출할 URL이 준비되었습니다.',
-      },
-    });
-  });
-
-  it('keeps the entered URL when the current tab URL is unsupported', async () => {
-    /** Popup model dependency. */
-    const dependencies = createDependencies({
-      tabs: {
-        getCurrentTabUrl: vi.fn().mockResolvedValue('https://example.com/watch?v=abc123_DEF0'),
-      },
-    });
-    /** Popup download model. */
-    const model = createPopupDownloadModel(dependencies);
-
-    await model.initialize();
-    await model.updateOption('sourceUrl', 'https://www.youtube.com/watch?v=abc123_DEF0');
-    await model.importCurrentTabUrl();
-
-    expect(model.getSnapshot()).toMatchObject({
-      canDownload: true,
-      options: {
-        sourceUrl: 'https://www.youtube.com/watch?v=abc123_DEF0',
-      },
-      status: {
-        kind: 'invalid-source-url',
-        message: '현재 탭에서 지원하는 YouTube URL을 찾을 수 없습니다.',
       },
     });
   });

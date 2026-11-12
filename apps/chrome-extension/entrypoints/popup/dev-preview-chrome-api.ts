@@ -230,6 +230,7 @@ function createDevPreviewChromeApi({
           {
             active: true,
             id: 1,
+            title: 'Dev preview 영상 - YouTube',
             url: 'https://www.youtube.com/watch?v=abc123_DEF0',
           } as chrome.tabs.Tab,
         ]);
