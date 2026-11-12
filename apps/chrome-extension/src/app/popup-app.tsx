@@ -1,32 +1,26 @@
-import { type ChangeEvent, type FormEvent, useEffect, useRef, useState } from 'react';
-import { type QualityOption, getQualityOptions } from '../domain/download-options/quality-options';
+import { type ChangeEvent, type FormEvent, type RefObject, useEffect, useRef, useState } from 'react';
 import { type DownloadJob } from '../domain/download-job/download-job';
-import { type PopupDownloadModel, type PopupDownloadSnapshot, type YoutubeOverlaySnapshot, createChromePopupDownloadModel } from '../features/popup-download/popup-download-model';
-import { type ThemePreference, getThemePreference, setThemePreference } from '../shared/theme-preference';
+import { type DownloadMode } from '../domain/download-options/download-options';
+import { getQualityOptions } from '../domain/download-options/quality-options';
+import { type StageSource } from '../domain/popup-state/popup-state';
+import { type PopupDownloadModel, type PopupDownloadSnapshot, createChromePopupDownloadModel } from '../features/popup-download/popup-download-model';
+import { type PopupIconName, PopupIcon } from './popup-icons';
 
-/** 형식별 옵션 필드 copy. */
-type AdaptiveOptionCopy = {
-  /** 옵션 입력 안내 문구. */
-  description: string;
-  /** 옵션 label. */
+/** 추출 버튼에 표시할 아이콘과 접근 가능한 이름. */
+type ExtractButtonView = {
+  /** 버튼 아이콘. */
+  icon: PopupIconName;
+  /** 버튼의 접근 가능한 이름. */
   label: string;
-  /** 옵션 select name. */
-  name: 'bitrate' | 'resolution';
-  /** 서버가 지원하는 고정 선택지. */
-  options: readonly QualityOption[];
-  /** 선택지 옆에 붙일 단위. */
-  unit: string;
-  /** 옵션 select 값. */
-  value: string;
+  /** 서버 확인처럼 기다리는 중인지 여부. */
+  busy: boolean;
 };
 
-/** URL 입력 아래에 표시할 피드백. */
-type SourceUrlFeedback = {
-  /** URL 입력 오류 여부. */
-  hasInputError: boolean;
-  /** 사용자에게 표시할 피드백 문구. */
-  message: string;
-};
+/** 형식 버튼 정의. */
+const MODE_OPTIONS: ReadonlyArray<{ /** 다운로드 형식. */ mode: DownloadMode; /** 형식 아이콘. */ icon: PopupIconName; /** 접근 가능한 이름. */ label: string }> = [
+  { icon: 'audio', label: '오디오 MP3', mode: 'audio' },
+  { icon: 'video', label: '비디오 MP4', mode: 'video' },
+];
 
 /** Popup download app component. */
 export function PopupApp() {
@@ -34,24 +28,20 @@ export function PopupApp() {
 
   /** Popup application model instance. */
   const modelRef = useRef<PopupDownloadModel | null>(null);
+  /** 붙여넣기 칸의 주소 입력. 지우기 뒤 다시 붙여넣을 수 있게 포커스를 돌려준다. */
+  const sourceInputRef = useRef<HTMLInputElement | null>(null);
 
   // States.
 
   /** Popup 화면 snapshot. */
   const [snapshot, setSnapshot] = useState<PopupDownloadSnapshot>(() => getPopupModel().getSnapshot());
-  /** 사용자가 선택한 popup theme 방식. */
-  const [themePreference, setThemePreferenceState] = useState<ThemePreference>(getThemePreference);
 
   // Computed.
 
-  /** 현재 다운로드 모드. */
-  const selectedMode = snapshot.options.mode;
-  /** 제출 버튼 문구. */
-  const submitLabel = getSubmitLabel(snapshot);
-  /** 원본 URL 입력 피드백. */
-  const sourceUrlFeedback = getSourceUrlFeedback(snapshot);
-  /** 형식별 옵션 필드 copy. */
-  const adaptiveOption = getAdaptiveOptionCopy(snapshot);
+  /** 무대에 올린 원본. */
+  const stageSource = snapshot.stageSource;
+  /** 추출 버튼 표시. */
+  const extractButton = getExtractButtonView(snapshot);
 
   // Functions.
 
@@ -82,27 +72,53 @@ export function PopupApp() {
     return unsubscribe;
   }, []);
 
+  useEffect(function listenForPasteOutsideSourceInput() {
+    /** 입력칸 밖에서 붙여넣은 주소로 무대 원본을 바꾼다. 탭 영상이 무대에 있어도 다른 영상으로 바꿀 수 있게 한다. */
+    function handleDocumentPaste(event: ClipboardEvent) {
+      // 입력칸 안의 붙여넣기는 그 입력칸의 change 경로가 처리한다.
+      if (event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement) {
+        return;
+      }
+
+      /** 붙여넣은 글자. */
+      const pastedText = event.clipboardData?.getData('text/plain').trim() ?? '';
+
+      if (!pastedText) {
+        return;
+      }
+
+      event.preventDefault();
+      void getPopupModel().updateOption('sourceUrl', pastedText);
+    }
+
+    document.addEventListener('paste', handleDocumentPaste);
+
+    return function stopListeningForPaste() {
+      document.removeEventListener('paste', handleDocumentPaste);
+    };
+  }, []);
+
   // Handlers.
+
+  /** 붙여넣기 칸의 주소 입력을 모델에 반영한다. */
+  function handleSourceUrlChange(event: ChangeEvent<HTMLInputElement>) {
+    void getPopupModel().updateOption('sourceUrl', event.currentTarget.value);
+  }
+
+  /** 잘못 넣은 주소를 지우고 붙여넣기 칸으로 포커스를 돌린다. */
+  function handleClearSourceUrl() {
+    void getPopupModel().updateOption('sourceUrl', '');
+    sourceInputRef.current?.focus();
+  }
 
   /** 다운로드 형식 변경을 모델에 반영한다. */
   function handleModeChange(event: ChangeEvent<HTMLInputElement>) {
-    /** 선택된 다운로드 모드. */
-    const mode = event.currentTarget.value === 'video' ? 'video' : 'audio';
-    void getPopupModel().updateOption('mode', mode);
+    void getPopupModel().updateOption('mode', event.currentTarget.value === 'video' ? 'video' : 'audio');
   }
 
-  /** 텍스트 기반 다운로드 옵션을 모델에 반영한다. */
-  function handleTextOptionChange<Key extends 'sourceUrl' | 'filename'>(key: Key) {
-    return function updateTextOption(event: ChangeEvent<HTMLInputElement>) {
-      void getPopupModel().updateOption(key, event.currentTarget.value);
-    };
-  }
-
-  /** 고정 선택지 품질 옵션을 모델에 반영한다. */
-  function handleQualityOptionChange<Key extends 'bitrate' | 'resolution'>(key: Key) {
-    return function updateQualityOption(event: ChangeEvent<HTMLSelectElement>) {
-      void getPopupModel().updateOption(key, event.currentTarget.value);
-    };
+  /** 품질 막대 선택을 현재 형식의 품질 옵션에 반영한다. */
+  function handleQualityChange(event: ChangeEvent<HTMLInputElement>) {
+    void getPopupModel().updateOption(snapshot.options.mode === 'audio' ? 'bitrate' : 'resolution', event.currentTarget.value);
   }
 
   /** form submit으로 서버 확인과 다운로드 요청을 시작한다. */
@@ -111,49 +127,104 @@ export function PopupApp() {
     void getPopupModel().submitDownload();
   }
 
-  /** 현재 탭의 YouTube URL을 form에 가져온다. */
-  function handleImportCurrentTabUrl() {
-    void getPopupModel().importCurrentTabUrl();
-  }
-
-  /** YouTube 썸네일 Overlay 권한 요청과 현재 탭 활성화를 시작한다. */
-  function handleActivateYoutubeOverlay() {
-    void getPopupModel().activateYoutubeOverlay();
-  }
-
-  /** native select theme 선택을 localStorage와 화면에 반영한다. */
-  function handleThemeChange(event: ChangeEvent<HTMLSelectElement>) {
-    /** 선택한 theme 방식. */
-    const preference = event.currentTarget.value as ThemePreference;
-    setThemePreferenceState(preference);
-    setThemePreference(preference);
-  }
-
-  return <main className="popup-shell" data-phase="request" data-status={snapshot.status.kind}>
-    <header className="popup-header">
-      <div><h1 className="popup-title">MyTube <span>Extract</span></h1><p>영상 추출 도구</p></div>
-      <label className="popup-theme-control"><span>테마</span><select value={themePreference} onChange={handleThemeChange}><option value="system">시스템</option><option value="light">라이트</option><option value="dark">다크</option></select></label>
-    </header>
-    <p className="policy-strip">저작권 및 플랫폼 정책을 준수해 사용하세요.</p>
-    <RequestForm snapshot={snapshot} selectedMode={selectedMode} adaptiveOption={adaptiveOption} sourceUrlFeedback={sourceUrlFeedback} submitLabel={submitLabel} onActivateYoutubeOverlay={handleActivateYoutubeOverlay} onImportCurrentTabUrl={handleImportCurrentTabUrl} onModeChange={handleModeChange} onQualityOptionChange={handleQualityOptionChange} onSubmit={handleSubmit} onTextOptionChange={handleTextOptionChange} />
+  return <main className="popup-shell" data-stage={stageSource.kind} data-status={snapshot.status.kind}>
+    <PopupHeader />
+    <form className="stage-form" onSubmit={handleSubmit}>
+      {stageSource.kind === 'tab' || stageSource.kind === 'pasted'
+        ? <StageThumbnail key={stageSource.thumbnailUrl} thumbnailUrl={stageSource.thumbnailUrl} />
+        : <PasteField inputRef={sourceInputRef} invalid={stageSource.kind === 'invalid'} reasonId="source-url-reason" sourceUrl={snapshot.options.sourceUrl} onChange={handleSourceUrlChange} onClear={handleClearSourceUrl} />}
+      <StageLine reason={snapshot.status.message} reasonId="source-url-reason" stageSource={stageSource} />
+      <div className="stage-controls">
+        <ModeToggle mode={snapshot.options.mode} onChange={handleModeChange} />
+        <QualityBars mode={snapshot.options.mode} value={snapshot.options.mode === 'audio' ? snapshot.options.bitrate : snapshot.options.resolution} onChange={handleQualityChange} />
+      </div>
+      <button aria-label={extractButton.label} className={extractButton.busy ? 'extract-button is-busy' : 'extract-button'} disabled={!snapshot.canDownload} type="submit">
+        <PopupIcon className={extractButton.busy ? 'is-spinning' : undefined} name={extractButton.icon} />
+      </button>
+      <RequestStatusFeedback snapshot={snapshot} />
+    </form>
     <RecentJobsList jobs={snapshot.jobs} />
   </main>;
 }
 
-/** popup의 요청 설정 form을 렌더링한다. */
-function RequestForm(props: { /** 현재 popup snapshot. */ snapshot: PopupDownloadSnapshot; /** 선택 mode. */ selectedMode: 'audio' | 'video'; /** mode별 옵션. */ adaptiveOption: AdaptiveOptionCopy; /** URL 입력 피드백. */ sourceUrlFeedback: SourceUrlFeedback | null; /** CTA 문구. */ submitLabel: string; /** YouTube 썸네일 Overlay 활성화. */ onActivateYoutubeOverlay: () => void; /** 현재 탭 URL 가져오기. */ onImportCurrentTabUrl: () => void; /** mode 변경. */ onModeChange: (event: ChangeEvent<HTMLInputElement>) => void; /** 고정 선택지 품질 option 변경 handler 생성기. */ onQualityOptionChange: <Key extends 'bitrate' | 'resolution'>(key: Key) => (event: ChangeEvent<HTMLSelectElement>) => void; /** form 제출. */ onSubmit: (event: FormEvent<HTMLFormElement>) => void; /** 텍스트 option 변경 handler 생성기. */ onTextOptionChange: <Key extends 'sourceUrl' | 'filename'>(key: Key) => (event: ChangeEvent<HTMLInputElement>) => void }) {
-  return <form className="download-form" onSubmit={props.onSubmit}>
-    <YoutubeOverlayActivation overlay={props.snapshot.youtubeOverlay} onActivate={props.onActivateYoutubeOverlay} />
-    <label className={props.sourceUrlFeedback?.hasInputError ? 'field source-field has-warning' : 'field source-field'}><span className="field-label">추출 URL</span><span className="field-description">YouTube watch, Shorts, youtu.be URL을 붙여넣으세요.</span><input aria-describedby={props.sourceUrlFeedback ? 'source-url-feedback' : undefined} aria-invalid={props.sourceUrlFeedback?.hasInputError || undefined} autoComplete="off" name="sourceUrl" placeholder="https://www.youtube.com/watch?v=..." type="url" value={props.snapshot.options.sourceUrl} onChange={props.onTextOptionChange('sourceUrl')} /><button className="secondary-button" disabled={props.snapshot.submitting} type="button" onClick={props.onImportCurrentTabUrl}>현재 탭 사용</button>{props.sourceUrlFeedback ? <p className={props.sourceUrlFeedback.hasInputError ? 'field-feedback field-feedback--error' : 'field-feedback'} id="source-url-feedback" role={props.sourceUrlFeedback.hasInputError ? 'alert' : undefined}>{props.sourceUrlFeedback.message}</p> : null}</label>
-    <fieldset className="mode-group"><legend>추출 형식</legend><label className={props.selectedMode === 'audio' ? 'mode-option is-selected' : 'mode-option'}><input checked={props.selectedMode === 'audio'} name="mode" type="radio" value="audio" onChange={props.onModeChange} />오디오</label><label className={props.selectedMode === 'video' ? 'mode-option is-selected' : 'mode-option'}><input checked={props.selectedMode === 'video'} name="mode" type="radio" value="video" onChange={props.onModeChange} />비디오</label></fieldset>
-    <label className="field"><span className="field-label">파일명</span><span className="field-description">비워두면 서버 기본값을 사용합니다.</span><input autoComplete="off" name="filename" type="text" value={props.snapshot.options.filename} onChange={props.onTextOptionChange('filename')} /></label>
-    <label className="field"><span className="field-label">{props.adaptiveOption.label}</span><span className="field-description">{props.adaptiveOption.description}</span><select name={props.adaptiveOption.name} value={props.adaptiveOption.value} onChange={props.onQualityOptionChange(props.adaptiveOption.name)}>{props.adaptiveOption.options.map((option) => <option key={option} value={option}>{option}{props.adaptiveOption.unit}</option>)}</select></label>
-    <button className="primary-button" disabled={!props.snapshot.canDownload} type="submit">{props.submitLabel}</button>
-    <RequestStatusFeedback snapshot={props.snapshot} />
-  </form>;
+/** 로고와 썸네일 버튼·설정 아이콘을 둔 헤더. 두 아이콘의 동작은 설정 화면에서 연결한다. */
+function PopupHeader() {
+  return <header className="popup-header">
+    <span aria-label="MyTube Extract" className="popup-logo" role="img"><PopupIcon name="down" /></span>
+    <button aria-label="썸네일 버튼" className="icon-button" disabled type="button"><PopupIcon name="grid" /></button>
+    <button aria-label="설정" className="icon-button" disabled type="button"><PopupIcon name="sliders" /></button>
+  </header>;
 }
 
-/** 서버 확인 또는 최신 job 상태를 form 아래에 짧게 안내한다. */
+/** 무대의 16:9 썸네일. 이미지를 불러오지 못하면 중립 배경과 비디오 아이콘으로 바꾼다. */
+function StageThumbnail(props: { /** YouTube 썸네일 주소. */ thumbnailUrl: string }) {
+  /** 썸네일 로드 실패 여부. 영상이 바뀌면 key로 새로 시작한다. */
+  const [failed, setFailed] = useState(false);
+
+  return <figure className="stage" data-thumbnail={failed ? 'fallback' : 'image'}>
+    {failed
+      ? <span className="stage__fallback"><PopupIcon name="video" /></span>
+      : <img alt="" className="stage__image" decoding="async" src={props.thumbnailUrl} onError={() => setFailed(true)} />}
+  </figure>;
+}
+
+/** 무대 자리의 붙여넣기 칸. 붙여넣기와 타이핑 모두 받는 실제 주소 입력이다. */
+function PasteField(props: { /** 주소 입력 ref. */ inputRef: RefObject<HTMLInputElement | null>; /** 잘못된 주소 여부. */ invalid: boolean; /** 이유 한 줄 element ID. */ reasonId: string; /** 현재 입력값. */ sourceUrl: string; /** 입력 변경. */ onChange: (event: ChangeEvent<HTMLInputElement>) => void; /** 지우기. */ onClear: () => void }) {
+  return <div className={props.invalid ? 'paste-field is-invalid' : 'paste-field'}>
+    <PopupIcon className="paste-field__icon" name={props.invalid ? 'link-off' : 'link'} />
+    <div className="paste-field__row">
+      <input ref={props.inputRef} aria-describedby={props.invalid ? props.reasonId : undefined} aria-invalid={props.invalid || undefined} aria-label="YouTube 주소" autoComplete="off" autoFocus className="paste-field__input" name="sourceUrl" placeholder="YouTube 주소 붙여넣기" spellCheck={false} type="url" value={props.sourceUrl} onChange={props.onChange} />
+      {props.sourceUrl ? <button aria-label="주소 지우기" className="icon-button" type="button" onClick={props.onClear}><PopupIcon name="x" /></button> : null}
+    </div>
+  </div>;
+}
+
+/** 무대 아래 한 줄. 영상 제목(모르면 영상 ID)이나 잘못된 주소의 이유를 보여준다. */
+function StageLine(props: { /** 무대 원본. */ stageSource: StageSource; /** 잘못된 주소의 이유. */ reason: string; /** 이유 한 줄 element ID. */ reasonId: string }) {
+  if (props.stageSource.kind === 'tab' || props.stageSource.kind === 'pasted') {
+    /** 화면에 보일 제목. */
+    const title = props.stageSource.title ?? props.stageSource.videoId;
+
+    return <p className="stage-line stage-line--title" title={title}>{title}</p>;
+  }
+
+  if (props.stageSource.kind === 'invalid') {
+    return <p className="stage-line stage-line--error" id={props.reasonId} role="alert">{props.reason}</p>;
+  }
+
+  // 붙여넣기 칸만 있을 때도 아래 조작의 위치가 흔들리지 않게 같은 높이를 비워 둔다.
+  return <p aria-hidden="true" className="stage-line" />;
+}
+
+/** 오디오·비디오 형식 아이콘 두 칸. */
+function ModeToggle(props: { /** 선택 형식. */ mode: DownloadMode; /** 형식 변경. */ onChange: (event: ChangeEvent<HTMLInputElement>) => void }) {
+  return <div aria-label="형식" className="mode-toggle" role="radiogroup">
+    {MODE_OPTIONS.map((option) => <label key={option.mode} className="mode-toggle__option">
+      <input aria-label={option.label} checked={props.mode === option.mode} className="visually-hidden-input" name="mode" type="radio" value={option.mode} onChange={props.onChange} />
+      <PopupIcon name={option.icon} />
+    </label>)}
+  </div>;
+}
+
+/** 높이가 다른 품질 막대 세 개. 선택한 값 이하의 막대를 채운다. */
+function QualityBars(props: { /** 현재 형식. */ mode: DownloadMode; /** 선택 품질 값. */ value: string; /** 품질 변경. */ onChange: (event: ChangeEvent<HTMLInputElement>) => void }) {
+  /** 현재 형식의 고정 품질 선택지. */
+  const options = getQualityOptions(props.mode);
+  /** 선택 품질의 순서. */
+  const selectedIndex = options.findIndex((option) => String(option) === props.value);
+  /** 접근 가능한 이름에 붙일 단위. */
+  const unit = props.mode === 'audio' ? ' kbps' : 'p';
+
+  return <div aria-label="품질" className="quality-bars" role="radiogroup">
+    {options.map((option, index) => <label key={option} className={index <= selectedIndex ? 'quality-bars__option is-filled' : 'quality-bars__option'}>
+      <input aria-label={`${option}${unit}`} checked={index === selectedIndex} className="visually-hidden-input" name="quality" type="radio" value={String(option)} onChange={props.onChange} />
+      <i aria-hidden="true" className="quality-bars__bar" />
+      <span aria-hidden="true" className="quality-bars__value">{option}</span>
+    </label>)}
+  </div>;
+}
+
+/** 서버 확인 또는 최신 job 상태를 버튼 아래에 짧게 안내한다. */
 function RequestStatusFeedback(props: { /** 현재 popup snapshot. */ snapshot: PopupDownloadSnapshot }) {
   const visibleStatuses = new Set([
     'checking-server',
@@ -210,15 +281,6 @@ function getRecentJobStatus(job: DownloadJob): { icon: string; kind: DownloadJob
   return { icon: '!', kind: 'failed', label: '실패' };
 }
 
-/** YouTube Overlay 권한 상태를 텍스트와 함께 전달할 아이콘으로 바꾼다. */
-function getYoutubeOverlayStatusIcon(status: YoutubeOverlaySnapshot['status']): string {
-  if (status === 'enabled') return '✓';
-  if (status === 'denied' || status === 'error') return '!';
-  if (status === 'checking' || status === 'requesting') return '…';
-
-  return '○';
-}
-
 /** 최근 job 생성 시각을 popup에 맞는 짧은 형식으로 표시한다. */
 function formatRecentJobTime(createdAt: string): string {
   const date = new Date(createdAt);
@@ -235,45 +297,9 @@ function formatRecentJobTime(createdAt: string): string {
   }).format(date);
 }
 
-/** YouTube 썸네일 Overlay의 최초 활성화와 현재 권한 상태를 보여준다. */
-function YoutubeOverlayActivation(props: { /** Overlay 권한 상태. */ overlay: YoutubeOverlaySnapshot; /** 권한 요청 handler. */ onActivate: () => void }) {
-  // Computed.
-
-  /** 권한 요청 중 여부. */
-  const isRequesting = props.overlay.status === 'requesting';
-  /** 이미 권한이 허용된 상태인지 여부. */
-  const isEnabled = props.overlay.status === 'enabled';
-  /** 거부·오류 상태인지 여부. */
-  const isProblem = props.overlay.status === 'denied' || props.overlay.status === 'error';
-
-  return <div className="youtube-overlay-activation" aria-labelledby="youtube-overlay-title">
-    <span aria-hidden="true" className="youtube-overlay-activation__icon">{getYoutubeOverlayStatusIcon(props.overlay.status)}</span><div><strong id="youtube-overlay-title" className="youtube-overlay-activation__title">YouTube 썸네일 버튼</strong><p className={isProblem ? 'youtube-overlay-activation__message youtube-overlay-activation__message--problem' : 'youtube-overlay-activation__message'} role={isProblem ? 'alert' : 'status'} aria-live="polite">{props.overlay.message}</p></div>
-    {!isEnabled ? <button aria-label="YouTube 썸네일 버튼 활성화" className="secondary-button secondary-button--compact" disabled={isRequesting} type="button" onClick={props.onActivate}>{isRequesting ? '활성화 중' : '버튼 활성화'}</button> : null}
-  </div>;
-}
-
-/** 제출 버튼에 표시할 문구를 반환한다. */
-function getSubmitLabel(snapshot: PopupDownloadSnapshot) {
-  if (snapshot.submitting || snapshot.status.kind === 'checking-server') return '서버 확인 중';
-  if (snapshot.status.kind === 'download-failed' && snapshot.canDownload) return '다시 시도';
-  return '추출 시작';
-}
-
-/** Popup status를 URL 입력 피드백으로 바꾼다. */
-function getSourceUrlFeedback(snapshot: PopupDownloadSnapshot): SourceUrlFeedback | null {
-  if (snapshot.status.kind !== 'missing-source-url' && snapshot.status.kind !== 'invalid-source-url') {
-    return null;
-  }
-
-  return {
-    hasInputError:
-      snapshot.status.kind === 'invalid-source-url' && !snapshot.canDownload,
-    message: snapshot.status.message,
-  };
-}
-
-/** 현재 추출 형식에 맞는 단일 옵션 필드 copy를 만든다. */
-function getAdaptiveOptionCopy(snapshot: PopupDownloadSnapshot): AdaptiveOptionCopy {
-  if (snapshot.options.mode === 'video') return { description: '서버가 지원하는 해상도 중에서 고를 수 있습니다.', label: '최대 해상도', name: 'resolution', options: getQualityOptions('video'), unit: 'p', value: snapshot.options.resolution };
-  return { description: '서버가 지원하는 비트레이트 중에서 고를 수 있습니다.', label: '최대 비트레이트', name: 'bitrate', options: getQualityOptions('audio'), unit: ' kbps', value: snapshot.options.bitrate };
+/** 추출 버튼의 아이콘과 접근 가능한 이름을 정한다. */
+function getExtractButtonView(snapshot: PopupDownloadSnapshot): ExtractButtonView {
+  if (snapshot.submitting || snapshot.status.kind === 'checking-server') return { busy: true, icon: 'loader', label: '서버 확인 중' };
+  if (snapshot.status.kind === 'download-failed' && snapshot.canDownload) return { busy: false, icon: 'retry', label: '다시 시도' };
+  return { busy: false, icon: 'down', label: '추출 시작' };
 }

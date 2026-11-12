@@ -136,6 +136,11 @@ export function parseYoutubeVideoId(sourceUrl: string): string | null {
   }
 }
 
+/** 영상 ID로 YouTube 썸네일 이미지 주소를 만든다. 4:3 이미지라 16:9 칸에서는 위아래를 잘라 보여준다. */
+export function getYoutubeThumbnailUrl(videoId: string): string {
+  return `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`;
+}
+
 /** YouTube watch URL인지 확인한다. */
 function isYoutubeWatchUrl(url: URL): boolean {
   /** YouTube video ID query 값. */
