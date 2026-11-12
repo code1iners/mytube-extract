@@ -27,4 +27,3 @@
   - `apps/chrome-extension/.env`의 API 주소가 로컬(127.0.0.1:5011)이고 그 서버가 꺼져 있어, 이전 티켓처럼 `WXT_MEDIA_NEST_API_BASE_URL`을 운영 기본 주소로 맞춰 실행했다. 실제 서버에는 `/health` GET만 보냈고, 다운로드는 가짜 응답으로 처리했다.
   - 로그: `/tmp/mytube-05/*.log`
   - 대표 캡처: `/tmp/mytube-05/screens/popup-filename-editing-light.png`(편집 상태), `/tmp/mytube-05/screens/popup-stage-dark.png`(연필이 있는 제목 줄)
-
