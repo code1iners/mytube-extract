@@ -88,6 +88,7 @@ function createDependencies(
     youtubeOverlay: {
       isEnabled: vi.fn().mockResolvedValue(false),
       requestAndEnable: vi.fn().mockResolvedValue(true),
+      disable: vi.fn().mockResolvedValue(true),
       ...overrides.youtubeOverlay,
     },
     downloads: {
@@ -98,56 +99,6 @@ function createDependencies(
 }
 
 describe('popup download model', () => {
-  it('shows the YouTube overlay activation state without changing the URL form flow', async () => {
-    /** Popup model dependency. */
-    const dependencies = createDependencies();
-    /** Popup download model. */
-    const model = createPopupDownloadModel(dependencies);
-
-    await model.initialize();
-
-    expect(model.getSnapshot()).toMatchObject({
-      youtubeOverlay: {
-        enabled: false,
-        status: 'disabled',
-      },
-    });
-
-    await model.activateYoutubeOverlay();
-
-    expect(dependencies.youtubeOverlay.requestAndEnable).toHaveBeenCalledTimes(1);
-    expect(model.getSnapshot()).toMatchObject({
-      youtubeOverlay: {
-        enabled: true,
-        status: 'enabled',
-      },
-    });
-  });
-
-  it('keeps the popup usable when the user denies the YouTube overlay permission', async () => {
-    /** Popup model dependency. */
-    const dependencies = createDependencies({
-      youtubeOverlay: {
-        isEnabled: vi.fn().mockResolvedValue(false),
-        requestAndEnable: vi.fn().mockResolvedValue(false),
-      },
-    });
-    /** Popup download model. */
-    const model = createPopupDownloadModel(dependencies);
-
-    await model.initialize();
-    await model.activateYoutubeOverlay();
-    await model.updateOption('sourceUrl', 'https://www.youtube.com/watch?v=abc123_DEF0');
-
-    expect(model.getSnapshot()).toMatchObject({
-      canDownload: true,
-      youtubeOverlay: {
-        enabled: false,
-        status: 'denied',
-      },
-    });
-  });
-
   it.each([
     ['watch', 'https://www.youtube.com/watch?v=abc123_DEF0&t=30s', 'https://www.youtube.com/watch?v=abc123_DEF0&t=30s'],
     ['Shorts', 'https://www.youtube.com/shorts/abc123_DEF0', 'https://www.youtube.com/watch?v=abc123_DEF0'],
@@ -944,6 +895,198 @@ function createDeferredSubmit() {
 
   return { resolve: (job: DownloadJob) => resolveSubmit(job), submitJob };
 }
+
+describe('popup settings and thumbnail button permission', () => {
+  it('opens the settings view and returns to the stage', async () => {
+    /** Popup download model. */
+    const model = createPopupDownloadModel(createDependencies());
+
+    await model.initialize();
+    model.openView('settings');
+
+    expect(model.getSnapshot().view).toBe('settings');
+
+    model.openView('main');
+
+    expect(model.getSnapshot().view).toBe('main');
+  });
+
+  it('turns the thumbnail button on through checking, off, requesting and on with matching header dots', async () => {
+    /** 권한 요청을 사용자가 Chrome 창에서 답할 때까지 붙잡아 둔다. */
+    let answerPermissionRequest: (granted: boolean) => void = () => {};
+    /** Popup model dependency. */
+    const dependencies = createDependencies({
+      youtubeOverlay: {
+        requestAndEnable: vi.fn(
+          () => new Promise<boolean>((resolve) => {
+            answerPermissionRequest = resolve;
+          }),
+        ),
+      },
+    });
+    /** Popup download model. */
+    const model = createPopupDownloadModel(dependencies);
+
+    expect(model.getSnapshot().youtubeOverlay).toMatchObject({ indicator: 'off', status: 'checking' });
+
+    await model.initialize();
+
+    expect(model.getSnapshot().youtubeOverlay).toMatchObject({ enabled: false, indicator: 'off', status: 'disabled' });
+
+    /** 진행 중인 켜기 요청. */
+    const activation = model.activateYoutubeOverlay();
+
+    expect(model.getSnapshot().youtubeOverlay).toMatchObject({ enabled: false, indicator: 'off', status: 'requesting' });
+
+    // 요청 중 다시 눌러도 Chrome 권한 창을 두 번 띄우지 않는다.
+    await model.activateYoutubeOverlay();
+    answerPermissionRequest(true);
+    await activation;
+
+    expect(dependencies.youtubeOverlay.requestAndEnable).toHaveBeenCalledTimes(1);
+    expect(model.getSnapshot().youtubeOverlay).toMatchObject({ enabled: true, indicator: 'on', status: 'enabled' });
+  });
+
+  it('shows a denied row reason and keeps the popup usable when the user denies the permission', async () => {
+    /** Popup model dependency. */
+    const dependencies = createDependencies({
+      youtubeOverlay: {
+        requestAndEnable: vi.fn().mockResolvedValue(false),
+      },
+    });
+    /** Popup download model. */
+    const model = createPopupDownloadModel(dependencies);
+
+    await model.initialize();
+    await model.activateYoutubeOverlay();
+    await model.updateOption('sourceUrl', 'https://www.youtube.com/watch?v=abc123_DEF0');
+
+    expect(model.getSnapshot()).toMatchObject({
+      canDownload: true,
+      youtubeOverlay: {
+        enabled: false,
+        indicator: 'problem',
+        message: '권한이 거부되어 썸네일 버튼을 표시하지 않아요.',
+        status: 'denied',
+      },
+    });
+
+    // 권한 다시 요청은 같은 켜기 동작이다.
+    vi.mocked(dependencies.youtubeOverlay.requestAndEnable).mockResolvedValueOnce(true);
+    await model.activateYoutubeOverlay();
+
+    expect(model.getSnapshot().youtubeOverlay).toMatchObject({ indicator: 'on', status: 'enabled' });
+  });
+
+  it('shows an error row when Chrome cannot request the permission', async () => {
+    /** Popup download model. */
+    const model = createPopupDownloadModel(
+      createDependencies({
+        youtubeOverlay: {
+          requestAndEnable: vi.fn().mockRejectedValue(new Error('YouTube 권한을 요청하지 못했어요.')),
+        },
+      }),
+    );
+
+    await model.initialize();
+    await model.activateYoutubeOverlay();
+
+    expect(model.getSnapshot().youtubeOverlay).toMatchObject({
+      enabled: false,
+      indicator: 'problem',
+      message: '썸네일 버튼을 켜지 못했어요. 다시 요청해 보세요.',
+      status: 'error',
+    });
+  });
+
+  it('shows an error row when the permission state cannot be read', async () => {
+    /** Popup download model. */
+    const model = createPopupDownloadModel(
+      createDependencies({
+        youtubeOverlay: {
+          isEnabled: vi.fn().mockRejectedValue(new Error('YouTube 권한 상태를 확인하지 못했어요.')),
+        },
+      }),
+    );
+
+    await model.initialize();
+
+    expect(model.getSnapshot().youtubeOverlay).toMatchObject({
+      indicator: 'problem',
+      message: '썸네일 버튼 권한을 확인하지 못했어요.',
+      status: 'error',
+    });
+  });
+
+  it('removes the permission when the switch is turned off', async () => {
+    /** Popup model dependency. */
+    const dependencies = createDependencies({
+      youtubeOverlay: {
+        isEnabled: vi.fn().mockResolvedValue(true),
+      },
+    });
+    /** Popup download model. */
+    const model = createPopupDownloadModel(dependencies);
+
+    await model.initialize();
+
+    expect(model.getSnapshot().youtubeOverlay).toMatchObject({ enabled: true, indicator: 'on', status: 'enabled' });
+
+    await model.deactivateYoutubeOverlay();
+
+    expect(dependencies.youtubeOverlay.disable).toHaveBeenCalledTimes(1);
+    expect(model.getSnapshot().youtubeOverlay).toMatchObject({ enabled: false, indicator: 'off', status: 'disabled' });
+  });
+
+  it.each([
+    ['Chrome keeps the permission', vi.fn().mockResolvedValue(false)],
+    ['Chrome fails to remove the permission', vi.fn().mockRejectedValue(new Error('썸네일 버튼을 끄지 못했어요.'))],
+  ])('shows an error row when %s on turning off', async (_case, disable) => {
+    /** Popup download model. */
+    const model = createPopupDownloadModel(
+      createDependencies({
+        youtubeOverlay: {
+          disable,
+          isEnabled: vi.fn().mockResolvedValue(true),
+        },
+      }),
+    );
+
+    await model.initialize();
+    await model.deactivateYoutubeOverlay();
+
+    expect(model.getSnapshot().youtubeOverlay).toMatchObject({
+      indicator: 'problem',
+      message: '썸네일 버튼을 끄지 못했어요. 다시 시도해 보세요.',
+      status: 'error',
+    });
+  });
+
+  it('tells the completed file retention days from the latest job, defaulting to 7 days', async () => {
+    /** 최근 job이 없는 Popup. */
+    const emptyModel = createPopupDownloadModel(createDependencies());
+
+    await emptyModel.initialize();
+
+    expect(emptyModel.getSnapshot().retentionDays).toBe(7);
+
+    /** 최근 job이 있는 Popup. */
+    const model = createPopupDownloadModel(
+      createDependencies({
+        downloadJobs: {
+          getJobs: vi.fn().mockResolvedValue([
+            createCompletedJob({ createdAt: '2026-06-24T05:00:00.000Z', jobId: 'job-old', retentionDays: 7 }),
+            createCompletedJob({ createdAt: '2026-06-25T05:00:00.000Z', jobId: 'job-new', retentionDays: 3 }),
+          ]),
+        },
+      }),
+    );
+
+    await model.initialize();
+
+    expect(model.getSnapshot().retentionDays).toBe(3);
+  });
+});
 
 describe('popup stage progress and problems', () => {
   it('moves the stage through checking, queued, processing and done, then back to idle', async () => {

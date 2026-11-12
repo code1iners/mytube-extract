@@ -94,6 +94,48 @@ describe('YouTube overlay adapter', () => {
       'overlay script unavailable',
     );
   });
+
+  it('removes the optional YouTube host permission when the user turns the thumbnail button off', async () => {
+    /** 테스트용 Chrome API. */
+    const chromeApi = createChromeApi({
+      permissionGranted: true,
+    });
+    /** YouTube overlay adapter. */
+    const adapter = createYoutubeOverlayAdapter(chromeApi);
+
+    await expect(adapter.disable()).resolves.toBe(true);
+    expect(chromeApi.permissions.remove).toHaveBeenCalledWith({
+      origins: [YOUTUBE_HOST_PERMISSION],
+    }, expect.any(Function));
+    await expect(adapter.isEnabled()).resolves.toBe(false);
+  });
+
+  it('reports that the permission stayed when Chrome does not remove it', async () => {
+    /** 테스트용 Chrome API. */
+    const chromeApi = createChromeApi({
+      permissionGranted: true,
+      permissionRemoved: false,
+    });
+    /** YouTube overlay adapter. */
+    const adapter = createYoutubeOverlayAdapter(chromeApi);
+
+    await expect(adapter.disable()).resolves.toBe(false);
+    await expect(adapter.isEnabled()).resolves.toBe(true);
+  });
+
+  it('rejects disable when chrome.runtime.lastError is set on the permission removal', async () => {
+    /** 테스트용 Chrome API. */
+    const chromeApi = createChromeApi({
+      lastError: { message: 'blocked' },
+      permissionGranted: true,
+    });
+    /** YouTube overlay adapter. */
+    const adapter = createYoutubeOverlayAdapter(chromeApi);
+
+    await expect(adapter.disable()).rejects.toThrow(
+      '썸네일 버튼을 끄지 못했어요.',
+    );
+  });
 });
 
 /** 테스트용 Chrome API를 만든다. */
@@ -101,6 +143,7 @@ function createChromeApi({
   lastError = null,
   permissionGranted,
   permissionRequestGranted = permissionGranted,
+  permissionRemoved = true,
   sendMessageResponse = { ok: true },
 }: {
   /** chrome.runtime.lastError 값. */
@@ -109,6 +152,8 @@ function createChromeApi({
   permissionGranted: boolean;
   /** 권한 요청 결과. */
   permissionRequestGranted?: boolean;
+  /** 권한 해제 결과. */
+  permissionRemoved?: boolean;
   /** content script activation 응답. */
   sendMessageResponse?: { message?: string; ok: boolean };
 }) {
@@ -123,6 +168,9 @@ function createChromeApi({
     ),
   };
 
+  /** 해제 뒤 contains가 바뀐 권한 상태를 돌려주도록 현재 권한을 들고 있는다. */
+  let granted = permissionGranted;
+
   return {
     runtime,
     permissions: {
@@ -130,7 +178,19 @@ function createChromeApi({
         (
           _permissions: chrome.permissions.Permissions,
           callback: (result: boolean) => void,
-        ) => callback(permissionGranted),
+        ) => callback(granted),
+      ),
+      remove: vi.fn(
+        (
+          _permissions: chrome.permissions.Permissions,
+          callback: (removed: boolean) => void,
+        ) => {
+          if (permissionRemoved) {
+            granted = false;
+          }
+
+          callback(permissionRemoved);
+        },
       ),
       request: vi.fn(
         (

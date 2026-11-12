@@ -93,6 +93,8 @@ const staticServer = await createStaticServer(extensionOutputRoot);
   /** 최근 요청 flow에서 수집한 fake API 요청. */
   const recentFakeApiRequests = await verifyRecentRequestsFlow(staticServer.origin);
   console.error('[popup-smoke] recent requests flow ok');
+  await verifySettingsFlow(staticServer.origin);
+  console.error('[popup-smoke] settings theme and overlay permission flow ok');
 
   console.log(
     JSON.stringify(
@@ -861,6 +863,177 @@ async function verifyRecentRequestsFlow(origin) {
   }
 }
 
+/** 설정 화면의 테마 세 칸과 썸네일 버튼 권한 켜기·끄기·거부 흐름, 헤더 점을 확인한다. */
+async function verifySettingsFlow(origin) {
+  /** Browser instance. context는 시스템 테마가 다크로 풀리는지 보려고 OS 색 구성을 다크로 둔다. */
+  const browser = await chromium.launch();
+
+  try {
+    /** 테마 저장소를 다시 연 Popup과 공유하는 context. */
+    const context = await browser.newContext({ colorScheme: 'dark', viewport: { width: 360, height: 600 } });
+    /** 권한을 아직 켜지 않은 page. */
+    const page = await context.newPage();
+
+    await routeYoutubeThumbnails(page, { available: true });
+    await installFakeChromeApi(page, {
+      currentTabTitle: '무대 영상 - YouTube',
+      holdPermissionRequest: true,
+      storedOptions: {},
+    });
+    await page.goto(`${origin}/popup.html`, { timeout: 10000, waitUntil: 'domcontentloaded' });
+
+    // 아직 켜지 않았으면 격자 아이콘에 빨간 점이 붙는다.
+    /** 격자 아이콘. */
+    const offButton = page.getByRole('button', { name: '썸네일 버튼 켜기' });
+
+    await offButton.waitFor({ timeout: 10000 });
+    await expectOverlayDot(page, 'off');
+    await offButton.click();
+    await page.getByRole('heading', { name: '설정' }).waitFor({ timeout: 10000 });
+    await expectFocused(page, page.getByRole('button', { name: '뒤로' }), 'settings back button');
+    await page.getByText('저작권과 플랫폼 정책을 지켜 사용하세요.').waitFor({ timeout: 10000 });
+    await page.getByText('완료 파일은 7일 뒤 만료돼요.').waitFor({ timeout: 10000 });
+
+    // 테마 세 칸: 고른 칸만 눌림 상태이고, 기존 저장 키에 남으며, 시스템은 OS 색 구성을 따른다.
+    // 처음에는 저장값 없이 시스템 테마가 기본 선택이다.
+    await expectThemeChoice(page, '시스템 테마', null, 'dark');
+    await page.getByRole('button', { name: '라이트 테마' }).click();
+    await expectThemeChoice(page, '라이트 테마', 'light', 'light');
+    await saveScreenshot(page, 'popup-settings-off-light.png');
+    await page.getByRole('button', { name: '다크 테마' }).click();
+    await expectThemeChoice(page, '다크 테마', 'dark', 'dark');
+    await page.getByRole('button', { name: '시스템 테마' }).click();
+    await expectThemeChoice(page, '시스템 테마', 'system', 'dark');
+    await page.getByRole('button', { name: '라이트 테마' }).click();
+    await expectNoHorizontalOverflow(page);
+
+    // 스위치를 켜면 Chrome 권한 창이 뜨고, 답할 때까지 스위치 자리에 회전 아이콘이 보인다.
+    /** 썸네일 버튼 스위치. */
+    const overlaySwitch = page.getByRole('switch', { name: '썸네일 버튼' });
+
+    await expectSwitchChecked(overlaySwitch, false);
+    await overlaySwitch.click();
+    await page.getByRole('img', { name: '권한 요청 중' }).waitFor({ timeout: 10000 });
+    await saveScreenshot(page, 'popup-settings-requesting-light.png');
+    await page.evaluate(() => globalThis.__myTubeExtractAnswerPermissionRequest(true));
+    await expectSwitchChecked(overlaySwitch, true);
+
+    if ((await page.evaluate(() => globalThis.__myTubeExtractOverlayEnableCount ?? 0)) !== 1) {
+      throw new Error('Expected the popup to ask Background to enable the overlay once.');
+    }
+
+    await saveScreenshot(page, 'popup-settings-on-light.png');
+    await page.evaluate(() => document.documentElement.setAttribute('data-theme', 'dark'));
+    await saveScreenshot(page, 'popup-settings-on-dark.png');
+    await page.evaluate(() => document.documentElement.setAttribute('data-theme', 'light'));
+
+    // 뒤로 가면 무대로 돌아오고, 격자 아이콘이 초록 점과 켜짐 이름을 갖고 포커스를 돌려받는다.
+    await page.getByRole('button', { name: '뒤로' }).click();
+    await page.locator('figure.stage').waitFor({ timeout: 10000 });
+    await expectFocused(page, page.getByRole('button', { name: '썸네일 버튼 켜짐' }), 'thumbnail button header icon');
+    await expectOverlayDot(page, 'on');
+    await saveScreenshot(page, 'popup-header-on-light.png');
+
+    // 설정 아이콘으로도 같은 화면이 열린다. 스위치를 끄면 YouTube 권한을 해제한다.
+    await page.getByRole('button', { name: '설정', exact: true }).click();
+    await page.getByRole('heading', { name: '설정' }).waitFor({ timeout: 10000 });
+    await overlaySwitch.click();
+    await expectSwitchChecked(overlaySwitch, false);
+
+    /** 권한 해제 결과. */
+    const removal = await page.evaluate(() => ({
+      count: globalThis.__myTubeExtractYoutubePermissionRemoveCount ?? 0,
+      granted: globalThis.__myTubeExtractYoutubePermissionGranted,
+    }));
+
+    if (removal.count !== 1 || removal.granted !== false) {
+      throw new Error(`Expected the switch to remove the YouTube permission: ${JSON.stringify(removal)}`);
+    }
+
+    await page.getByRole('button', { name: '뒤로' }).click();
+    await expectFocused(page, page.getByRole('button', { name: '설정', exact: true }), 'settings header icon');
+    await expectOverlayDot(page, 'off');
+
+    // 권한 창에서 거부하면 crimson 행과 이유 한 줄, 권한 다시 요청 버튼이 보이고 헤더 점이 crimson이 된다.
+    await page.getByRole('button', { name: '설정', exact: true }).click();
+    await overlaySwitch.click();
+    await page.evaluate(() => globalThis.__myTubeExtractAnswerPermissionRequest(false));
+    await expectAlertText(page, '권한이 거부되어 썸네일 버튼을 표시하지 않아요.');
+    await page.getByRole('button', { name: '권한 다시 요청' }).waitFor({ timeout: 10000 });
+    await expectNoHorizontalOverflow(page);
+    await saveScreenshot(page, 'popup-settings-denied-light.png');
+    await page.evaluate(() => document.documentElement.setAttribute('data-theme', 'dark'));
+    await saveScreenshot(page, 'popup-settings-denied-dark.png');
+    await page.evaluate(() => document.documentElement.setAttribute('data-theme', 'light'));
+    await page.getByRole('button', { name: '뒤로' }).click();
+    await page.getByRole('button', { name: '썸네일 버튼 권한 거부됨' }).waitFor({ timeout: 10000 });
+    await expectOverlayDot(page, 'problem');
+
+    // 권한 다시 요청을 허용하면 스위치가 켜진 상태로 돌아온다.
+    await page.getByRole('button', { name: '썸네일 버튼 권한 거부됨' }).click();
+    await page.getByRole('button', { name: '권한 다시 요청' }).click();
+    await page.evaluate(() => globalThis.__myTubeExtractAnswerPermissionRequest(true));
+    await expectSwitchChecked(overlaySwitch, true);
+
+    // 이미 켜 둔 사용자는 다시 연 Popup에서 바로 초록 점을 본다. 테마 선택도 유지된다.
+    /** 권한이 켜진 채로 다시 연 page. 테마 저장소를 공유하도록 같은 context에서 연다. */
+    const reopenedPage = await context.newPage();
+
+    await routeYoutubeThumbnails(reopenedPage, { available: true });
+    await installFakeChromeApi(reopenedPage, { storedOptions: {}, youtubePermissionGranted: true });
+    await reopenedPage.goto(`${origin}/popup.html`, { timeout: 10000, waitUntil: 'domcontentloaded' });
+    await reopenedPage.getByRole('button', { name: '썸네일 버튼 켜짐' }).waitFor({ timeout: 10000 });
+    await expectOverlayDot(reopenedPage, 'on');
+
+    if ((await reopenedPage.evaluate(() => document.documentElement.dataset.theme)) !== 'light') {
+      throw new Error('Expected the reopened popup to keep the light theme preference.');
+    }
+  } finally {
+    await browser.close();
+  }
+}
+
+/** 헤더 격자 아이콘의 권한 점 상태를 확인한다. */
+async function expectOverlayDot(page, expectedIndicator) {
+  await page.waitForFunction(
+    (indicator) => document.querySelector(`.popup-header [data-overlay] .overlay-dot--${indicator}`) !== null,
+    expectedIndicator,
+    { timeout: 10000 },
+  );
+}
+
+/** 테마 세 칸 중 고른 칸만 눌림 상태이고, 저장 값과 실제 적용 테마가 맞는지 확인한다. */
+async function expectThemeChoice(page, pressedName, storedPreference, appliedTheme) {
+  await page.getByRole('button', { name: pressedName, pressed: true }).waitFor({ timeout: 10000 });
+
+  /** 눌림 칸 수, 저장 값, 적용 테마. */
+  const state = await page.evaluate(() => ({
+    applied: document.documentElement.dataset.theme,
+    pressedCount: document.querySelectorAll('.theme-segments__option[aria-pressed="true"]').length,
+    stored: window.localStorage.getItem('mytube-extract-popup-theme-preference'),
+  }));
+
+  if (state.pressedCount !== 1 || state.stored !== storedPreference || state.applied !== appliedTheme) {
+    throw new Error(`Unexpected theme state for ${pressedName}: ${JSON.stringify(state)}`);
+  }
+}
+
+/** 스위치의 켜짐 상태를 확인한다. 권한 요청 중에는 스위치가 회전 아이콘으로 바뀌었다가 다시 그려지므로 locator로 다시 찾는다. */
+async function expectSwitchChecked(locator, expectedChecked) {
+  /** 기다릴 마감 시각. */
+  const deadline = Date.now() + 10000;
+
+  while (Date.now() < deadline) {
+    if ((await locator.count()) === 1 && (await locator.getAttribute('aria-checked')) === String(expectedChecked)) {
+      return;
+    }
+
+    await new Promise((resolve) => setTimeout(resolve, 50));
+  }
+
+  throw new Error(`Expected the switch to be ${expectedChecked ? 'on' : 'off'}.`);
+}
+
 /** 지정한 control에 포커스가 있는지 확인한다. */
 async function expectFocused(page, locator, description) {
   await locator.waitFor({ timeout: 10000 });
@@ -1150,6 +1323,11 @@ async function installFakeChromeApi(page, options) {
             return;
           }
 
+          if (message?.type === 'youtube-overlay-enable') {
+            globalThis.__myTubeExtractOverlayEnableCount =
+              (globalThis.__myTubeExtractOverlayEnableCount ?? 0) + 1;
+          }
+
           callback({ ok: true });
         },
       },
@@ -1202,7 +1380,24 @@ async function installFakeChromeApi(page, options) {
           callback(globalThis.__myTubeExtractYoutubePermissionGranted);
         },
         request(_permissions, callback) {
-          globalThis.__myTubeExtractYoutubePermissionGranted = true;
+          /** 사용자가 Chrome 권한 창에서 고른 답을 반영한다. */
+          function answer(granted) {
+            globalThis.__myTubeExtractYoutubePermissionGranted = granted;
+            callback(granted);
+          }
+
+          // 검사가 권한 창이 떠 있는 동안의 화면을 보려면 답을 붙잡아 두고 나중에 답한다.
+          if (chromeOptions.holdPermissionRequest) {
+            globalThis.__myTubeExtractAnswerPermissionRequest = answer;
+            return;
+          }
+
+          answer(true);
+        },
+        remove(_permissions, callback) {
+          globalThis.__myTubeExtractYoutubePermissionRemoveCount =
+            (globalThis.__myTubeExtractYoutubePermissionRemoveCount ?? 0) + 1;
+          globalThis.__myTubeExtractYoutubePermissionGranted = false;
           callback(true);
         },
       },

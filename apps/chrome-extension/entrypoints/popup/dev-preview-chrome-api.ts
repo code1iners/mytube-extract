@@ -250,6 +250,13 @@ function createDevPreviewChromeApi({
         youtubePermissionGranted = true;
         callback(true);
       },
+      remove(
+        _permissions: chrome.permissions.Permissions,
+        callback: (removed: boolean) => void,
+      ) {
+        youtubePermissionGranted = false;
+        callback(true);
+      },
     },
   };
 

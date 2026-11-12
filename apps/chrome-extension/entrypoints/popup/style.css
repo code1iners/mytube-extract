@@ -75,6 +75,12 @@ button:disabled { cursor: not-allowed; }
 .icon-button:hover:not(:disabled) { background: var(--color-surface-alt); color: var(--color-text-primary); }
 .icon-button:disabled { color: var(--color-text-disabled); }
 .icon-button .icon { width: 20px; height: 20px; }
+/* 격자 아이콘의 권한 점: 빨간 점 = 아직 켜지 않음·확인 중, 초록 점 = 켜짐, crimson 점 = 거부·오류. 이름이 같은 뜻을 전한다. */
+.icon-button[data-overlay] { position: relative; }
+.overlay-dot { position: absolute; top: 8px; right: 8px; width: 10px; height: 10px; border-radius: 9999px; box-shadow: 0 0 0 2px var(--color-canvas); }
+.overlay-dot--off { background: var(--color-primary); }
+.overlay-dot--on { background: var(--color-status-completed); }
+.overlay-dot--problem { background: var(--color-status-failed); }
 
 .stage-form { display: grid; gap: 0; }
 /* 무대와 붙여넣기 칸은 같은 16:9 자리를 차지해 원본이 바뀌어도 아래 조작 위치가 그대로다. */
@@ -182,6 +188,31 @@ button:disabled { cursor: not-allowed; }
 .recent-row__wait--processing { color: var(--color-status-processing); }
 .recent-empty { display: grid; place-items: center; padding: 40px 0; color: var(--color-text-disabled); }
 .recent-empty .icon { width: 48px; height: 48px; stroke-width: 1.4; }
+/* 설정 화면: 행은 surface 한 겹만 쓰고 카드를 겹치지 않는다. */
+.settings { display: grid; gap: 12px; }
+.settings-row { display: flex; min-height: 68px; align-items: center; gap: 12px; padding: 12px; border-radius: 12px; background: var(--color-surface); color: var(--color-text-secondary); }
+.settings-row > .icon { width: 20px; height: 20px; }
+.settings-row__name { flex: 1; min-width: 0; color: var(--color-text-primary); font-size: 15px; font-weight: 600; }
+.settings-row__note { flex: 1; margin: 0; color: var(--color-text-primary); font-size: 14px; line-height: 1.45; }
+.settings-row.is-problem { background: color-mix(in srgb, var(--color-status-failed) 8%, var(--color-surface)); }
+.settings-row__warn { color: var(--color-status-failed); }
+.settings-row__retry { display: grid; width: 44px; height: 44px; flex: none; place-items: center; padding: 0; border: 0; border-radius: 9999px; background: var(--color-canvas); color: var(--color-primary); }
+.settings-row__retry .icon, .settings-row__wait .icon { width: 20px; height: 20px; }
+.settings-row__wait { display: grid; width: 52px; height: 44px; flex: none; place-items: center; color: var(--color-status-processing); }
+.settings-problem { margin: -4px 0 0; }
+.settings-fine { margin: 0; padding: 0 4px; color: var(--color-text-secondary); font-size: 14px; line-height: 1.45; }
+.theme-segments { display: flex; flex: 1; gap: 4px; }
+.theme-segments__option { display: grid; height: 44px; flex: 1; place-items: center; padding: 0; border: 0; border-radius: 8px; background: transparent; color: var(--color-text-secondary); }
+.theme-segments__option:hover { background: var(--color-surface-alt); }
+.theme-segments__option[aria-pressed='true'] { background: var(--color-canvas); box-shadow: inset 0 0 0 2px var(--color-primary); color: var(--color-primary); }
+.theme-segments__option .icon { width: 20px; height: 20px; }
+/* 스위치는 52×32 트랙을 그리지만 조작 영역은 세로 44px을 확보한다. */
+.switch { position: relative; width: 52px; height: 44px; flex: none; padding: 0; border: 0; background: transparent; }
+.switch::before { content: ''; position: absolute; top: 6px; left: 0; width: 52px; height: 32px; border-radius: 9999px; background: var(--color-text-secondary); transition: background 150ms; }
+.switch::after { content: ''; position: absolute; top: 9px; left: 3px; width: 26px; height: 26px; border-radius: 9999px; background: var(--color-canvas); transition: transform 150ms; }
+.switch[aria-checked='true']::before { background: var(--color-status-completed); }
+.switch[aria-checked='true']::after { transform: translateX(20px); }
+.switch:disabled::before { background: var(--color-text-disabled); }
 :focus-visible { outline: 2px solid var(--color-focus); outline-offset: 2px; }
 @media (max-width: 400px) { body { width: 100vw; } }
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; transition: none !important; } }

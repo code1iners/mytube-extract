@@ -28,6 +28,7 @@ import {
   type YoutubeOverlayEnableResponse,
   YOUTUBE_OVERLAY_SCRIPT_FILE,
 } from '../src/features/youtube-overlay/youtube-overlay-message';
+import { createYoutubeOverlayInjector } from '../src/features/youtube-overlay/youtube-overlay-injection';
 import { isSupportedYoutubePageUrl } from '../src/features/youtube-overlay/youtube-page';
 
 /** Background에서 사용하는 MyTube Extract API client. */
@@ -39,8 +40,12 @@ const downloads = createDownloadsAdapter();
 /** Background에서 사용하는 Chrome notifications adapter. */
 const notifications = createDownloadNotificationsAdapter();
 
-/** Background에서 사용하는 YouTube permission adapter. */
-const youtubeOverlay = createYoutubeOverlayAdapter();
+/** 권한이 있을 때만 YouTube 탭에 Overlay를 주입한다. 권한을 해제하면 이후 자동 주입이 멈춘다. */
+const youtubeOverlayInjector = createYoutubeOverlayInjector({
+  injectScript: injectOverlayIntoTab,
+  permission: createYoutubeOverlayAdapter(),
+  queryActiveTabs,
+});
 
 /** 최근 다운로드 job을 Popup 재오픈 후에도 읽을 수 있도록 영속 저장하는 adapter. */
 const downloadJobStorage = createDownloadJobStorageAdapter();
@@ -100,7 +105,7 @@ export default defineBackground(() => {
 
   chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     if (isYoutubeOverlayEnableRequest(message)) {
-      void activateCurrentYoutubeTab()
+      void youtubeOverlayInjector.activateActiveYoutubeTabs()
         .then<YoutubeOverlayEnableResponse>(() => ({ ok: true }))
         .catch((error: unknown) => ({
           message: getErrorMessage(
@@ -159,43 +164,10 @@ export default defineBackground(() => {
   void injectExistingYoutubeTabs();
 });
 
-/** Popup 활성화 요청 이후 현재 활성 탭에 Overlay를 주입한다. */
-async function activateCurrentYoutubeTab(): Promise<void> {
-  if (!(await youtubeOverlay.isEnabled())) {
-    throw new Error('YouTube 권한이 허용되지 않았어요.');
-  }
-
-  /** 현재 활성 탭 목록. */
-  const tabs = await queryActiveTabs();
-
-  await Promise.all(
-    tabs
-      .filter(
-        (tab): tab is chrome.tabs.Tab & { id: number } =>
-          typeof tab.id === 'number' && isSupportedYoutubePageUrl(tab.url),
-      )
-      .map((tab) => injectOverlayIntoTab(tab.id)),
-  );
-}
-
 /** service worker 시작 시 권한이 이미 있는 YouTube 탭에 Overlay를 주입한다. */
 async function injectExistingYoutubeTabs(): Promise<void> {
   try {
-    if (!(await youtubeOverlay.isEnabled())) {
-      return;
-    }
-
-    /** 현재 브라우저의 활성 탭 목록. */
-    const tabs = await queryActiveTabs();
-
-    await Promise.all(
-      tabs
-        .filter(
-          (tab): tab is chrome.tabs.Tab & { id: number } =>
-            typeof tab.id === 'number' && isSupportedYoutubePageUrl(tab.url),
-        )
-        .map((tab) => injectOverlayIntoTab(tab.id)),
-    );
+    await youtubeOverlayInjector.injectActiveYoutubeTabs();
   } catch {
     // 브라우저 시작 직후 탭 정보가 아직 준비되지 않은 경우 다음 탭 이벤트에서 재시도한다.
   }
@@ -206,14 +178,8 @@ async function injectTabIfEnabled(
   tabId: number,
   pageUrl: string | undefined,
 ): Promise<void> {
-  if (!isSupportedYoutubePageUrl(pageUrl)) {
-    return;
-  }
-
   try {
-    if (await youtubeOverlay.isEnabled()) {
-      await injectOverlayIntoTab(tabId);
-    }
+    await youtubeOverlayInjector.injectTabIfEnabled(tabId, pageUrl);
   } catch {
     // chrome:// 페이지 전환, 탭 종료 등 주입할 수 없는 상태는 다음 navigation에서 재시도한다.
   }
