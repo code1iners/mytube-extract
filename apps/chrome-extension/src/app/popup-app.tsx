@@ -2,7 +2,7 @@ import { type ChangeEvent, type FormEvent, type RefObject, useEffect, useRef, us
 import { type DownloadJob } from '../domain/download-job/download-job';
 import { type DownloadMode } from '../domain/download-options/download-options';
 import { getQualityOptions } from '../domain/download-options/quality-options';
-import { type StageSource } from '../domain/popup-state/popup-state';
+import { type StageSource, hasStageVideo } from '../domain/popup-state/popup-state';
 import { type PopupDownloadModel, type PopupDownloadSnapshot, createChromePopupDownloadModel } from '../features/popup-download/popup-download-model';
 import { type PopupIconName, PopupIcon } from './popup-icons';
 
@@ -21,6 +21,9 @@ const MODE_OPTIONS: ReadonlyArray<{ /** 다운로드 형식. */ mode: DownloadMo
   { icon: 'audio', label: '오디오 MP3', mode: 'audio' },
   { icon: 'video', label: '비디오 MP4', mode: 'video' },
 ];
+
+/** 잘못된 주소의 이유 한 줄 element ID. 붙여넣기 칸이 aria-describedby로 가리킨다. */
+const SOURCE_URL_REASON_ID = 'source-url-reason';
 
 /** Popup download app component. */
 export function PopupApp() {
@@ -130,10 +133,10 @@ export function PopupApp() {
   return <main className="popup-shell" data-stage={stageSource.kind} data-status={snapshot.status.kind}>
     <PopupHeader />
     <form className="stage-form" onSubmit={handleSubmit}>
-      {stageSource.kind === 'tab' || stageSource.kind === 'pasted'
+      {hasStageVideo(stageSource)
         ? <StageThumbnail key={stageSource.thumbnailUrl} thumbnailUrl={stageSource.thumbnailUrl} />
-        : <PasteField inputRef={sourceInputRef} invalid={stageSource.kind === 'invalid'} reasonId="source-url-reason" sourceUrl={snapshot.options.sourceUrl} onChange={handleSourceUrlChange} onClear={handleClearSourceUrl} />}
-      <StageLine reason={snapshot.status.message} reasonId="source-url-reason" stageSource={stageSource} />
+        : <PasteField inputRef={sourceInputRef} invalid={stageSource.kind === 'invalid'} sourceUrl={snapshot.options.sourceUrl} onChange={handleSourceUrlChange} onClear={handleClearSourceUrl} />}
+      <StageLine reason={snapshot.status.message} stageSource={stageSource} />
       <div className="stage-controls">
         <ModeToggle mode={snapshot.options.mode} onChange={handleModeChange} />
         <QualityBars mode={snapshot.options.mode} value={snapshot.options.mode === 'audio' ? snapshot.options.bitrate : snapshot.options.resolution} onChange={handleQualityChange} />
@@ -169,19 +172,19 @@ function StageThumbnail(props: { /** YouTube 썸네일 주소. */ thumbnailUrl: 
 }
 
 /** 무대 자리의 붙여넣기 칸. 붙여넣기와 타이핑 모두 받는 실제 주소 입력이다. */
-function PasteField(props: { /** 주소 입력 ref. */ inputRef: RefObject<HTMLInputElement | null>; /** 잘못된 주소 여부. */ invalid: boolean; /** 이유 한 줄 element ID. */ reasonId: string; /** 현재 입력값. */ sourceUrl: string; /** 입력 변경. */ onChange: (event: ChangeEvent<HTMLInputElement>) => void; /** 지우기. */ onClear: () => void }) {
+function PasteField(props: { /** 주소 입력 ref. */ inputRef: RefObject<HTMLInputElement | null>; /** 잘못된 주소 여부. */ invalid: boolean; /** 현재 입력값. */ sourceUrl: string; /** 입력 변경. */ onChange: (event: ChangeEvent<HTMLInputElement>) => void; /** 지우기. */ onClear: () => void }) {
   return <div className={props.invalid ? 'paste-field is-invalid' : 'paste-field'}>
     <PopupIcon className="paste-field__icon" name={props.invalid ? 'link-off' : 'link'} />
     <div className="paste-field__row">
-      <input ref={props.inputRef} aria-describedby={props.invalid ? props.reasonId : undefined} aria-invalid={props.invalid || undefined} aria-label="YouTube 주소" autoComplete="off" autoFocus className="paste-field__input" name="sourceUrl" placeholder="YouTube 주소 붙여넣기" spellCheck={false} type="url" value={props.sourceUrl} onChange={props.onChange} />
+      <input ref={props.inputRef} aria-describedby={props.invalid ? SOURCE_URL_REASON_ID : undefined} aria-invalid={props.invalid || undefined} aria-label="YouTube 주소" autoComplete="off" autoFocus className="paste-field__input" name="sourceUrl" placeholder="YouTube 주소 붙여넣기" spellCheck={false} type="url" value={props.sourceUrl} onChange={props.onChange} />
       {props.sourceUrl ? <button aria-label="주소 지우기" className="icon-button" type="button" onClick={props.onClear}><PopupIcon name="x" /></button> : null}
     </div>
   </div>;
 }
 
 /** 무대 아래 한 줄. 영상 제목(모르면 영상 ID)이나 잘못된 주소의 이유를 보여준다. */
-function StageLine(props: { /** 무대 원본. */ stageSource: StageSource; /** 잘못된 주소의 이유. */ reason: string; /** 이유 한 줄 element ID. */ reasonId: string }) {
-  if (props.stageSource.kind === 'tab' || props.stageSource.kind === 'pasted') {
+function StageLine(props: { /** 무대 원본. */ stageSource: StageSource; /** 잘못된 주소의 이유. */ reason: string }) {
+  if (hasStageVideo(props.stageSource)) {
     /** 화면에 보일 제목. */
     const title = props.stageSource.title ?? props.stageSource.videoId;
 
@@ -189,7 +192,7 @@ function StageLine(props: { /** 무대 원본. */ stageSource: StageSource; /** 
   }
 
   if (props.stageSource.kind === 'invalid') {
-    return <p className="stage-line stage-line--error" id={props.reasonId} role="alert">{props.reason}</p>;
+    return <p className="stage-line stage-line--error" id={SOURCE_URL_REASON_ID} role="alert">{props.reason}</p>;
   }
 
   // 붙여넣기 칸만 있을 때도 아래 조작의 위치가 흔들리지 않게 같은 높이를 비워 둔다.

@@ -144,10 +144,20 @@ export function deriveStageSource(sourceUrl: string, tabVideo: TabVideo | null):
     return { input: sourceUrl, kind: 'invalid' };
   }
 
-  // 붙여넣은 주소라도 활성 탭과 같은 영상이면 탭 제목을 그대로 쓸 수 있다.
-  if (tabVideo?.videoId === videoId) {
-    return { kind: 'tab', thumbnailUrl: getYoutubeThumbnailUrl(videoId), title: tabVideo.title, videoId };
-  }
+  /** 원본이 활성 탭 영상인지 여부. 붙여넣은 주소라도 탭과 같은 영상이면 탭 제목을 그대로 쓸 수 있어 `tab`으로 본다. */
+  const isTabVideo = tabVideo?.videoId === videoId;
 
-  return { kind: 'pasted', thumbnailUrl: getYoutubeThumbnailUrl(videoId), title: null, videoId };
+  return {
+    kind: isTabVideo ? 'tab' : 'pasted',
+    thumbnailUrl: getYoutubeThumbnailUrl(videoId),
+    title: isTabVideo ? tabVideo.title : null,
+    videoId,
+  };
+}
+
+/** 무대에 영상이 올라와 있는지 확인한다. */
+export function hasStageVideo(
+  stageSource: StageSource,
+): stageSource is Extract<StageSource, { kind: 'tab' | 'pasted' }> {
+  return stageSource.kind === 'tab' || stageSource.kind === 'pasted';
 }

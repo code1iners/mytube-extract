@@ -12,8 +12,7 @@ export type TabsAdapter = {
   getCurrentTab(): Promise<CurrentTab>;
 };
 
-/** Chrome tabs adapter를 만든다. */
-// Popup을 연 아이콘 클릭이 activeTab을 부여하므로 추가 권한 없이 활성 탭 URL·제목을 읽을 수 있다.
+/** Chrome tabs adapter를 만든다. Popup을 연 아이콘 클릭이 activeTab을 부여하므로 추가 권한 없이 활성 탭 URL·제목을 읽을 수 있다. */
 export function createTabsAdapter(chromeApi: typeof chrome = chrome): TabsAdapter {
   return {
     getCurrentTab() {

@@ -159,8 +159,8 @@ export function createPopupDownloadModel(
   let tabVideo: TabVideo | null = null;
 
   /** Snapshot을 갱신하고 listener에게 알린다. */
-  // 무대 원본은 모든 갱신 경로에서 원본 URL로 다시 도출해 입력값과 어긋나지 않게 한다.
   function setSnapshot(nextSnapshot: PopupDownloadSnapshot) {
+    // 무대 원본은 모든 갱신 경로에서 원본 URL로 다시 도출해 입력값과 어긋나지 않게 한다.
     snapshot = {
       ...nextSnapshot,
       stageSource: deriveStageSource(nextSnapshot.options.sourceUrl, tabVideo),
@@ -332,8 +332,7 @@ export function createPopupDownloadModel(
           tabVideo = { title: parseYoutubeTabTitle(currentTab.title), videoId };
         }
       } catch {
-        // 탭을 읽지 못하면 붙여넣기 칸에서 시작한다.
-        tabSourceUrl = '';
+        // 탭을 읽지 못하면 원본 없이 붙여넣기 칸에서 시작한다.
       }
 
       // 원본 URL은 저장하지 않으므로 저장된 값 대신 활성 탭에서 매번 새로 정한다.
