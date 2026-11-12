@@ -226,7 +226,7 @@ describe('Chrome download notifications adapter', () => {
     const adapter = createDownloadNotificationsAdapter(chrome.chromeApi);
 
     await expect(adapter.showCompleted(createJob({ status: 'completed' }))).rejects.toThrow(
-      'Could not show the download notification.',
+      '다운로드 알림을 표시하지 못했어요.',
     );
   });
 });

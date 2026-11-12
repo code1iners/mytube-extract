@@ -82,6 +82,11 @@ const staticServer = await createStaticServer(extensionOutputRoot);
     /** 서버 실패 flow에서 수집한 fake API 요청. */
     const unavailableFakeApiRequests = await verifyServerUnavailableFlow(staticServer.origin);
   console.error('[popup-smoke] server unavailable flow ok');
+  /** 접수 거부 flow에서 수집한 fake API 요청. */
+  const rejectedFakeApiRequests = await verifyRejectedRequestFlow(staticServer.origin);
+  console.error('[popup-smoke] rejected request flow ok');
+  await verifyRestoredProgressAndReducedMotion(staticServer.origin);
+  console.error('[popup-smoke] restored progress and reduced motion ok');
   /** 다운로드 flow에서 수집한 fake API 요청. */
   const fakeApiRequests = await verifyDownloadFlow(staticServer.origin);
   console.error('[popup-smoke] download flow ok');
@@ -93,6 +98,7 @@ const staticServer = await createStaticServer(extensionOutputRoot);
         mode: smokeMode,
         outputRoot: extensionOutputRoot,
         fakeApiRequests,
+        rejectedFakeApiRequests,
         unavailableFakeApiRequests,
         status: 'ok',
       },
@@ -348,7 +354,7 @@ async function verifyServerUnavailableFlow(origin) {
   /** Browser instance. */
   const browser = await chromium.launch();
   /** Browser page. */
-  const page = await browser.newPage();
+  const page = await browser.newPage({ viewport: { width: 360, height: 600 } });
   /** Fake API 요청 목록. */
   const requests = [];
 
@@ -367,10 +373,15 @@ async function verifyServerUnavailableFlow(origin) {
 
     await page.locator('figure.stage').waitFor({ timeout: 10000 });
     await page.getByRole('button', { name: '추출 시작' }).click();
-    await expectStatusText(page, 'Server is unavailable.');
+    // 서버 연결 실패는 구름 아이콘 덮개와 고정 문장으로 일반 실패와 구분된다.
+    await page.locator('figure.stage [data-veil="unreachable"]').waitFor({ timeout: 10000 });
+    await expectAlertText(page, '서버에 연결할 수 없어요');
     // 같은 자리의 추출 버튼이 같은 조건 재시도로 바뀐다.
     await page.getByRole('button', { name: '다시 시도' }).waitFor({ timeout: 10000 });
-    await page.locator('figure.stage').waitFor({ timeout: 10000 });
+    await saveScreenshot(page, 'popup-unreachable-light.png');
+    await page.getByRole('button', { name: '다시 시도' }).click();
+    await waitForRequestCount(requests, 'GET /health', 2);
+    await page.locator('figure.stage [data-veil="unreachable"]').waitFor({ timeout: 10000 });
 
     /** Fake Chrome downloads API가 요청한 URL. */
     const downloadUrl = await page.evaluate(() => globalThis.__myTubeExtractDownloadUrl);
@@ -398,6 +409,7 @@ async function verifyDownloadFlow(origin) {
 
   try {
     await routeMyTubeExtractApi(page, {
+      healthDelayMs: 800,
       requestBodies,
       requests,
       healthOk: true,
@@ -429,7 +441,19 @@ async function verifyDownloadFlow(origin) {
     await expectDownloadButtonDisabled(page, false);
     await expectDownloadButtonVisibleInViewport(page);
     await page.getByRole('button', { name: '추출 시작' }).click();
-    await expectStatusText(page, '추출 요청을 시작했습니다.');
+    // 서버 확인 동안은 회전 링 덮개, 회색 회전 버튼, 잠긴 형식·품질을 보여준다.
+    await page.locator('figure.stage [data-veil="checking"]').waitFor({ timeout: 10000 });
+    await page.getByRole('button', { name: '서버 확인 중' }).waitFor({ timeout: 10000 });
+    await expectLiveText(page, '서버 확인 중');
+    await expectRadiosDisabled(page, true);
+    await saveScreenshot(page, 'popup-checking-light.png');
+    // 완료는 초록 체크 덮개를 잠깐 보여 준 뒤 준비 상태로 돌아간다.
+    await page.locator('figure.stage [data-veil="done"]').waitFor({ timeout: 10000 });
+    await expectLiveText(page, '다운로드를 시작했어요');
+    await saveScreenshot(page, 'popup-done-light.png');
+    await page.locator('figure.stage [data-veil]').waitFor({ state: 'detached', timeout: 5000 });
+    await expectDownloadButtonDisabled(page, false);
+    await expectRadiosDisabled(page, false);
     await page.getByRole('heading', { name: '최근 요청' }).waitFor({ timeout: 10000 });
 
     /** 완료된 job 목록 항목 수. */
@@ -470,8 +494,194 @@ async function verifyDownloadFlow(origin) {
   }
 }
 
+/** Built popup에서 서버가 접수를 거부한 실패 덮개와 같은 조건 재시도를 확인한다. */
+async function verifyRejectedRequestFlow(origin) {
+  /** Browser instance. */
+  const browser = await chromium.launch();
+  /** Browser page. */
+  const page = await browser.newPage({ viewport: { width: 360, height: 600 } });
+  /** Fake API 요청 목록. */
+  const requests = [];
+  /** Fake API가 받은 요청 본문 목록. */
+  const requestBodies = [];
+
+  try {
+    await routeMyTubeExtractApi(page, {
+      createRejectMessage: '지원하지 않는 영상이에요.',
+      healthOk: true,
+      requestBodies,
+      requests,
+    });
+    await routeYoutubeThumbnails(page, { available: true });
+    await installFakeChromeApi(page, {
+      currentTabTitle: '거부되는 영상 - YouTube',
+      storedOptions: { mode: 'video', resolution: '720' },
+    });
+    await page.goto(`${origin}/popup.html`, { timeout: 10000, waitUntil: 'domcontentloaded' });
+
+    await page.locator('figure.stage').waitFor({ timeout: 10000 });
+    await page.getByRole('button', { name: '추출 시작' }).click();
+    // 접수 거부는 어두운 덮개 위 경고 아이콘과 서버가 준 이유 한 줄이다.
+    await page.locator('figure.stage [data-veil="failed"]').waitFor({ timeout: 10000 });
+    await expectAlertText(page, '지원하지 않는 영상이에요.');
+    await page.getByRole('button', { name: '다시 시도' }).waitFor({ timeout: 10000 });
+    await expectRadiosDisabled(page, false);
+    await saveScreenshot(page, 'popup-failed-light.png');
+    await page.emulateMedia({ colorScheme: 'dark' });
+    await page.evaluate(() => document.documentElement.setAttribute('data-theme', 'dark'));
+    await saveScreenshot(page, 'popup-failed-dark.png');
+
+    await page.getByRole('button', { name: '다시 시도' }).click();
+    await waitForRequestCount(requests, 'POST /downloads', 2);
+    await page.locator('figure.stage [data-veil="failed"]').waitFor({ timeout: 10000 });
+
+    /** 두 번의 job 생성 요청 본문. */
+    const createBodies = requestBodies.filter((item) => item.path === '/downloads').map((item) => JSON.stringify(item.body));
+
+    if (createBodies.length !== 2 || createBodies[0] !== createBodies[1] || !createBodies[0].includes('"quality":"720"')) {
+      throw new Error(`Expected the retry to resend the same request, got ${JSON.stringify(createBodies)}`);
+    }
+
+    return requests;
+  } finally {
+    await browser.close();
+  }
+}
+
+/** 다시 연 Popup이 같은 영상의 진행 단계를 복원하고, 줄어든 동작 설정에서 회전을 멈추는지 확인한다. */
+async function verifyRestoredProgressAndReducedMotion(origin) {
+  /** Browser instance. */
+  const browser = await chromium.launch();
+
+  try {
+    for (const status of ['queued', 'processing']) {
+      for (const reducedMotion of ['no-preference', 'reduce']) {
+        /** 상태를 복원할 page. */
+        const page = await browser.newPage({ reducedMotion, viewport: { width: 360, height: 600 } });
+
+        await routeYoutubeThumbnails(page, { available: true });
+        await installFakeChromeApi(page, {
+          currentTabTitle: '진행 중인 영상 - YouTube',
+          storedOptions: {
+            mode: 'audio',
+            recentDownloadJobs: [
+              {
+                createdAt: new Date().toISOString(),
+                displayStatus: status,
+                downloadUrl: null,
+                errorCode: null,
+                jobId: `job-${status}`,
+                message: '진행 중입니다.',
+                progress: status === 'queued' ? 0 : 50,
+                quality: '192',
+                retentionDays: 7,
+                sourceUrl: 'https://www.youtube.com/watch?v=abc123_DEF0',
+                status,
+                title: null,
+                type: 'audio',
+              },
+            ],
+          },
+        });
+        await page.goto(`${origin}/popup.html`, { timeout: 10000, waitUntil: 'domcontentloaded' });
+
+        await page.locator(`figure.stage [data-veil="${status}"]`).waitFor({ timeout: 10000 });
+        await page.getByRole('button', { name: status === 'queued' ? '대기 중' : '처리 중' }).waitFor({ timeout: 10000 });
+        await expectLiveText(page, status === 'queued' ? '대기 중' : '처리 중');
+        await expectDownloadButtonState(page, status === 'queued' ? '대기 중' : '처리 중', true);
+        await expectRadiosDisabled(page, true);
+
+        /** 회전 링·버튼 아이콘·덮개의 애니메이션 이름. */
+        const animations = await page.evaluate(() =>
+          ['.stage-ring', '.extract-button .is-spinning', '.stage-veil'].map(
+            (selector) => getComputedStyle(document.querySelector(selector)).animationName,
+          ),
+        );
+        /** 줄어든 동작 설정에서 모든 애니메이션이 꺼졌는지 여부. */
+        const allStopped = animations.every((name) => name === 'none');
+        /** 기본 설정에서 모든 애니메이션이 살아 있는지 여부. */
+        const allRunning = animations.every((name) => name !== 'none');
+
+        if (reducedMotion === 'reduce' ? !allStopped : !allRunning) {
+          throw new Error(`Unexpected animations for ${status}/${reducedMotion}: ${JSON.stringify(animations)}`);
+        }
+
+        if (reducedMotion === 'no-preference') {
+          await saveScreenshot(page, `popup-${status}-light.png`);
+          await page.evaluate(() => document.documentElement.setAttribute('data-theme', 'dark'));
+          await saveScreenshot(page, `popup-${status}-dark.png`);
+        }
+
+        await page.close();
+      }
+    }
+  } finally {
+    await browser.close();
+  }
+}
+
+/** 스크린샷 폴더가 지정됐을 때만 현재 Popup을 캡처한다. */
+async function saveScreenshot(page, fileName) {
+  if (!screenshotDirectory) {
+    return;
+  }
+
+  fs.mkdirSync(screenshotDirectory, { recursive: true });
+  // 덮개 페이드인이 끝난 모습을 남긴다.
+  await page.waitForTimeout(400);
+  await expectNoHorizontalOverflow(page);
+  await page.screenshot({ fullPage: true, path: path.join(screenshotDirectory, fileName) });
+}
+
+/** 같은 fake API 요청이 기대 횟수만큼 들어올 때까지 기다린다. */
+async function waitForRequestCount(requests, requestLine, expectedCount) {
+  /** 기다릴 마감 시각. */
+  const deadline = Date.now() + 10000;
+
+  while (requests.filter((line) => line === requestLine).length < expectedCount) {
+    if (Date.now() > deadline) {
+      throw new Error(`Expected ${expectedCount} x ${requestLine}, got ${JSON.stringify(requests)}`);
+    }
+
+    await new Promise((resolve) => setTimeout(resolve, 50));
+  }
+}
+
+/** 무대 아래 오류 줄(alert)이 기대 문장이 될 때까지 기다린다. */
+async function expectAlertText(page, expectedText) {
+  await page.locator('.stage-problem[role="alert"]', { hasText: expectedText }).waitFor({ timeout: 10000 });
+}
+
+/** 진행 단계 live region 문장이 기대값이 될 때까지 기다린다. */
+async function expectLiveText(page, expectedText) {
+  await page.locator('p.visually-hidden[role="status"]', { hasText: expectedText }).waitFor({ state: 'attached', timeout: 10000 });
+}
+
+/** 형식·품질 radio가 모두 잠겼는지(또는 풀렸는지) 확인한다. */
+async function expectRadiosDisabled(page, expectedDisabled) {
+  /** radio별 disabled 여부. */
+  const states = await page.locator('input[type="radio"]').evaluateAll((inputs) => inputs.map((input) => input.disabled));
+
+  if (states.length === 0 || states.some((disabled) => disabled !== expectedDisabled)) {
+    throw new Error(`Expected radios disabled=${expectedDisabled}, got ${JSON.stringify(states)}`);
+  }
+}
+
+/** 이름이 주어진 추출 버튼의 disabled 상태를 확인한다. */
+async function expectDownloadButtonState(page, name, expectedDisabled) {
+  /** 버튼 disabled 여부. */
+  const disabled = await page.getByRole('button', { name }).evaluate((button) => button.disabled);
+
+  if (disabled !== expectedDisabled) {
+    throw new Error(`Expected "${name}" button disabled=${expectedDisabled}, got ${disabled}`);
+  }
+}
+
 /** Production API 요청을 browser smoke 안에서 fake 응답으로 처리한다. */
-async function routeMyTubeExtractApi(page, { requestBodies = [], requests, healthOk }) {
+async function routeMyTubeExtractApi(
+  page,
+  { createRejectMessage = null, healthDelayMs = 0, requestBodies = [], requests, healthOk },
+) {
   await page.route(`${expectedApiOrigin}/**`, async (route) => {
     /** 가로챈 production API 요청. */
     const request = route.request();
@@ -481,6 +691,11 @@ async function routeMyTubeExtractApi(page, { requestBodies = [], requests, healt
     requests.push(`${request.method()} ${requestUrl.pathname}${requestUrl.search}`);
 
     if (requestUrl.pathname === '/health') {
+      // 서버 확인 단계를 화면에서 붙잡을 수 있게 health 응답을 늦출 수 있다.
+      if (healthDelayMs) {
+        await new Promise((resolve) => setTimeout(resolve, healthDelayMs));
+      }
+
       await route.fulfill({
         status: healthOk ? 200 : 503,
         headers: {
@@ -498,6 +713,19 @@ async function routeMyTubeExtractApi(page, { requestBodies = [], requests, healt
       const body = request.postDataJSON();
 
       requestBodies.push({ body, path: requestUrl.pathname });
+
+      // 서버가 요청을 거부하는 경우는 안내 메시지와 함께 400을 돌려준다.
+      if (createRejectMessage) {
+        await route.fulfill({
+          status: 400,
+          headers: {
+            'Access-Control-Allow-Origin': '*',
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ message: createRejectMessage }),
+        });
+        return;
+      }
 
       await route.fulfill({
         status: 201,
@@ -592,17 +820,17 @@ async function installFakeChromeApi(page, options) {
         const healthResponse = await fetch(`${request.apiBaseUrl}/health`);
 
         if (!healthResponse.ok) {
-          return { message: 'Server is unavailable.', ok: false };
+          return { failure: 'unreachable', message: '서버에 연결할 수 없어요.', ok: false };
         }
 
         /** health check payload. */
         const healthPayload = await healthResponse.json();
 
         if (healthPayload?.ok !== true) {
-          return { message: 'Server health check failed.', ok: false };
+          return { failure: 'unreachable', message: '서버에 연결할 수 없어요.', ok: false };
         }
       } catch {
-        return { message: 'Server is unavailable.', ok: false };
+        return { failure: 'unreachable', message: '서버에 연결할 수 없어요.', ok: false };
       }
 
       try {
@@ -618,7 +846,14 @@ async function installFakeChromeApi(page, options) {
         });
 
         if (!createResponse.ok) {
-          return { message: 'Could not create the download job.', ok: false };
+          /** 거부 응답의 서버 안내 메시지. */
+          const rejectPayload = await createResponse.json().catch(() => null);
+
+          return {
+            failure: 'rejected',
+            message: rejectPayload?.message ?? '서버가 요청을 처리하지 못했어요.',
+            ok: false,
+          };
         }
 
         /** 생성된 job. */
@@ -651,7 +886,7 @@ async function installFakeChromeApi(page, options) {
 
         return { job, ok: true };
       } catch {
-        return { message: 'Could not reach the server to create the download job.', ok: false };
+        return { failure: 'unreachable', message: '서버에 연결할 수 없어요.', ok: false };
       }
     }
 

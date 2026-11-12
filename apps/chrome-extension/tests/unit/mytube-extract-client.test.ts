@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
   DownloadJobRequestError,
+  ServerUnreachableError,
   createMyTubeExtractClient,
 } from '../../src/services/mytube-extract/mytube-extract-client';
 
@@ -223,9 +224,24 @@ describe('mytube extract client download jobs', () => {
       .catch((error: unknown) => error);
 
     expect(thrownError).not.toBeInstanceOf(DownloadJobRequestError);
-    expect(thrownError).toBeInstanceOf(Error);
-    expect((thrownError as Error).message).toBe(
-      'Could not reach the server to create the download job.',
-    );
+    expect(thrownError).toBeInstanceOf(ServerUnreachableError);
+    expect((thrownError as Error).message).toBe('서버에 연결할 수 없어요.');
+  });
+
+  it('treats a failed or unhealthy health check as an unreachable server', async () => {
+    /** 네트워크 오류, 503, ok=false 응답을 차례로 돌려주는 가짜 fetch 함수. */
+    const fetchMock = vi
+      .fn()
+      .mockRejectedValueOnce(new TypeError('network down'))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ ok: false }), { status: 503 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ ok: false }), { status: 200 }));
+    /** 테스트용 client. */
+    const client = createMyTubeExtractClient({ fetch: fetchMock });
+
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      await expect(client.assertServerAvailable('http://127.0.0.1:3030')).rejects.toBeInstanceOf(
+        ServerUnreachableError,
+      );
+    }
   });
 });

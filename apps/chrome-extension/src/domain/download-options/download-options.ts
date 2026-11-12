@@ -73,14 +73,14 @@ export function normalizeApiBaseUrl(apiBaseUrl: string | undefined): string {
   const trimmedBaseUrl = apiBaseUrl?.trim() ?? '';
 
   if (!trimmedBaseUrl) {
-    throw new Error('API base URL is required');
+    throw new Error('API 주소가 필요해요.');
   }
 
   /** URL 객체로 검증한 API base URL. */
   const url = new URL(trimmedBaseUrl);
 
   if (!['http:', 'https:'].includes(url.protocol)) {
-    throw new Error('API base URL must use http or https');
+    throw new Error('API 주소는 http 또는 https여야 해요.');
   }
 
   return url.toString().replace(/\/$/, '');
@@ -101,7 +101,7 @@ export function normalizeSourceUrl(sourceUrl: string | undefined): string {
   const trimmedSourceUrl = sourceUrl?.trim() ?? '';
 
   if (!trimmedSourceUrl) {
-    throw new Error('A valid source URL is required');
+    throw new Error('올바른 원본 주소가 필요해요.');
   }
 
   /** URL 객체로 검증한 source URL. */
@@ -110,14 +110,14 @@ export function normalizeSourceUrl(sourceUrl: string | undefined): string {
   try {
     url = new URL(trimmedSourceUrl);
   } catch {
-    throw new Error('A valid source URL is required');
+    throw new Error('올바른 원본 주소가 필요해요.');
   }
 
   /** 원본 URL에서 추출한 YouTube video ID. */
   const videoId = getYoutubeVideoId(url);
 
   if (!videoId) {
-    throw new Error('YouTube watch URL is required');
+    throw new Error('지원하는 YouTube 영상 주소가 필요해요.');
   }
 
   if (isYoutubeWatchUrl(url)) {
@@ -197,6 +197,6 @@ export function isDownloadMode(mode: unknown): mode is DownloadMode {
 /** 지원하지 않는 다운로드 모드면 오류를 던진다. */
 export function assertDownloadMode(mode: unknown): asserts mode is DownloadMode {
   if (!DOWNLOAD_MODES.has(mode as DownloadMode)) {
-    throw new Error('Unsupported download mode');
+    throw new Error('지원하지 않는 형식이에요.');
   }
 }

@@ -44,7 +44,7 @@ export function createActiveDownloadJobsStorageAdapter(
     return new Promise((resolve, reject) => {
       chromeApi.storage.local.get([ACTIVE_DOWNLOAD_JOBS_STORAGE_KEY], (items) => {
         if (chromeApi.runtime.lastError) {
-          reject(new Error('Could not load the tracked download jobs.'));
+          reject(new Error('진행 중인 요청을 불러오지 못했어요.'));
           return;
         }
 
@@ -64,7 +64,7 @@ export function createActiveDownloadJobsStorageAdapter(
         { [ACTIVE_DOWNLOAD_JOBS_STORAGE_KEY]: recordsByJobId },
         () => {
           if (chromeApi.runtime.lastError) {
-            reject(new Error('Could not save the tracked download job.'));
+            reject(new Error('진행 중인 요청을 저장하지 못했어요.'));
             return;
           }
 

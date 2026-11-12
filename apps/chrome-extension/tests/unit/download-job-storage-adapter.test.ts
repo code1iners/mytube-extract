@@ -232,7 +232,7 @@ describe('download job storage adapter', () => {
     const adapter = createDownloadJobStorageAdapter(chromeApi);
 
     await expect(adapter.loadLatestJob()).rejects.toThrow(
-      'Could not load the latest download job.',
+      '마지막 요청을 불러오지 못했어요.',
     );
   });
 
@@ -262,7 +262,7 @@ describe('download job storage adapter', () => {
     const adapter = createDownloadJobStorageAdapter(chromeApi);
 
     await expect(adapter.saveLatestJob(createJob())).rejects.toThrow(
-      'Could not save the latest download job.',
+      '마지막 요청을 저장하지 못했어요.',
     );
   });
 

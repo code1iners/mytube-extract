@@ -97,7 +97,7 @@ type JobTrackingOptions = {
 /** job이 실패 상태로 끝났을 때 던지는 오류. 실패 사유와 원본 job을 함께 전달한다. */
 export class DownloadJobFailedError extends Error {
   constructor(job: DownloadJob) {
-    super(job.message || 'Download job failed.');
+    super(job.message || '추출하지 못했어요.');
     this.name = 'DownloadJobFailedError';
     this.job = job;
   }

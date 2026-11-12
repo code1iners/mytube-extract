@@ -42,11 +42,11 @@ export function createYoutubeOverlayDownloadJobInput(
   input: YoutubeOverlayDownloadInput,
 ): YoutubeOverlayDownloadJobInput {
   if (!isYoutubeVideoId(input.videoId)) {
-    throw new Error('A valid YouTube video ID is required.');
+    throw new Error('올바른 YouTube 영상이 아니에요.');
   }
 
   if (!isQualityOption(input.mode, input.quality)) {
-    throw new Error('Unsupported YouTube overlay quality.');
+    throw new Error('지원하지 않는 품질이에요.');
   }
 
   /** 완료된 파일을 로컬에 저장할 때 사용할 안전한 제목과 확장자. */

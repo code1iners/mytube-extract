@@ -222,7 +222,7 @@ describe('active download jobs storage adapter', () => {
     const adapter = createActiveDownloadJobsStorageAdapter(chromeApi);
 
     await expect(adapter.loadActiveJobs()).rejects.toThrow(
-      'Could not load the tracked download jobs.',
+      '진행 중인 요청을 불러오지 못했어요.',
     );
   });
 
@@ -234,7 +234,7 @@ describe('active download jobs storage adapter', () => {
 
     // 기존 기록을 먼저 읽어 병합하는 구현이라, get 단계에서 lastError를 만나 load 오류로 거절된다.
     await expect(adapter.saveActiveJob(createRecord())).rejects.toThrow(
-      'Could not load the tracked download jobs.',
+      '진행 중인 요청을 불러오지 못했어요.',
     );
   });
 
@@ -258,7 +258,7 @@ describe('active download jobs storage adapter', () => {
     const adapter = createActiveDownloadJobsStorageAdapter(rawChromeApi as unknown as typeof chrome);
 
     await expect(adapter.saveActiveJob(createRecord())).rejects.toThrow(
-      'Could not save the tracked download job.',
+      '진행 중인 요청을 저장하지 못했어요.',
     );
   });
 });

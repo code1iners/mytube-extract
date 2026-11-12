@@ -2,7 +2,11 @@ import { type ReactNode } from 'react';
 
 /** Popup에서 쓰는 선 아이콘 이름. 모양은 승인 시안(extension-a-states.html)의 아이콘을 따른다. */
 export type PopupIconName =
+  | 'alert'
   | 'audio'
+  | 'check'
+  | 'clock'
+  | 'cloud-off'
   | 'down'
   | 'grid'
   | 'link'
@@ -15,6 +19,17 @@ export type PopupIconName =
 
 /** 아이콘별 SVG 내용. viewBox는 모두 `0 0 24 24`다. */
 const ICON_PATHS: Record<PopupIconName, ReactNode> = {
+  alert: <path d="M12 6v8M12 18.5v.01" />,
+  check: <path d="M5 12.5l4.5 4.5L19 7" />,
+  clock: (
+    <>
+      <circle cx="12" cy="12" r="8.5" />
+      <path d="M12 7.5V12l3 2" />
+    </>
+  ),
+  'cloud-off': (
+    <path d="M8 7.5A5.5 5.5 0 0 1 17.4 10H18a4 4 0 0 1 2.3 7.3M16 18H7a4.5 4.5 0 0 1-1.6-8.7M3 3l18 18" />
+  ),
   audio: <path d="M4 10v4M8 6v12M12 3v18M16 8v8M20 10.5v3" />,
   down: <path d="M12 4v11M6.5 10l5.5 5.5 5.5-5.5M5 20h14" />,
   grid: (

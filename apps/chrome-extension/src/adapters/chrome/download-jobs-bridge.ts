@@ -2,6 +2,7 @@ import { type DownloadJob, type DownloadQuality } from '../../domain/download-jo
 import { type DownloadMode } from '../../domain/download-options/download-options';
 import {
   DOWNLOAD_JOB_SUBMIT_MESSAGE_TYPE,
+  type DownloadJobSubmitFailure,
   type DownloadJobSubmitRequest,
   type DownloadJobSubmitResponse,
 } from '../../features/download-jobs/download-job-message';
@@ -23,6 +24,18 @@ export type SubmitDownloadJobBridgeInput = {
   /** 원본 YouTube URL. */
   sourceUrl: string;
 };
+
+/** job 제출 실패. Popup이 서버 연결 실패와 접수 거부를 다르게 보여줄 수 있게 원인을 함께 싣는다. */
+export class DownloadJobSubmitError extends Error {
+  constructor(failure: DownloadJobSubmitFailure, message: string) {
+    super(message);
+    this.name = 'DownloadJobSubmitError';
+    this.failure = failure;
+  }
+
+  /** 실패 원인. */
+  failure: DownloadJobSubmitFailure;
+}
 
 /** Popup이 Background의 download job 추적을 이용하는 창구. */
 // job 제출은 메시지로 Background에 위임하고, 상태 조회·구독은 Background가 기록한
@@ -68,12 +81,22 @@ export function createDownloadJobsBridge(
           request,
           (response: DownloadJobSubmitResponse | undefined) => {
             if (chromeApi.runtime.lastError) {
-              reject(new Error('Could not reach the extension background.'));
+              reject(
+                new DownloadJobSubmitError(
+                  'rejected',
+                  '확장 프로그램 내부 연결에 실패했어요. 다시 시도해 주세요.',
+                ),
+              );
               return;
             }
 
-            if (!response?.ok) {
-              reject(new Error(response?.message ?? 'Could not create the download job.'));
+            if (!response) {
+              reject(new DownloadJobSubmitError('rejected', '추출 요청을 만들지 못했어요.'));
+              return;
+            }
+
+            if (!response.ok) {
+              reject(new DownloadJobSubmitError(response.failure ?? 'rejected', response.message));
               return;
             }
 

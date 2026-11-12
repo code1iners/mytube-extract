@@ -14,7 +14,7 @@ const rootElement = document.querySelector('#root');
 applyTheme(getThemePreference());
 
 if (!rootElement) {
-  throw new Error('Popup root element was not found.');
+  throw new Error('Popup 루트 요소를 찾지 못했어요.');
 }
 
 createRoot(rootElement).render(
