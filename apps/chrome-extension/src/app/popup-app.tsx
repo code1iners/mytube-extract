@@ -16,14 +16,6 @@ type ExtractButtonView = {
   busy: boolean;
 };
 
-/** 진행 단계마다 스크린리더에 읽힐 문장. 실패 문장은 무대 아래 오류 줄이 alert로 전한다. */
-const STAGE_PHASE_ANNOUNCEMENTS: Partial<Record<StagePhase, string>> = {
-  checking: '서버 확인 중',
-  done: '다운로드를 시작했어요',
-  processing: '처리 중',
-  queued: '대기 중',
-};
-
 /** 형식 버튼 정의. */
 const MODE_OPTIONS: ReadonlyArray<{ /** 다운로드 형식. */ mode: DownloadMode; /** 형식 아이콘. */ icon: PopupIconName; /** 접근 가능한 이름. */ label: string }> = [
   { icon: 'audio', label: '오디오 MP3', mode: 'audio' },
@@ -55,6 +47,8 @@ export function PopupApp() {
   const extractButton = getExtractButtonView(snapshot);
   /** 진행 중이라 형식·품질을 잠그는지 여부. */
   const controlsLocked = isStagePhaseBusy(snapshot.stagePhase);
+  /** 진행 단계 live region 문장(서버 확인 중·대기 중·처리 중·다운로드를 시작했어요). 실패 문장은 오류 줄의 alert가 전한다. */
+  const stageAnnouncement = controlsLocked || snapshot.stagePhase === 'done' ? snapshot.status.message : '';
 
   // Functions.
 
@@ -155,7 +149,7 @@ export function PopupApp() {
       <button aria-label={extractButton.label} className={extractButton.busy ? 'extract-button is-busy' : 'extract-button'} disabled={!snapshot.canDownload} type="submit">
         <PopupIcon className={extractButton.busy ? 'is-spinning' : undefined} name={extractButton.icon} />
       </button>
-      <p aria-live="polite" className="visually-hidden" role="status">{STAGE_PHASE_ANNOUNCEMENTS[snapshot.stagePhase] ?? ''}</p>
+      <p aria-live="polite" className="visually-hidden" role="status">{stageAnnouncement}</p>
     </form>
     <RecentJobsList jobs={snapshot.jobs} />
   </main>;

@@ -150,6 +150,8 @@ type SubmitFailure = {
   message: string;
   /** 다시 시도할 때 그대로 보낼 제출 입력. */
   request: SubmitDownloadJobBridgeInput;
+  /** 실패 당시 그 영상의 최신 job ID. 이후 다른 경로로 새 job이 생기면 실패 대신 그 job을 보여준다. */
+  latestJobId: string | null;
 };
 
 /** 무대 영상 기준으로 도출한 진행 상황. */
@@ -226,12 +228,12 @@ export function createPopupDownloadModel(
       return { failureMessage: null, job: null, phase: 'checking' };
     }
 
-    if (submitFailure?.videoId === stageVideoId) {
+    /** 무대 영상의 최신 job. 목록은 최신순이다. */
+    const job = findLatestVideoJob(jobs, stageVideoId);
+
+    if (submitFailure?.videoId === stageVideoId && submitFailure.latestJobId === (job?.jobId ?? null)) {
       return { failureMessage: submitFailure.message, job: null, phase: submitFailure.phase };
     }
-
-    /** 무대 영상의 최신 job. 목록은 최신순이다. */
-    const job = jobs.find((item) => getDownloadJobVideoId(item) === stageVideoId) ?? null;
 
     if (!job) {
       return { failureMessage: null, job: null, phase: 'idle' };
@@ -403,7 +405,7 @@ export function createPopupDownloadModel(
     /** 제출 시점의 옵션. */
     const options = snapshot.options;
 
-    if (progress.phase !== 'failed' && progress.phase !== 'unreachable') {
+    if (!isStagePhaseProblem(progress.phase)) {
       return {
         apiBaseUrl: options.apiBaseUrl,
         localFilename: resolveLocalFilename(options.filename),
@@ -603,6 +605,7 @@ export function createPopupDownloadModel(
       } catch (error) {
         submittingVideoIds.delete(videoId);
         submitFailure = {
+          latestJobId: findLatestVideoJob(snapshot.jobs, videoId)?.jobId ?? null,
           message:
             error instanceof Error && error.message ? error.message : '추출 요청에 실패했어요.',
           phase:
@@ -642,6 +645,11 @@ export function createPopupDownloadModel(
       }
     },
   };
+}
+
+/** 최신순 job 목록에서 한 영상의 최신 job을 찾는다. */
+function findLatestVideoJob(jobs: readonly DownloadJob[], videoId: string): DownloadJob | null {
+  return jobs.find((job) => getDownloadJobVideoId(job) === videoId) ?? null;
 }
 
 /** 무대에 올라온 영상 ID를 얻는다. 붙여넣기 칸 상태면 null이다. */

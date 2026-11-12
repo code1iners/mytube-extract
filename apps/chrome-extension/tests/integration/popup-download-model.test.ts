@@ -1092,6 +1092,24 @@ describe('popup stage progress and problems', () => {
     expect(model.getSnapshot()).toMatchObject({ canDownload: true, stagePhase: 'idle' });
   });
 
+  it('lets a newer job of the stage video replace an earlier submit failure', async () => {
+    const { model, pushJobs } = createStageModel({
+      downloadJobs: {
+        submitJob: vi.fn().mockRejectedValue(new DownloadJobSubmitError('rejected', '거부됨')),
+      },
+    });
+
+    await model.initialize();
+    await model.submitDownload();
+
+    expect(model.getSnapshot().stagePhase).toBe('failed');
+
+    // 썸네일 버튼 같은 다른 경로로 같은 영상의 새 job이 접수됐다.
+    pushJobs([createJob({ jobId: 'job-overlay', status: 'processing' })]);
+
+    expect(model.getSnapshot().stagePhase).toBe('processing');
+  });
+
   it('ignores job progress of another video and keeps that video submittable', async () => {
     const { dependencies, model, pushJobs } = createStageModel();
 
