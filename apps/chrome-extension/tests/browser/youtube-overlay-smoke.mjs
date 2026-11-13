@@ -155,13 +155,30 @@ try {
 
   assertEqual(sharedFormatState.levelNumbers.join(','), '128,192,320', 'format shared within the page');
 
-  // 막대를 누르면 품질 패널 없이 바로 제출하고 아이콘 토스트를 띄운다.
+  // 막대를 누르면 품질 패널 없이 바로 제출한다. Background 응답 전에는 접수를 단정하지 않는 중립 진행 토스트만 띄운다.
+  await page.evaluate(() => {
+    globalThis.__myTubeExtractOverlayResponseDelayMs = 1500;
+  });
   await clickInOverlay(page, '#audio-card', '.levels button:nth-child(2)');
   await page.waitForFunction(
     () => globalThis.__myTubeExtractOverlayRequests.length === 1,
     null,
     { timeout: 10000 },
   );
+
+  await waitForLiveText(page, 'status', '요청을 보내고 있어요');
+
+  const pendingToast = await readToast(page);
+
+  assertEqual(pendingToast.kind, 'pending', 'pending toast kind before the Background response');
+  assertEqual(pendingToast.visible, true, 'pending toast visible');
+  assertEqual(pendingToast.hasCheckIcon, false, 'pending toast has no check icon');
+  assertEqual(pendingToast.quality, '192', 'pending toast quality');
+  assertEqual(pendingToast.visibleSentence, false, 'pending toast hides the sentence');
+  await saveScreenshot(page, 'overlay-toast-pending.png');
+  await page.evaluate(() => {
+    globalThis.__myTubeExtractOverlayResponseDelayMs = 50;
+  });
 
   await waitForLiveText(page, 'status', '요청을 접수했어요');
 
@@ -599,6 +616,8 @@ function readToast(page) {
       buttons: [...(toast?.querySelectorAll('button') ?? [])].map((button) =>
         button.getAttribute('aria-label'),
       ),
+      // 체크 아이콘 도형(`check`)이 상태 자리에 있는지로 접수 표시 여부를 본다.
+      hasCheckIcon: Boolean(toast?.querySelector('.toast__status path[d="M5 12.5l4.5 4.5L19 7"]')),
       kind: toast?.getAttribute('data-kind') ?? '',
       quality: toast?.querySelector('.toast__quality')?.textContent?.trim() ?? '',
       status: root?.querySelector('[role="status"]')?.textContent ?? '',

@@ -116,7 +116,9 @@ type ToastController = {
     message: string,
     retry: () => void,
   ): void;
-  /** 품질 막대를 눌러 접수 요청을 보냈음을 바로 표시한다. */
+  /** 품질 막대를 눌러 요청을 보냈고 Background 응답을 기다리는 중임을 표시한다. 접수 여부는 아직 단정하지 않는다. */
+  showPending(request: YoutubeOverlayDownloadRequest): void;
+  /** Background가 요청을 접수했음을 표시한다. */
   showAccepted(request: YoutubeOverlayDownloadRequest): void;
 };
 
@@ -487,7 +489,7 @@ function mountCardOverlay(
 
     pending = true;
     setControlsDisabled(true);
-    toast.showAccepted(request);
+    toast.showPending(request);
 
     try {
       chrome.runtime.sendMessage(
@@ -506,6 +508,7 @@ function mountCardOverlay(
 
           pending = false;
           setControlsDisabled(false);
+          toast.showAccepted(request);
         },
       );
     } catch {
@@ -697,7 +700,7 @@ function createToastController(): ToastController {
 
   /** Toast 박스를 요청 정보와 결과 종류로 다시 그린다. */
   function render(
-    kind: 'accepted' | 'failed',
+    kind: 'pending' | 'accepted' | 'failed',
     request: YoutubeOverlayDownloadRequest,
     retry?: () => void,
   ) {
@@ -721,7 +724,10 @@ function createToastController(): ToastController {
     thumbnail.addEventListener('error', () => thumbnail.remove(), { once: true });
     thumbnailFrame.append(thumbnail);
     statusIcon.className = 'toast__status';
-    statusIcon.append(createIcon(kind === 'accepted' ? 'check' : 'alert'));
+    // 응답을 기다리는 동안은 체크 대신 숫자 없는 회전 링만 둔다.
+    statusIcon.append(
+      kind === 'pending' ? createSpinnerRing() : createIcon(kind === 'accepted' ? 'check' : 'alert'),
+    );
     quality.className = 'toast__quality';
     qualityValue.textContent = String(request.quality);
     quality.append(createIcon(request.mode), qualityValue);
@@ -746,6 +752,10 @@ function createToastController(): ToastController {
         alertRegion,
         message ? '추출 요청에 실패했어요. ' + message : '추출 요청에 실패했어요.',
       );
+    },
+    showPending(request) {
+      render('pending', request);
+      announce(statusRegion, '요청을 보내고 있어요');
     },
     showAccepted(request) {
       render('accepted', request);
@@ -882,7 +892,7 @@ function createToastStyle(): HTMLStyleElement {
 
   // YouTube 페이지 위에 떠 있으므로 승인 시안처럼 테마와 상관없이 어두운 표면과 다크 상태 토큰을 쓴다.
   style.textContent = [
-    ':host { --toast-surface: #18191b; --toast-thumb: #3a3b3e; --toast-text: #ffffff; --toast-text-secondary: #c8c8c8; --toast-primary: #e60012; --toast-ok: #8fd6a0; --toast-bad: #ff8a80; --toast-on-status: #18191b; --toast-focus: #a9b4f2; display: block; font-family: "Pretendard Variable", ui-sans-serif, system-ui, sans-serif; }',
+    ':host { --toast-surface: #18191b; --toast-thumb: #3a3b3e; --toast-text: #ffffff; --toast-text-secondary: #c8c8c8; --toast-primary: #e60012; --toast-ok: #8fd6a0; --toast-bad: #ff8a80; --toast-on-status: #18191b; --toast-focus: #a9b4f2; --toast-ring-track: rgba(255, 255, 255, .25); display: block; font-family: "Pretendard Variable", ui-sans-serif, system-ui, sans-serif; }',
     createFontFaceRule(),
     '.toast { display: flex; align-items: center; gap: 10px; max-width: calc(100vw - 32px); padding: 8px; border-radius: 12px; background: var(--toast-surface); color: var(--toast-text); box-shadow: 0 8px 24px rgba(0, 0, 0, .24); font: 600 13px/1.2 "Pretendard Variable", ui-sans-serif, system-ui, sans-serif; }',
     '.toast:empty { display: none; }',
@@ -893,6 +903,11 @@ function createToastStyle(): HTMLStyleElement {
     '.toast__status .icon { stroke-width: 3; }',
     '.toast[data-kind="accepted"] .toast__status { background: var(--toast-ok); }',
     '.toast[data-kind="failed"] .toast__status { background: var(--toast-bad); }',
+    '.toast[data-kind="pending"] .toast__status { position: relative; background: var(--toast-thumb); }',
+    '.ring { position: absolute; inset: 0; width: 28px; height: 28px; }',
+    '.ring__track { stroke: var(--toast-ring-track); }',
+    '.ring__arc { stroke: var(--toast-text); transform-origin: 50% 50%; animation: mytube-spin 1.4s linear infinite; }',
+    '@keyframes mytube-spin { to { transform: rotate(360deg); } }',
     '.toast__quality { display: flex; align-items: center; gap: 4px; color: var(--toast-text-secondary); }',
     '.toast__button { display: grid; width: 44px; height: 44px; flex: none; place-items: center; margin: 0; padding: 0; border: 0; border-radius: 9999px; background: transparent; color: var(--toast-text); cursor: pointer; }',
     '.toast__button .icon { width: 18px; height: 18px; }',
@@ -900,6 +915,7 @@ function createToastStyle(): HTMLStyleElement {
     '.toast__button[data-action="retry"] { background: var(--toast-primary); }',
     '.toast__button:focus-visible { outline: 2px solid var(--toast-focus); outline-offset: 2px; }',
     '.sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }',
+    '@media (prefers-reduced-motion: reduce) { .ring__arc { animation: none; } }',
   ].join('');
 
   return style;
