@@ -16,6 +16,11 @@ export function sanitizeFilenameStem(value: string): string {
   return sanitized === '.' || sanitized === '..' ? '' : sanitized;
 }
 
+/** 영상 제목으로 저장 파일명(확장자 제외)을 만든다. 제목이 비거나 정리 후 쓸 수 없으면 `fallbackStem`(보통 영상 ID)을 쓴다. */
+export function buildTitleFilenameStem(title: string, fallbackStem: string): string {
+  return sanitizeFilenameStem(title) || fallbackStem;
+}
+
 /** 경로 탐색이나 파일 시스템 오작동을 일으킬 수 있는 문자인지 확인한다. */
 function isUnsafeFilenameChar(character: string): boolean {
   if (character === '\\' || character === '/') {

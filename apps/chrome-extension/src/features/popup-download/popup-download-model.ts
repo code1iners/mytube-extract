@@ -58,8 +58,7 @@ import {
   parseYoutubeTabTitle,
 } from '../../domain/popup-state/popup-state';
 import { type RecentRequest, deriveRecentRequest } from '../../domain/recent-request/recent-request';
-import { sanitizeFilenameStem } from '../../shared/sanitize-filename';
-import { sanitizeYoutubeOverlayFilename } from '../youtube-overlay/youtube-overlay-download';
+import { buildTitleFilenameStem, sanitizeFilenameStem } from '../../shared/sanitize-filename';
 
 /** Popup model dependency. */
 export type PopupDownloadModelDependencies = {
@@ -889,7 +888,7 @@ function resolveStageFilename(
   /** 경로 구분자·제어 문자를 정리한 편집값. */
   const sanitized = sanitizeFilenameStem(withoutExtension);
 
-  return sanitized || sanitizeYoutubeOverlayFilename(stageSource.title ?? '', stageSource.videoId);
+  return sanitized || buildTitleFilenameStem(stageSource.title ?? '', stageSource.videoId);
 }
 
 /** 최근 요청을 다시 받을 때 쓸 기본 파일명. 제목 기반 정리(실패 시 영상 ID)에 형식 확장자를 붙이고, 영상 ID를 모르면 서버 기본 이름을 쓰도록 비운다. */
@@ -898,7 +897,7 @@ function buildDefaultLocalFilename(job: DownloadJob): string {
   const videoId = getDownloadJobVideoId(job);
 
   return videoId
-    ? `${sanitizeYoutubeOverlayFilename(job.title ?? '', videoId)}.${getFileExtension(job.type)}`
+    ? `${buildTitleFilenameStem(job.title ?? '', videoId)}.${getFileExtension(job.type)}`
     : '';
 }
 

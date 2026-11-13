@@ -1,9 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { DEFAULT_API_BASE_URL } from '../../src/shared/constants';
-import {
-  createYoutubeOverlayDownloadJobInput,
-  sanitizeYoutubeOverlayFilename,
-} from '../../src/features/youtube-overlay/youtube-overlay-download';
+import { createYoutubeOverlayDownloadJobInput } from '../../src/features/youtube-overlay/youtube-overlay-download';
 import {
   isYoutubeOverlayDownloadRequest,
   YOUTUBE_OVERLAY_DOWNLOAD_MESSAGE_TYPE,
@@ -77,7 +74,9 @@ describe('YouTube overlay contract', () => {
   });
 
   it('falls back to the video ID when the title cannot be used as a filename', () => {
-    expect(sanitizeYoutubeOverlayFilename(' /\\\n\r\0 ', 'abc123_DEF0')).toBe('abc123_DEF0');
-    expect(sanitizeYoutubeOverlayFilename('..', 'abc123_DEF0')).toBe('abc123_DEF0');
+    expect(
+      createYoutubeOverlayDownloadJobInput({ mode: 'audio', quality: 192, title: ' /\\\n\r\0 ', videoId: 'abc123_DEF0' })
+        .localFilename,
+    ).toBe('abc123_DEF0.mp3');
   });
 });
