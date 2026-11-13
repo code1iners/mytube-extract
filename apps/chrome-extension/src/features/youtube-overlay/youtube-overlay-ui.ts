@@ -10,6 +10,7 @@ import {
   getQualityUnit,
   type QualityOption,
 } from '../../domain/download-options/quality-options';
+import { type LineIconName, LINE_ICON_SHAPES } from '../../shared/line-icon-shapes';
 import { parseStandardYoutubeWatchUrl } from './youtube-card-url';
 import {
   createOverlayCardStatusTracker,
@@ -54,28 +55,8 @@ const STATUS_LABELS: Record<OverlayCardStatus['state'], string> = {
   queued: '접수됨, 대기 중',
 };
 
-/** Overlay에서 쓰는 선 아이콘 이름. 모양은 Popup 아이콘(승인 시안)과 같다. */
-type OverlayIconName = 'alert' | 'audio' | 'check' | 'clock' | 'retry' | 'video' | 'x';
-
-/** SVG 도형 하나의 태그와 속성. */
-type OverlayIconShape = [tag: 'circle' | 'path' | 'rect', attributes: Record<string, string>];
-
-/** 아이콘별 SVG 도형. viewBox는 모두 `0 0 24 24`다. */
-const OVERLAY_ICON_SHAPES: Record<OverlayIconName, OverlayIconShape[]> = {
-  alert: [['path', { d: 'M12 6v8M12 18.5v.01' }]],
-  audio: [['path', { d: 'M4 10v4M8 6v12M12 3v18M16 8v8M20 10.5v3' }]],
-  check: [['path', { d: 'M5 12.5l4.5 4.5L19 7' }]],
-  clock: [
-    ['circle', { cx: '12', cy: '12', r: '8.5' }],
-    ['path', { d: 'M12 7.5V12l3 2' }],
-  ],
-  retry: [['path', { d: 'M4.5 12a7.5 7.5 0 1 0 2.2-5.3M4.5 4v4.5H9' }]],
-  video: [
-    ['rect', { height: '14', rx: '3', width: '18', x: '3', y: '5' }],
-    ['path', { d: 'M10 9.2v5.6l4.8-2.8z', fill: 'currentColor' }],
-  ],
-  x: [['path', { d: 'M6 6l12 12M18 6L6 18' }]],
-};
+/** Overlay에서 쓰는 선 아이콘 이름. 모양은 Popup과 같은 도형 데이터를 쓴다. */
+type OverlayIconName = Extract<LineIconName, 'alert' | 'audio' | 'check' | 'clock' | 'retry' | 'video' | 'x'>;
 
 /** SVG element namespace. */
 const SVG_NAMESPACE = 'http://www.w3.org/2000/svg';
@@ -810,7 +791,7 @@ function createIcon(name: OverlayIconName): SVGSVGElement {
   icon.setAttribute('viewBox', '0 0 24 24');
 
   // YouTube의 Trusted Types 정책에 걸리지 않도록 innerHTML 대신 도형 element를 직접 만든다.
-  OVERLAY_ICON_SHAPES[name].forEach(([tag, attributes]) => {
+  LINE_ICON_SHAPES[name].forEach(([tag, attributes]) => {
     /** 아이콘 도형 element. */
     const shape = document.createElementNS(SVG_NAMESPACE, tag);
 
