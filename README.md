@@ -225,7 +225,7 @@ Chrome 확장 프로그램 소스는 `apps/chrome-extension` workspace package�
 
 Chrome 확장 프로그램의 제품 범위와 기능 계약은 `docs/chrome-extension/current-implementation-prd.md`, `docs/chrome-extension/current-implementation-fsd.md`를 기준으로 한다.
 
-현재 MVP는 WXT + React + TypeScript popup과 YouTube 썸네일 Overlay에서 다운로드 job을 만들고, Background가 `POST /downloads` → 상태 polling → 완료 파일 다운로드를 담당한다. Popup은 최근 5건의 job 상태를 보여 주며, 기존 `/audio`·`/video` 직접 다운로드 endpoint는 외부 호환용으로 유지한다. Web 앱도 같은 `/downloads` job 흐름을 사용한다.
+현재 MVP는 WXT + React + TypeScript popup과 YouTube 썸네일 Overlay에서 다운로드 job을 만들고, Background가 `POST /downloads` → 상태 polling → 완료 파일 다운로드를 담당한다. Popup은 현재 탭 영상을 무대에 바로 올리고 최근 5건의 job 상태를 썸네일로 보여 주며, Overlay는 썸네일 카드 위에 그 영상의 진행 상태를 남긴다. 화면 계약은 `docs/DESIGN.md`의 "Chrome popup·Overlay 최소 UI 계약"을 따른다. 기존 `/audio`·`/video` 직접 다운로드 endpoint는 외부 호환용으로 유지한다. Web 앱도 같은 `/downloads` job 흐름을 사용한다.
 
 로컬 개발 서버:
 
@@ -237,7 +237,7 @@ pnpm --filter chrome-extension run dev
 
 `pnpm dev`는 root script 기준 API watch server와 web Vite dev server만 실행한다. Worker는 별도 shell에서 `pnpm deploy:worker`로 Docker Compose 실행한다. Chrome extension dev preview는 별도 shell에서 `pnpm --filter chrome-extension run dev`를 실행한다.
 
-개발 중 바로 보는 UI는 wrapper가 여는 popup preview server다. Preview에서도 사용자가 원본 URL을 직접 입력해 상태와 레이아웃을 확인한다.
+개발 중 바로 보는 UI는 wrapper가 여는 popup preview server다. Preview는 YouTube 탭이 없는 환경이라 무대 자리의 붙여넣기 칸에 원본 URL을 넣어 상태와 레이아웃을 확인한다.
 
 ```text
 http://localhost:3000/popup.html
@@ -284,7 +284,7 @@ pnpm --filter chrome-extension run lint
 pnpm --filter chrome-extension run test:browser
 ```
 
-`test:browser`는 먼저 API `/health`를 확인하고, WXT production build를 Chromium load unpacked로 렌더링한 뒤, built popup을 브라우저에서 실행해 URL 미입력·형식 오류, 현재 탭 URL 가져오기·실패, 서버 확인 실패, 다운로드 시작 흐름을 검증한다. `dev:smoke`는 이미 실행 중인 WXT dev output으로 popup 렌더링만 빠르게 확인하며 production build를 만들지 않는다. Chrome Web Store 배포, 고정 extension ID 기반 CORS 허용, 다운로드 진행률 표시는 후속 범위다.
+`test:browser`는 먼저 API `/health`를 확인하고, WXT production build를 Chromium load unpacked로 렌더링한 뒤, built popup을 브라우저에서 실행해 무대 자동 지정·붙여넣기 칸·잘못된 주소, 서버 확인 실패·접수 거부, 다운로드 진행, 파일명 편집, 최근 요청, 설정 화면 흐름과 Overlay 스모크를 검증한다. 실제 API에는 `/health`만 보내고 나머지는 가짜 응답을 쓴다. `dev:smoke`는 이미 실행 중인 WXT dev output으로 popup 렌더링만 빠르게 확인하며 production build를 만들지 않는다. Chrome Web Store 배포, 고정 extension ID 기반 CORS 허용, 백분율 다운로드 진행률 표시는 후속 범위다.
 
 ## Test
 

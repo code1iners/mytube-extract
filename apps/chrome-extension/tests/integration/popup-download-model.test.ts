@@ -375,7 +375,7 @@ describe('popup download model', () => {
       canDownload: false,
       status: {
         kind: 'invalid-source-url',
-        message: '지원하는 YouTube URL을 입력하세요.',
+        message: '유튜브 영상 주소가 아니에요',
       },
     });
   });
@@ -966,7 +966,7 @@ describe('popup settings and thumbnail button permission', () => {
       youtubeOverlay: {
         enabled: false,
         indicator: 'problem',
-        message: '권한이 거부되어 썸네일 버튼을 표시하지 않아요.',
+        message: '권한이 거부되어 표시하지 않아요',
         status: 'denied',
       },
     });
