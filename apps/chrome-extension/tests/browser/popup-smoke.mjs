@@ -100,6 +100,11 @@ const staticServer = await createStaticServer(extensionOutputRoot);
   console.error('[popup-smoke] recent requests flow ok');
   await verifySettingsFlow(staticServer.origin);
   console.error('[popup-smoke] settings theme and overlay permission flow ok');
+  /** 붙여넣은 영상 접수 flow에서 수집한 fake API 요청. */
+  const pastedTitleFakeApiRequests = await verifyPastedVideoTitleFlow(staticServer.origin);
+  console.error('[popup-smoke] pasted video title after acceptance ok');
+  await verifyZoom200Flow(staticServer.origin);
+  console.error('[popup-smoke] 200% zoom flow ok');
 
   console.log(
     JSON.stringify(
@@ -108,6 +113,7 @@ const staticServer = await createStaticServer(extensionOutputRoot);
         mode: smokeMode,
         outputRoot: extensionOutputRoot,
         fakeApiRequests,
+        pastedTitleFakeApiRequests,
         recentFakeApiRequests,
         rejectedFakeApiRequests,
         unavailableFakeApiRequests,
@@ -332,6 +338,145 @@ async function verifyPasteFieldFlow(origin) {
     await expectDownloadButtonDisabled(page, false);
   } finally {
     await browser.close();
+  }
+}
+
+/** 제목을 모르는 붙여넣은 영상은 접수 뒤 API의 요청 영상 제목을 제목 줄과 기본 파일명에 쓴다. */
+async function verifyPastedVideoTitleFlow(origin) {
+  /** Browser instance. */
+  const browser = await chromium.launch();
+  /** Browser page. */
+  const page = await browser.newPage({ viewport: { width: 360, height: 600 } });
+  /** Fake API 요청 목록. */
+  const requests = [];
+
+  try {
+    await routeMyTubeExtractApi(page, { createdJobTitle: '붙여넣은 / 공연 영상', healthOk: true, requests });
+    await routeYoutubeThumbnails(page, { available: true });
+    await installFakeChromeApi(page, {
+      currentTabTitle: '예시 페이지',
+      currentTabUrl: 'https://example.com/',
+      storedOptions: {},
+    });
+    await page.goto(`${origin}/popup.html`, { timeout: 10000, waitUntil: 'domcontentloaded' });
+    await page.getByLabel('YouTube 주소').fill('https://youtu.be/xyz789_GHI1');
+    await page.locator('figure.stage').waitFor({ timeout: 10000 });
+    await page.locator('.stage-line__text', { hasText: 'xyz789_GHI1' }).waitFor({ timeout: 10000 });
+    await page.getByRole('button', { name: '추출 시작' }).click();
+    await waitForRequestCount(requests, 'POST /downloads', 1);
+    // 기본 파일명 규칙대로 경로 구분자는 공백으로 정리된다.
+    await page.locator('.stage-line__text', { hasText: '붙여넣은 공연 영상' }).waitFor({ timeout: 10000 });
+    await page.locator('figure.stage [data-veil]').waitFor({ state: 'detached', timeout: 5000 });
+    await saveScreenshot(page, 'popup-pasted-title-light.png');
+    await page.evaluate(() => document.documentElement.setAttribute('data-theme', 'dark'));
+    await saveScreenshot(page, 'popup-pasted-title-dark.png');
+
+    return requests;
+  } finally {
+    await browser.close();
+  }
+}
+
+/**
+ * 브라우저 200% 확대를 흉내 내 무대·최근 요청·설정 화면의 조작이 넘치거나 가려지지 않는지 확인한다.
+ * Popup 창은 최대 800×600 기기 픽셀이라 200%에서는 360px 폭 그대로 보이는 높이가 300 CSS px로 줄어든다.
+ * 글자 크기는 모두 px로 정해 브라우저 기본 글꼴 크기 설정 대신 페이지 확대가 실제 확대 경로다.
+ */
+async function verifyZoom200Flow(origin) {
+  /** Browser instance. */
+  const browser = await chromium.launch();
+
+  try {
+    /** 200% 확대 Popup page. */
+    const page = await browser.newPage({ deviceScaleFactor: 2, viewport: { width: 360, height: 300 } });
+    /** 최근 요청 줄이 보이도록 저장해 둘 job 생성 시각. */
+    const createdAt = new Date().toISOString();
+
+    await routeYoutubeThumbnails(page, { available: true });
+    await installFakeChromeApi(page, {
+      currentTabTitle: '아주 긴 제목의 라이브 공연 풀버전 영상 - YouTube',
+      storedOptions: {
+        recentDownloadJobs: [
+          { createdAt, displayStatus: 'failed', downloadUrl: null, errorCode: 'EXTRACTION_FAILED', jobId: 'job-zoom-failed', message: '추출하지 못했어요.', progress: null, quality: '720', retentionDays: 7, sourceUrl: 'https://www.youtube.com/watch?v=failVID0001', status: 'failed', title: '확대 검사용 실패한 아주 긴 제목의 뮤직비디오', type: 'video' },
+        ],
+      },
+    });
+    await page.goto(`${origin}/popup.html`, { timeout: 10000, waitUntil: 'domcontentloaded' });
+    await page.locator('figure.stage').waitFor({ timeout: 10000 });
+    await page.getByRole('button', { name: '최근 요청 모두 보기' }).waitFor({ timeout: 10000 });
+    await expectControlsReachable(page, 'main');
+    await saveScreenshot(page, 'popup-zoom200-main-light.png');
+    await page.evaluate(() => document.documentElement.setAttribute('data-theme', 'dark'));
+    await saveScreenshot(page, 'popup-zoom200-main-dark.png');
+    await page.evaluate(() => document.documentElement.removeAttribute('data-theme'));
+
+    await page.getByRole('button', { name: '최근 요청 모두 보기' }).click();
+    await page.getByRole('heading', { name: '최근 요청' }).waitFor({ timeout: 10000 });
+    await expectControlsReachable(page, 'recent');
+    await saveScreenshot(page, 'popup-zoom200-recent-light.png');
+    await page.evaluate(() => document.documentElement.setAttribute('data-theme', 'dark'));
+    await saveScreenshot(page, 'popup-zoom200-recent-dark.png');
+    await page.evaluate(() => document.documentElement.removeAttribute('data-theme'));
+    await page.getByRole('button', { name: '뒤로' }).click();
+
+    await page.getByRole('button', { name: '설정' }).click();
+    await page.getByRole('heading', { name: '설정' }).waitFor({ timeout: 10000 });
+    await expectControlsReachable(page, 'settings');
+    await saveScreenshot(page, 'popup-zoom200-settings-light.png');
+    await page.evaluate(() => document.documentElement.setAttribute('data-theme', 'dark'));
+    await saveScreenshot(page, 'popup-zoom200-settings-dark.png');
+  } finally {
+    await browser.close();
+  }
+}
+
+/** 화면의 모든 조작을 스크롤로 불러왔을 때 viewport 안에 들어오고 다른 요소에 가려지지 않는지 확인한다. */
+async function expectControlsReachable(page, viewName) {
+  await expectNoHorizontalOverflow(page);
+
+  /** 넘치거나 가려진 조작 목록. */
+  const problems = await page.evaluate(() =>
+    [...document.querySelectorAll('button, input, [role="switch"]')].flatMap((control) => {
+      /** 조작의 접근 가능한 이름. */
+      const name = control.getAttribute('aria-label') ?? control.textContent?.trim() ?? control.tagName;
+
+      // 글자가 커져 칸을 넘치면 overflow를 숨긴 조상이 조작 일부를 잘라 낸다.
+      // 프로그램 스크롤은 숨긴 영역도 움직이므로 위치가 아니라 그 조상이 실제로 넘치는지로 판정한다.
+      for (let ancestor = control.parentElement; ancestor; ancestor = ancestor.parentElement) {
+        /** 조상의 overflow 값. */
+        const { overflowX, overflowY } = getComputedStyle(ancestor);
+        /** 숨겨진 방향으로 내용이 넘치는지 여부. */
+        const overflowsHidden =
+          (['hidden', 'clip'].includes(overflowY) && ancestor.scrollHeight > ancestor.clientHeight + 1) ||
+          (['hidden', 'clip'].includes(overflowX) && ancestor.scrollWidth > ancestor.clientWidth + 1);
+
+        if (overflowsHidden) {
+          return [`${name}: clipped by ${ancestor.className || ancestor.tagName}`];
+        }
+      }
+
+      control.scrollIntoView({ block: 'center', inline: 'nearest' });
+
+      /** 스크롤 뒤 조작 영역. */
+      const rect = control.getBoundingClientRect();
+
+      if (rect.width === 0 || rect.height === 0) {
+        return [`${name}: empty box`];
+      }
+
+      if (rect.left < 0 || rect.right > window.innerWidth || rect.top < 0 || rect.bottom > window.innerHeight) {
+        return [`${name}: outside viewport ${JSON.stringify(rect)}`];
+      }
+
+      /** 조작 가운데에서 실제로 포인터를 받는 요소. */
+      const hit = document.elementFromPoint(rect.left + rect.width / 2, rect.top + rect.height / 2);
+
+      return hit && (control === hit || control.contains(hit)) ? [] : [`${name}: covered by ${hit?.className ?? hit?.tagName}`];
+    }),
+  );
+
+  if (problems.length > 0) {
+    throw new Error(`Expected every ${viewName} control reachable at 200% zoom, got ${JSON.stringify(problems)}`);
   }
 }
 
@@ -1152,7 +1297,7 @@ async function expectDownloadButtonState(page, name, expectedDisabled) {
 /** Production API 요청을 browser smoke 안에서 fake 응답으로 처리한다. */
 async function routeMyTubeExtractApi(
   page,
-  { createRejectMessage = null, healthDelayMs = 0, requestBodies = [], requests, healthOk },
+  { createRejectMessage = null, createdJobTitle = null, healthDelayMs = 0, requestBodies = [], requests, healthOk },
 ) {
   await page.route(`${expectedApiOrigin}/**`, async (route) => {
     /** 가로챈 production API 요청. */
@@ -1217,7 +1362,7 @@ async function routeMyTubeExtractApi(
           retentionDays: 7,
           sourceUrl: body.url,
           status: 'completed',
-          title: null,
+          title: createdJobTitle,
           type: body.type,
         }),
       });
