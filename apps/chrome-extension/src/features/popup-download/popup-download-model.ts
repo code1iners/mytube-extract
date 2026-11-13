@@ -414,8 +414,12 @@ export function createPopupDownloadModel(
   ) {
     /** 바뀐 입력 상태. */
     const base = { ...snapshot, ...changes };
-    /** 원본 URL과 활성 탭 영상으로 도출한 무대 원본. */
-    const stageSource = deriveStageSource(base.options.sourceUrl, tabVideo);
+    /** 원본 URL과 활성 탭 영상, 그 영상의 최신 job 제목으로 도출한 무대 원본. */
+    const stageSource = deriveStageSource(
+      base.options.sourceUrl,
+      tabVideo,
+      (videoId) => findLatestVideoJob(base.jobs, videoId)?.title ?? null,
+    );
     /** 무대 영상 ID. */
     const stageVideoId = getStageVideoId(stageSource);
     /** 무대 진행 상황. */

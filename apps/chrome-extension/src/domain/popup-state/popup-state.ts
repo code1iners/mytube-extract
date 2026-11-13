@@ -164,8 +164,15 @@ export function parseYoutubeTabTitle(tabTitle: string | null | undefined): strin
   return title && title !== 'YouTube' ? title : null;
 }
 
-/** 현재 원본 주소와 활성 탭 영상으로 무대 원본을 도출한다. */
-export function deriveStageSource(sourceUrl: string, tabVideo: TabVideo | null): StageSource {
+/**
+ * 현재 원본 주소와 활성 탭 영상으로 무대 원본을 도출한다.
+ * 탭 제목을 모르는 영상은 `findRequestedTitle`이 돌려준 API의 요청 영상 제목(접수 뒤 최신 job의 제목)을 쓴다.
+ */
+export function deriveStageSource(
+  sourceUrl: string,
+  tabVideo: TabVideo | null,
+  findRequestedTitle: (videoId: string) => string | null = () => null,
+): StageSource {
   if (!sourceUrl.trim()) {
     return { kind: 'empty' };
   }
@@ -183,7 +190,7 @@ export function deriveStageSource(sourceUrl: string, tabVideo: TabVideo | null):
   return {
     kind: isTabVideo ? 'tab' : 'pasted',
     thumbnailUrl: getYoutubeThumbnailUrl(videoId),
-    title: isTabVideo ? tabVideo.title : null,
+    title: (isTabVideo ? tabVideo.title : null) ?? findRequestedTitle(videoId),
     videoId,
   };
 }

@@ -1394,6 +1394,58 @@ describe('popup filename editing', () => {
     );
   });
 
+  it('uses the requested video title from the accepted job for a pasted video with no tab title', async () => {
+    const { dependencies, model } = createStageModel({
+      downloadJobs: {
+        submitJob: vi.fn().mockResolvedValue(createJob({ title: '서울/공연 풀버전' })),
+      },
+      tabs: { getCurrentTab: vi.fn().mockResolvedValue({ title: '예시 페이지', url: 'https://example.com/' }) },
+    });
+
+    await model.initialize();
+    await model.updateOption('sourceUrl', 'https://youtu.be/abc123_DEF0');
+
+    expect(model.getSnapshot()).toMatchObject({ stageFilename: 'abc123_DEF0', stageSource: { title: null } });
+
+    await model.submitDownload();
+
+    expect(model.getSnapshot()).toMatchObject({
+      stageFilename: '서울 공연 풀버전',
+      stageSource: { kind: 'pasted', title: '서울/공연 풀버전' },
+    });
+  });
+
+  it('keeps the edited filename when the accepted job brings the requested video title', async () => {
+    const { model } = createStageModel({
+      downloadJobs: {
+        submitJob: vi.fn().mockResolvedValue(createJob({ title: '서울 공연 풀버전' })),
+      },
+      tabs: { getCurrentTab: vi.fn().mockResolvedValue({ title: '예시 페이지', url: 'https://example.com/' }) },
+    });
+
+    await model.initialize();
+    await model.updateOption('sourceUrl', 'https://youtu.be/abc123_DEF0');
+    await model.updateOption('filename', '내 파일');
+    await model.submitDownload();
+
+    expect(model.getSnapshot()).toMatchObject({
+      stageFilename: '내 파일',
+      stageSource: { title: '서울 공연 풀버전' },
+    });
+  });
+
+  it('prefers the tab title over the job title for the active tab video', async () => {
+    const { model } = createStageModel({
+      downloadJobs: {
+        getJobs: vi.fn().mockResolvedValue([createCompletedJob({ title: '서버 제목' })]),
+      },
+    });
+
+    await model.initialize();
+
+    expect(model.getSnapshot()).toMatchObject({ stageFilename: '무대 영상', stageSource: { title: '무대 영상' } });
+  });
+
   it('never stores the filename while still storing format and quality', async () => {
     const { dependencies, model } = createStageModel();
 
