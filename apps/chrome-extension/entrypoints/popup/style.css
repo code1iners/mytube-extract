@@ -122,7 +122,7 @@ button:disabled { cursor: not-allowed; }
 .quality-bars__option:nth-child(3) .quality-bars__bar { height: 28px; }
 .quality-bars__option.is-filled .quality-bars__bar { background: var(--color-primary); }
 .quality-bars__value { font-size: 12px; font-weight: 600; line-height: 1; }
-/* 선택값 이하 막대가 모두 채워지므로 실제로 고른 값은 밑줄로도 구분한다. */
+/* 선택값 이하 막대가 모두 채워지므로 실제로 고른 값은 숫자를 본문색으로 바꿔 구분한다. */
 .quality-bars__option:has(input:checked) .quality-bars__value { color: var(--color-text-primary); }
 .mode-toggle__option:has(input:focus-visible), .quality-bars__option:has(input:focus-visible) { outline: 2px solid var(--color-focus); outline-offset: 2px; }
 

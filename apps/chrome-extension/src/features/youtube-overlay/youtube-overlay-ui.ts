@@ -841,31 +841,31 @@ function createOverlayStyle(): HTMLStyleElement {
 
   // 썸네일 위에 놓이므로 YouTube 테마와 상관없이 어두운 scrim 위 흰 아이콘을 쓴다.
   style.textContent = [
-    ':host { --overlay-primary: #e60012; --overlay-scrim: rgba(18, 18, 20, .74); --overlay-scrim-strong: rgba(0, 0, 0, .9); --overlay-bar: rgba(255, 255, 255, .4); --overlay-focus: #4b5cce; --overlay-ok: #356b43; --overlay-bad: #c62828; --overlay-ring: #ffffff; --overlay-ring-track: rgba(255, 255, 255, .25); display: block; font-family: "Pretendard Variable", ui-sans-serif, system-ui, sans-serif; }',
+    ':host { --overlay-primary: #e60012; --overlay-scrim: rgba(18, 18, 20, .74); --overlay-scrim-strong: rgba(0, 0, 0, .9); --overlay-bar: rgba(255, 255, 255, .4); --overlay-focus: #4b5cce; --overlay-ok: #356b43; --overlay-bad: #c62828; --overlay-on-scrim: #ffffff; --overlay-hover: rgba(255, 255, 255, .14); --overlay-ring: var(--overlay-on-scrim); --overlay-ring-track: rgba(255, 255, 255, .25); display: block; font-family: "Pretendard Variable", ui-sans-serif, system-ui, sans-serif; }',
     createFontFaceRule(),
     '.overlay { position: absolute; top: 8px; right: 8px; display: flex; flex-direction: column; align-items: flex-end; gap: 8px; opacity: 0; pointer-events: none; transition: opacity .12s ease-out; }',
     '.overlay[data-visible] { opacity: 1; pointer-events: auto; }',
     '.formats { display: flex; gap: 6px; }',
-    'button { margin: 0; padding: 0; border: 0; color: #ffffff; cursor: pointer; font: inherit; }',
+    'button { margin: 0; padding: 0; border: 0; color: var(--overlay-on-scrim); cursor: pointer; font: inherit; }',
     '.icon { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }',
     '.format { display: grid; width: 44px; height: 44px; place-items: center; border-radius: 9999px; background: var(--overlay-scrim); }',
     '.format:hover { background: var(--overlay-scrim-strong); }',
     // 선택을 색만으로 전달하지 않도록 흰 테두리를 함께 둔다.
-    '.format[aria-pressed="true"] { background: var(--overlay-primary); box-shadow: inset 0 0 0 2px #ffffff; }',
+    '.format[aria-pressed="true"] { background: var(--overlay-primary); box-shadow: inset 0 0 0 2px var(--overlay-on-scrim); }',
     '.levels { display: flex; gap: 4px; padding: 4px; border-radius: 10px; background: var(--overlay-scrim); }',
     '.level { display: flex; flex-direction: column; align-items: center; justify-content: flex-end; gap: 3px; width: 44px; height: 48px; padding-bottom: 4px; border-radius: 6px; background: transparent; }',
-    '.level:hover { background: rgba(255, 255, 255, .14); }',
+    '.level:hover { background: var(--overlay-hover); }',
     '.level i { display: block; width: 8px; border-radius: 2px; background: var(--overlay-bar); }',
     '.level:nth-child(1) i { height: 8px; } .level:nth-child(2) i { height: 15px; } .level:nth-child(3) i { height: 22px; }',
     '.level[data-filled] i { background: var(--overlay-primary); }',
     '.level span { font-size: 11px; font-weight: 600; line-height: 1.2; }',
     // 밝은 썸네일 위에서도 보이도록 파란 outline 안쪽에 흰 띠를 둔다.
-    'button:focus-visible { outline: 2px solid var(--overlay-focus); outline-offset: 2px; box-shadow: 0 0 0 2px #ffffff; }',
-    '.format[aria-pressed="true"]:focus-visible { box-shadow: inset 0 0 0 2px #ffffff, 0 0 0 2px #ffffff; }',
+    'button:focus-visible { outline: 2px solid var(--overlay-focus); outline-offset: 2px; box-shadow: 0 0 0 2px var(--overlay-on-scrim); }',
+    '.format[aria-pressed="true"]:focus-visible { box-shadow: inset 0 0 0 2px var(--overlay-on-scrim), 0 0 0 2px var(--overlay-on-scrim); }',
     'button:disabled { cursor: not-allowed; opacity: .55; }',
     // 상태 배지는 호버 UI(오른쪽 위)와 겹치지 않는 왼쪽 위에 고정한다. 호버에 따라 움직이면 재시도 배지를 누르려다 빗나간다.
     '.status { position: absolute; top: 8px; left: 8px; }',
-    '.status__ring, .status__badge { position: relative; display: grid; width: 44px; height: 44px; place-items: center; border-radius: 9999px; color: #ffffff; }',
+    '.status__ring, .status__badge { position: relative; display: grid; width: 44px; height: 44px; place-items: center; border-radius: 9999px; color: var(--overlay-on-scrim); }',
     '.status__ring { background: var(--overlay-scrim); }',
     '.ring { position: absolute; inset: 0; width: 44px; height: 44px; }',
     '.ring__track { stroke: var(--overlay-ring-track); }',
