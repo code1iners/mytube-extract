@@ -334,12 +334,29 @@ function StageProblemLine(props: { /** 현재 popup snapshot. */ snapshot: Popup
   </p>;
 }
 
+/** 붙여넣기 단축키 키캡. macOS는 Command, 그 밖의 운영체제는 Ctrl이다. */
+const PASTE_SHORTCUT_KEYS: readonly string[] = [isMacPlatform() ? '⌘' : 'Ctrl', 'V'];
+
+/** 지금 브라우저가 macOS에서 도는지 확인한다. */
+function isMacPlatform(): boolean {
+  /** userAgentData를 아직 타입에 갖지 않은 navigator. */
+  const browserNavigator = navigator as Navigator & { userAgentData?: { platform?: string } };
+  /** 운영체제 이름. userAgentData가 없으면 예전 platform 값을 쓴다. */
+  const platform = browserNavigator.userAgentData?.platform ?? browserNavigator.platform ?? '';
+
+  return /mac/i.test(platform);
+}
+
 /** 무대 자리의 붙여넣기 칸. 붙여넣기와 타이핑 모두 받는 실제 주소 입력이다. */
 function PasteField(props: { /** 주소 입력 ref. */ inputRef: RefObject<HTMLInputElement | null>; /** 잘못된 주소 여부. */ invalid: boolean; /** 현재 입력값. */ sourceUrl: string; /** 입력 변경. */ onChange: (event: ChangeEvent<HTMLInputElement>) => void; /** 지우기. */ onClear: () => void }) {
   return <div className={props.invalid ? 'paste-field is-invalid' : 'paste-field'}>
     <PopupIcon className="paste-field__icon" name={props.invalid ? 'link-off' : 'link'} />
     <div className="paste-field__row">
-      <input ref={props.inputRef} aria-describedby={props.invalid ? SOURCE_URL_REASON_ID : undefined} aria-invalid={props.invalid || undefined} aria-label="YouTube 주소" autoComplete="off" autoFocus className="paste-field__input" name="sourceUrl" placeholder="YouTube 주소 붙여넣기" spellCheck={false} type="url" value={props.sourceUrl} onChange={props.onChange} />
+      <div className="paste-field__control">
+        <input ref={props.inputRef} aria-describedby={props.invalid ? SOURCE_URL_REASON_ID : undefined} aria-invalid={props.invalid || undefined} aria-label="YouTube 주소" autoComplete="off" autoFocus className="paste-field__input" name="sourceUrl" spellCheck={false} type="url" value={props.sourceUrl} onChange={props.onChange} />
+        {/* 붙여넣기 단축키 안내. 장식이라 읽지 않고, 입력이 시작되면 숨긴다. 클릭은 입력칸으로 통과한다. */}
+        {props.sourceUrl ? null : <span aria-hidden="true" className="paste-field__keys">{PASTE_SHORTCUT_KEYS.map((key) => <kbd key={key} className="keycap">{key}</kbd>)}</span>}
+      </div>
       {props.sourceUrl ? <button aria-label="주소 지우기" className="icon-button" type="button" onClick={props.onClear}><PopupIcon name="x" /></button> : null}
     </div>
   </div>;
@@ -573,8 +590,8 @@ function RecentRequestList(props: { /** 최신순 최근 요청. */ requests: Po
 
 /** 최근 요청 한 줄: 썸네일, 제목, 형식·품질과 요청 시각, 상태, 행동 하나. */
 function RecentRequestRow(props: { /** 그릴 최근 요청. */ request: PopupRecentRequest; /** 항목 행동 실행. */ onAction: (jobId: string) => void }) {
-  /** 품질 표기. */
-  const qualityLabel = props.request.mode === 'audio' ? `${props.request.quality} kbps` : `${props.request.quality}p`;
+  /** 화면에는 숫자만 두고 스크린리더에만 읽힐 품질 단위. */
+  const qualityUnit = props.request.mode === 'audio' ? ' kbps' : 'p';
 
   return <li className="recent-row" data-job-id={props.request.jobId} data-state={props.request.state}>
     <RecentThumbnail request={props.request} />
@@ -583,7 +600,7 @@ function RecentRequestRow(props: { /** 그릴 최근 요청. */ request: PopupRe
       <span className="recent-row__option">
         <PopupIcon name={props.request.mode} />
         <span className="visually-hidden">{props.request.mode === 'audio' ? '오디오 MP3' : '비디오 MP4'}</span>
-        <span>{qualityLabel}</span>
+        <span>{props.request.quality}<span className="visually-hidden">{qualityUnit}</span></span>
         <span aria-hidden="true">·</span>
         <time dateTime={props.request.createdAt}>{formatRecentJobTime(props.request.createdAt)}</time>
       </span>

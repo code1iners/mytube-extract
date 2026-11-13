@@ -281,9 +281,11 @@ async function verifyPasteFieldFlow(origin) {
 
     await sourceInput.waitFor({ timeout: 10000 });
     await expectDownloadButtonDisabled(page, true);
+    await expectPasteKeycaps(page, true);
 
     await sourceInput.fill('https://vimeo.com/76979871');
-    await expectStatusText(page, '지원하는 YouTube URL을 입력하세요.');
+    await expectPasteKeycaps(page, false);
+    await expectStatusText(page, '유튜브 영상 주소가 아니에요');
     await expectDownloadButtonDisabled(page, true);
     await expectNoHorizontalOverflow(page);
 
@@ -346,7 +348,7 @@ async function captureStageScreenshots(origin, outputDirectory) {
 
         if (state === 'invalid') {
           await page.getByLabel('YouTube 주소').fill('https://vimeo.com/76979871/very/long/path/that/keeps/going');
-          await expectStatusText(page, '지원하는 YouTube URL을 입력하세요.');
+          await expectStatusText(page, '유튜브 영상 주소가 아니에요');
           await page.locator('body').click({ position: { x: 1, y: 1 } });
         }
 
@@ -958,7 +960,7 @@ async function verifySettingsFlow(origin) {
     await page.getByRole('button', { name: '설정', exact: true }).click();
     await overlaySwitch.click();
     await page.evaluate(() => globalThis.__myTubeExtractAnswerPermissionRequest(false));
-    await expectAlertText(page, '권한이 거부되어 썸네일 버튼을 표시하지 않아요.');
+    await expectAlertText(page, '권한이 거부되어 표시하지 않아요');
     await page.getByRole('button', { name: '권한 다시 요청' }).waitFor({ timeout: 10000 });
     await expectNoHorizontalOverflow(page);
     await saveScreenshot(page, 'popup-settings-denied-light.png');
@@ -1040,6 +1042,33 @@ async function expectFocused(page, locator, description) {
 
   if (!(await locator.evaluate((element) => element === document.activeElement))) {
     throw new Error(`Expected focus on ${description}.`);
+  }
+}
+
+/** 빈 붙여넣기 칸의 단축키 키캡이 보이는지 확인한다. 키캡은 장식이라 접근성 트리에서 숨어 있어야 한다. */
+async function expectPasteKeycaps(page, expectedVisible) {
+  /** 키캡 묶음. */
+  const keycaps = page.locator('.paste-field__keys');
+
+  if (!expectedVisible) {
+    if ((await keycaps.count()) !== 0) {
+      throw new Error('Expected the paste shortcut keycaps to hide once the field has input.');
+    }
+
+    return;
+  }
+
+  await keycaps.waitFor({ timeout: 10000 });
+
+  /** 키캡에 적힌 키 이름. */
+  const keys = await keycaps.locator('kbd').allTextContents();
+
+  if (keys.length !== 2 || keys[1] !== 'V' || !['⌘', 'Ctrl'].includes(keys[0])) {
+    throw new Error(`Unexpected paste shortcut keycaps: ${keys.join(' ')}`);
+  }
+
+  if ((await keycaps.getAttribute('aria-hidden')) !== 'true') {
+    throw new Error('Expected the paste shortcut keycaps to be hidden from assistive technology.');
   }
 }
 

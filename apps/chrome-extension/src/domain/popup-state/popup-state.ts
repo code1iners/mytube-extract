@@ -30,7 +30,7 @@ export const MISSING_SOURCE_URL_STATUS: PopupStatus = {
 /** URL 형식 오류 상태. */
 export const INVALID_SOURCE_URL_STATUS: PopupStatus = {
   kind: 'invalid-source-url',
-  message: '지원하는 YouTube URL을 입력하세요.',
+  message: '유튜브 영상 주소가 아니에요',
 };
 
 /** 서버 확인 상태. 메시지는 진행 단계 live region 문장이다. */
