@@ -26,8 +26,6 @@ const realApiBaseUrl =
   process.env.WXT_MEDIA_NEST_API_BASE_URL ??
   process.env.MEDIA_NEST_API_BASE_URL ??
   'https://mytube-extract-api.codeliners.cc';
-/** Built popup에 주입되는 MyTube Extract API origin. */
-const expectedApiOrigin = new URL(realApiBaseUrl).origin;
 /** 가짜 YouTube 썸네일 응답으로 쓸 PNG. 스모크가 실제 YouTube 이미지 서버를 부르지 않게 한다. */
 const fakeThumbnailPng = fs.readFileSync(path.resolve('public/icon-128.png'));
 /** 지정하면 상태별 Popup 스크린샷을 라이트·다크로 이 폴더에 남긴다. */
@@ -41,6 +39,13 @@ if (!['production', 'dev'].includes(smokeMode)) {
 if (!fs.existsSync(path.join(extensionOutputRoot, 'manifest.json'))) {
   throw new Error(createMissingOutputMessage(smokeMode, extensionOutputRoot));
 }
+
+/**
+ * Built popup에 주입된 MyTube Extract API origin.
+ * 빌드는 `.env`의 API 주소도 기본값으로 넣으므로 스모크 프로세스의 환경 변수가 아니라 빌드 결과의 host permission에서 읽는다.
+ * 이 origin의 요청은 모두 가짜 응답으로 가로챈다.
+ */
+const expectedApiOrigin = readBundledApiOrigin(extensionOutputRoot);
 
 await assertRealApiHealth(realApiBaseUrl);
 console.error('[popup-smoke] real API health ok');
@@ -114,6 +119,20 @@ const staticServer = await createStaticServer(extensionOutputRoot);
   );
 } finally {
   await staticServer.close();
+}
+
+/** 빌드 manifest의 API host permission(`<origin>/*`)에서 번들이 쓰는 API origin을 읽는다. */
+function readBundledApiOrigin(outputRoot) {
+  /** 빌드된 manifest. */
+  const manifest = JSON.parse(fs.readFileSync(path.join(outputRoot, 'manifest.json'), 'utf8'));
+  /** API 서버 host permission. 확장이 요청하는 필수 host permission은 API 서버 하나뿐이다. */
+  const apiHostPermission = manifest.host_permissions?.[0];
+
+  if (typeof apiHostPermission !== 'string' || !apiHostPermission.endsWith('/*')) {
+    throw new Error(`Built manifest has no API host permission: ${JSON.stringify(manifest.host_permissions)}`);
+  }
+
+  return new URL(apiHostPermission.slice(0, -2)).origin;
 }
 
 /** 실제 MyTube Extract API health endpoint를 확인한다. */
