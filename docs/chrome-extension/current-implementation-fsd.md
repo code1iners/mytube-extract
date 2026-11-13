@@ -99,6 +99,18 @@ API base URL은 `WXT_MYTUBE_EXTRACT_API_BASE_URL` 환경 변수로 정하며 pop
 - 썸네일 버튼 행: 꺼짐(스위치) → 켜기(권한 요청 중 회전 아이콘) → 켜짐(스위치 on), 거부·오류는 crimson 행·이유 한 줄(거부: `권한이 거부되어 표시하지 않아요`)·`권한 다시 요청` 버튼이다. 켜진 스위치를 끄면 YouTube optional host permission을 제거하고 이후 자동 주입이 멈춘다. 이미 열린 탭의 버튼은 다음 이동이나 새로고침 때 사라진다.
 - 저작권·플랫폼 정책 안내와 완료 파일 보관 기간(job의 `retentionDays`, 기본 7일) 안내를 보여 준다.
 
+### 사용자 승인 동작 (2026-11-13 리뷰 결정)
+
+spec에 따로 적히지 않았거나 해석이 갈리는 아래 동작은 현재 구현대로 유지하기로 사용자가 정했다.
+
+- 무대 제목 줄은 저장 파일명이라 경로 구분자(`/`, `\`)와 제어 문자를 공백으로 정리한 값을 보인다. 원래 제목을 따로 보이지 않는다.
+- 완료 파일 만료는 서버의 `expired` 외에 요청 생성 시각(`createdAt`) + `retentionDays`로도 판정한다. job에 완료 시각이 없어 서버보다 조금 일찍 만료로 볼 수 있지만, 이미 지워진 주소를 내밀지 않으려는 보수적 선택이다. Overlay 카드 상태도 같은 판정을 쓴다.
+- 입력칸 밖에서 붙여넣은 글자도 무대 원본 주소로 받는다. 탭 영상이 무대에 있어도 다른 영상으로 바꿀 수 있다.
+- 파일명 편집 중 Escape는 편집을 취소하고 이전 이름으로 돌아간다.
+- 형식·품질 저장에 실패하면 `설정을 저장하지 못했어요.` 오류 한 줄로 알린다.
+- 최근 요청 행동은 실행 중에 같은 항목을 다시 누를 수 없게 잠그고, 시작 성공(`다운로드를 다시 시작했어요`·`다시 요청했어요`)을 live region으로 알린다.
+- 썸네일 버튼 끄기(권한 해제)가 실패하면 실제 권한을 다시 읽어, 남아 있으면 켜짐 그대로 끄지 못한 이유 한 줄만 보인다.
+
 ### YouTube 썸네일 Overlay
 
 - Popup 설정 화면의 썸네일 버튼 스위치를 켤 때 `https://www.youtube.com/*` optional Host Permission을 요청하고, 끌 때 해제한다.
@@ -107,8 +119,8 @@ API base URL은 `WXT_MYTUBE_EXTRACT_API_BASE_URL` 환경 변수로 정하며 pop
 - 썸네일에 마우스를 올리거나 키보드로 포커스하면 오른쪽 위에 형식 원형 아이콘 버튼 두 개(오디오·비디오)와 품질 막대 세 개가 나타난다. 오디오를 고르면 막대 숫자가 `128 / 192 / 320`(kbps), 비디오면 `360 / 720 / 1080`(p)이 된다. 형식 선택은 같은 페이지 안에서만 기억한다.
 - 품질 막대를 누르면 별도 패널 없이 바로 기존 `youtube-overlay-download` 메시지로 접수한다.
 - 카드 제목을 파일명 후보로 전달하고 Background에서 경로 구분자·제어 문자를 제거한다. 제목이 비어 있거나 `.`/`..`이면 video ID를 사용한다.
-- 카드 진행 상태: Overlay 스크립트가 저장된 최근 요청 목록(`recentDownloadJobs`)의 storage 변경을 구독하고, 카드 영상 ID와 같은 영상의 최신 job 상태를 카드 왼쪽 위에 그린다(시안은 오른쪽 위지만 호버 조작과 겹치지 않게 왼쪽 위로 두기로 사용자가 정했다). 대기는 시계와 회전 링, 처리는 회전 링, 완료는 초록 체크 배지(약 3초 뒤 사라짐), 실패는 crimson 다시 시도 버튼 배지다. 실패 배지를 누르면 같은 형식·품질로 다시 접수한다. 배지는 호버와 관계없이 보이고, 카드가 다시 그려져도 같은 매칭으로 다시 표시한다. 최근 5건 보관 목록에 있는 job만 표시하고, 만료된 job은 표시하지 않는다. 새 background→content 메시지는 쓰지 않는다.
-- 페이지에는 단일 전역 Toast를 사용한다. 접수·실패 Toast는 미니 썸네일, 상태 아이콘, 형식 아이콘과 품질, 닫기 버튼으로 구성하고 실패 Toast에는 다시 시도 버튼을 더한다. 문장은 화면에 보이지 않고 live region으로만 전달한다. 백분율 진행률은 표시하지 않는다.
+- 카드 진행 상태: Overlay 스크립트가 저장된 최근 요청 목록(`recentDownloadJobs`)의 storage 변경을 구독하고, 카드 영상 ID와 같은 영상의 최신 job 상태를 카드 왼쪽 위에 그린다(시안은 오른쪽 위지만 호버 조작과 겹치지 않게 왼쪽 위로 두기로 사용자가 정했다). 대기는 시계와 회전 링, 처리는 회전 링, 완료는 초록 체크 배지(약 3초 뒤 사라짐), 실패는 crimson 다시 시도 버튼 배지다. 실패 배지를 누르면 같은 형식·품질로 다시 접수한다. 배지는 호버와 관계없이 보이고, 카드가 다시 그려져도 같은 매칭으로 다시 표시한다. 최근 5건 보관 목록에 있는 job만 표시하고, 만료된 job은 표시하지 않는다. 새 background→content 메시지는 쓰지 않는다. 페이지를 연 뒤 첫 목록 읽기가 끝나기 전에 온 storage 변경은 모아 두었다가 첫 목록 다음에 비교하므로, 그 사이 완료된 job에도 완료 배지가 뜬다.
+- 페이지에는 단일 전역 Toast를 사용한다. 진행·접수·실패 Toast는 미니 썸네일, 상태 아이콘, 형식 아이콘과 품질, 닫기 버튼으로 구성하고 실패 Toast에는 다시 시도 버튼을 더한다. 품질 막대를 누르면 Background 응답을 기다리는 동안 중립 회전 링 진행 Toast(live region `요청을 보내고 있어요`)를 보이고, 접수 응답을 받은 뒤 체크 접수 Toast(`요청을 접수했어요`, 약 4초 뒤 닫힘)로, 실패하면 실패 Toast로 바꾼다. 문장은 화면에 보이지 않고 live region으로만 전달한다. 백분율 진행률은 표시하지 않는다.
 - Overlay UI는 카드 Shadow Root에 격리하고, `docs/DESIGN.md`의 "Chrome popup·Overlay 최소 UI 계약"(어두운 scrim 위 흰 아이콘, 44px 조작 영역, blue focus, 줄어든 동작 설정에서 회전 정지)과 `Pretendard Variable`을 적용한다.
 
 ## API 호출 계약
@@ -244,8 +256,8 @@ Chrome 확장 프로그램은 현재 `POST /downloads`와 job 상태·파일 end
 - `pnpm --filter chrome-extension run build`가 WXT generated manifest, popup asset, 권한, icon 참조를 검증한다.
 - `pnpm --filter chrome-extension run test`가 URL 검증, job API 매핑, active/recent storage 직렬화·복구, popup 상태 전이, Overlay 품질·메시지·파일명·권한 계약을 검증한다.
 - `pnpm --filter chrome-extension run lint`가 WXT type generation과 TypeScript compile을 검증한다.
-- `pnpm --filter chrome-extension run test:browser`가 실제 API `/health`, WXT load unpacked 렌더링, built popup의 무대 자동 지정·붙여넣기 칸·잘못된 주소·서버 실패·접수 거부·다운로드 시작·파일명 편집·진행 복원·최근 요청 줄과 목록·설정 화면의 테마와 썸네일 버튼 권한 흐름, 그리고 Overlay 스모크를 검증한다. 실제 API에는 `/health` GET만 보내고 나머지 API 응답은 가짜로 대신한다. `MYTUBE_EXTRACT_POPUP_SCREENSHOT_DIR`·`MYTUBE_EXTRACT_OVERLAY_SCREENSHOT_DIR`를 지정하면 상태별 캡처를 남긴다.
-- `pnpm --filter chrome-extension run test:browser:overlay`가 Overlay unlisted script의 형식 아이콘·품질 막대, 품질 클릭 제출, 저장된 job 변경에 따른 카드 상태 배지, 실패 배지 재시도, 전역 Toast, Shorts 제외, 동적 카드, 중복 주입을 검증한다.
+- `pnpm --filter chrome-extension run test:browser`가 실제 API `/health`, WXT load unpacked 렌더링, built popup의 무대 자동 지정·붙여넣기 칸·잘못된 주소·서버 실패·접수 거부·다운로드 시작·파일명 편집·진행 복원·최근 요청 줄과 목록·설정 화면의 테마와 썸네일 버튼 권한 흐름, 그리고 Overlay 스모크를 검증한다. 실제 API에는 `/health` GET만 보내고 나머지 API 응답은 가짜로 대신한다. 붙여넣은 영상의 접수 뒤 API 제목 표시와 200% 확대에서 무대·최근 요청·설정 화면의 조작이 잘리거나 가려지지 않는지도 확인한다. 스모크는 빌드 manifest의 API host permission에서 번들이 쓰는 API origin을 읽어 그 origin을 가로채므로, `.env`에 다른 API 주소가 있어도 기본 실행이 통과한다. `MYTUBE_EXTRACT_POPUP_SCREENSHOT_DIR`·`MYTUBE_EXTRACT_OVERLAY_SCREENSHOT_DIR`를 지정하면 상태별 캡처를 남긴다.
+- `pnpm --filter chrome-extension run test:browser:overlay`가 Overlay unlisted script의 형식 아이콘·품질 막대, 품질 클릭 제출, 저장된 job 변경에 따른 카드 상태 배지, 실패 배지 재시도, 응답 전 진행 Toast와 응답 뒤 접수 Toast를 포함한 전역 Toast, Shorts 제외, 동적 카드, 중복 주입을 검증한다.
 - 실제 Chrome에서 새 프로필로 optional permission을 허용한 뒤 YouTube 홈·검색·구독·시청 추천 영역을 직접 열어 selector와 실제 다운로드를 확인해야 한다. 자동 fixture smoke 통과만으로 실제 YouTube 동작을 완료 처리하지 않는다.
 
 ## 후속 보류 사항
