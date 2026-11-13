@@ -13,6 +13,7 @@ import {
   createOverlayCardStatusTracker,
   type OverlayCardStatus,
   type OverlayCardStatusTracker,
+  subscribeOverlayRecentJobs,
 } from './youtube-overlay-card-status';
 import {
   type YoutubeOverlayDownloadRequest,
@@ -209,8 +210,6 @@ function subscribeRecentJobs(pageState: OverlayPageState): void {
   const storage = createDownloadJobStorageAdapter(chrome);
   /** 완료 배지를 지우려고 예약한 timer. */
   let expiryTimer: number | undefined;
-  /** 변경 이벤트로 최신 목록을 이미 받았는지 여부. */
-  let receivedChange = false;
 
   /** 모든 카드의 상태 배지를 다시 그리고, 완료 배지가 사라질 때 한 번 더 그리도록 예약한다. */
   function renderStatuses() {
@@ -236,21 +235,7 @@ function subscribeRecentJobs(pageState: OverlayPageState): void {
   }
 
   try {
-    storage.subscribeJobs((jobs) => {
-      receivedChange = true;
-      applyJobs(jobs);
-    });
-    storage.loadJobs().then(
-      (jobs) => {
-        // 읽기가 끝나기 전에 변경 이벤트가 왔다면 그 목록이 더 최신이라 늦게 온 읽기 결과는 버린다.
-        if (!receivedChange) {
-          applyJobs(jobs);
-        }
-      },
-      () => {
-        // 확장을 다시 불러와 연결이 끊긴 페이지에서는 상태 없이 호버 UI만 남긴다.
-      },
-    );
+    subscribeOverlayRecentJobs(storage, applyJobs);
   } catch {
     // 연결이 끊긴 확장 context에서는 storage 호출 자체가 예외를 던진다.
   }

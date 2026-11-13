@@ -1,3 +1,4 @@
+import { type DownloadJobStorageAdapter } from '../../adapters/chrome/download-job-storage';
 import { type DownloadJob, getDownloadJobVideoId } from '../../domain/download-job/download-job';
 import { type DownloadMode } from '../../domain/download-options/download-options';
 import { isQualityOption, type QualityOption } from '../../domain/download-options/quality-options';
@@ -126,4 +127,43 @@ export function createOverlayCardStatusTracker(): OverlayCardStatusTracker {
       return delays.length > 0 ? Math.min(...delays) : null;
     },
   };
+}
+
+/**
+ * 저장된 최근 job 목록을 처음 읽고 이후 변경을 받아 `onJobs`에 순서대로 넘긴다.
+ * 첫 읽기가 끝나기 전에 온 변경은 모아 두었다가 첫 목록을 넘긴 뒤에 넘긴다.
+ * 변경 목록을 첫 목록으로 삼으면 그 사이 완료된 job이 '이미 끝난 일'로 보여 완료 배지가 뜨지 않는다.
+ */
+export function subscribeOverlayRecentJobs(
+  storage: Pick<DownloadJobStorageAdapter, 'loadJobs' | 'subscribeJobs'>,
+  onJobs: (jobs: DownloadJob[]) => void,
+): void {
+  /** 첫 읽기가 끝났는지(성공·실패 모두) 여부. */
+  let firstReadSettled = false;
+  /** 첫 읽기 전에 받은 마지막 변경 목록. 변경 이벤트는 목록 전체를 주므로 마지막 것만 남긴다. */
+  let pendingChange: DownloadJob[] | null = null;
+
+  /** 첫 읽기 결과(실패면 null)를 넘기고, 그동안 모아 둔 변경을 이어서 넘긴다. */
+  function settleFirstRead(jobs: DownloadJob[] | null) {
+    firstReadSettled = true;
+
+    if (jobs) {
+      onJobs(jobs);
+    }
+
+    if (pendingChange) {
+      onJobs(pendingChange);
+      pendingChange = null;
+    }
+  }
+
+  storage.subscribeJobs((jobs) => {
+    if (firstReadSettled) {
+      onJobs(jobs);
+      return;
+    }
+
+    pendingChange = jobs;
+  });
+  storage.loadJobs().then(settleFirstRead, () => settleFirstRead(null));
 }

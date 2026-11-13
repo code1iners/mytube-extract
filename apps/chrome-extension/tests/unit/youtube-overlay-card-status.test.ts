@@ -3,6 +3,7 @@ import { type DownloadJob } from '../../src/domain/download-job/download-job';
 import {
   createOverlayCardStatusTracker,
   OVERLAY_COMPLETED_BADGE_MS,
+  subscribeOverlayRecentJobs,
 } from '../../src/features/youtube-overlay/youtube-overlay-card-status';
 
 /** 검사 기준 시각. */
@@ -163,5 +164,59 @@ describe('Overlay card status tracker', () => {
     tracker.update([createJob({ status: 'completed' })], NOW + 1000);
 
     expect(tracker.getStatus('abc123_DEF0', NOW + 1000)).toEqual({ state: 'completed' });
+  });
+});
+
+/** 첫 읽기를 원하는 시점에 끝낼 수 있는 가짜 최근 job storage를 만든다. */
+function createDeferredJobStorage() {
+  /** 변경 이벤트 listener. */
+  let changeListener: (jobs: DownloadJob[]) => void = () => {};
+  /** 첫 읽기 결과를 돌려주는 함수. */
+  let resolveLoad: (jobs: DownloadJob[]) => void = () => {};
+
+  return {
+    storage: {
+      loadJobs: () =>
+        new Promise<DownloadJob[]>((resolve) => {
+          resolveLoad = resolve;
+        }),
+      subscribeJobs(listener: (jobs: DownloadJob[]) => void) {
+        changeListener = listener;
+
+        return () => {};
+      },
+    },
+    emitChange: (jobs: DownloadJob[]) => changeListener(jobs),
+    finishLoad: (jobs: DownloadJob[]) => resolveLoad(jobs),
+  };
+}
+
+describe('Overlay recent job subscription', () => {
+  it('shows the completed badge when the job completes before the first read finishes', async () => {
+    /** Overlay 카드 상태 tracker. */
+    const tracker = createOverlayCardStatusTracker();
+    /** 첫 읽기가 늦게 끝나는 storage. */
+    const { emitChange, finishLoad, storage } = createDeferredJobStorage();
+
+    subscribeOverlayRecentJobs(storage, (jobs) => tracker.update(jobs, NOW));
+    emitChange([createJob({ status: 'completed' })]);
+    finishLoad([createJob({ status: 'processing' })]);
+    await Promise.resolve();
+
+    expect(tracker.getStatus('abc123_DEF0', NOW)).toEqual({ state: 'completed' });
+  });
+
+  it('applies only the first read when no change arrives before it', async () => {
+    /** 반영한 목록 기록. */
+    const applied: DownloadJob[][] = [];
+    /** 첫 읽기가 늦게 끝나는 storage. */
+    const { emitChange, finishLoad, storage } = createDeferredJobStorage();
+
+    subscribeOverlayRecentJobs(storage, (jobs) => applied.push(jobs));
+    finishLoad([createJob({ status: 'processing' })]);
+    await Promise.resolve();
+    emitChange([createJob({ status: 'completed' })]);
+
+    expect(applied.map((jobs) => jobs[0]?.status)).toEqual(['processing', 'completed']);
   });
 });
