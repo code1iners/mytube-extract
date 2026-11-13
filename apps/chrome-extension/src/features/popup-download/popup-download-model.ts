@@ -57,8 +57,24 @@ import {
   isStagePhaseProblem,
   parseYoutubeTabTitle,
 } from '../../domain/popup-state/popup-state';
-import { type RecentRequest, deriveRecentRequest } from '../../domain/recent-request/recent-request';
 import { buildTitleFilenameStem, sanitizeFilenameStem } from '../../shared/sanitize-filename';
+import {
+  type PopupRecentRequest,
+  type RecentActionResult,
+  createPopupRecentRequestActions,
+} from './popup-recent-requests';
+import {
+  type YoutubeOverlaySnapshot,
+  createYoutubeOverlayPermission,
+  createYoutubeOverlaySnapshot,
+} from './youtube-overlay-permission';
+
+export type { PopupRecentRequest, RecentActionResult } from './popup-recent-requests';
+export type {
+  YoutubeOverlayIndicator,
+  YoutubeOverlaySnapshot,
+  YoutubeOverlayStatus,
+} from './youtube-overlay-permission';
 
 /** Popup model dependency. */
 export type PopupDownloadModelDependencies = {
@@ -74,73 +90,8 @@ export type PopupDownloadModelDependencies = {
   downloads: DownloadsAdapter;
 };
 
-/** 썸네일 버튼 권한 상태. */
-export type YoutubeOverlayStatus = 'checking' | 'disabled' | 'enabled' | 'requesting' | 'denied' | 'error';
-
-/** 헤더 격자 아이콘의 점. `off`는 빨간 점(아직 켜지 않음·확인 중), `on`은 초록 점, `problem`은 crimson 점(거부·오류)이다. */
-export type YoutubeOverlayIndicator = 'off' | 'on' | 'problem';
-
-/** YouTube 썸네일 Overlay 권한 상태. */
-export type YoutubeOverlaySnapshot = {
-  /** 선택 Host Permission 활성화 여부. */
-  enabled: boolean;
-  /** Overlay 권한 상태. */
-  status: YoutubeOverlayStatus;
-  /** 헤더 격자 아이콘에 보일 점. status에서 도출한다. */
-  indicator: YoutubeOverlayIndicator;
-  /** 권한 상태 문장. 거부·오류면 설정 화면의 이유 한 줄로 보인다. */
-  message: string;
-  /** 스위치를 끄지 못한 이유. 권한이 남아 있어 켜짐 상태 그대로 이 한 줄만 알린다. 다음 권한 변경 때 비운다. */
-  turnOffError: string | null;
-};
-
-/** 권한 상태별 기본 문장. */
-const YOUTUBE_OVERLAY_MESSAGES: Record<YoutubeOverlayStatus, string> = {
-  checking: '썸네일 버튼 권한을 확인하고 있어요.',
-  denied: '권한이 거부되어 표시하지 않아요',
-  disabled: '켜면 YouTube 썸네일에서 바로 추출할 수 있어요.',
-  enabled: '썸네일 버튼이 켜져 있어요.',
-  error: '썸네일 버튼 권한을 확인하지 못했어요.',
-  requesting: '썸네일 버튼 권한을 요청하고 있어요.',
-};
-
-/** 켜기 요청이 실패했을 때의 이유. */
-const YOUTUBE_OVERLAY_ENABLE_FAILED_MESSAGE = '썸네일 버튼을 켜지 못했어요. 다시 요청해 보세요.';
-/** 끄기(권한 해제)가 실패했을 때의 이유. */
-const YOUTUBE_OVERLAY_DISABLE_FAILED_MESSAGE = '썸네일 버튼을 끄지 못했어요. 다시 시도해 보세요.';
-
-/** 권한 상태로 snapshot 값을 만든다. 헤더 점은 상태에서만 도출해 설정 행과 어긋나지 않게 한다. */
-function createYoutubeOverlaySnapshot(
-  status: YoutubeOverlayStatus,
-  message = YOUTUBE_OVERLAY_MESSAGES[status],
-): YoutubeOverlaySnapshot {
-  return {
-    enabled: status === 'enabled',
-    indicator: status === 'enabled' ? 'on' : status === 'denied' || status === 'error' ? 'problem' : 'off',
-    message,
-    status,
-    turnOffError: null,
-  };
-}
-
 /** job에 보관 일수가 없을 때 안내할 완료 파일 보관 일수. */
 export const DEFAULT_RETENTION_DAYS = 7;
-
-/** Popup이 그리는 최근 요청 하나. 도출한 표시 정보에 이 Popup에서 행동을 실행 중인지를 더한다. */
-export type PopupRecentRequest = RecentRequest & {
-  /** 다시 내려받기·다시 시도·다시 요청을 실행하는 중인지 여부. 실행 중에는 같은 항목의 행동을 막는다. */
-  pending: boolean;
-  /** 같은 영상의 다른 요청이 진행 중이라 다시 시도·다시 요청을 잠갔는지 여부. 무대의 같은 영상 제출 잠금과 같은 규칙이다. */
-  locked: boolean;
-};
-
-/** 마지막 최근 요청 행동의 결과. recent 화면이 live region과 오류 줄로 알린다. */
-export type RecentActionResult = {
-  /** 행동을 시작했으면 `started`, 실패했으면 `failed`다. */
-  kind: 'started' | 'failed';
-  /** 알릴 문장. */
-  message: string;
-};
 
 /** Popup 화면 snapshot. */
 export type PopupDownloadSnapshot = {
@@ -303,10 +254,12 @@ export function createPopupDownloadModel(
   const scheduledDoneJobIds = new Set<string>();
   /** job별 마지막 상태. 제출 응답과 storage 구독이 서로 다른 시점에 도착해도 되돌리지 않는다. */
   const lastAppliedJobs = new Map<string, DownloadJob>();
-  /** 최근 요청 행동을 실행 중인 job ID. */
-  const pendingRecentJobIds = new Set<string>();
-  /** 썸네일 버튼 켜기·끄기를 처리 중인지 여부. Chrome 권한 창이 겹쳐 뜨지 않게 한 번에 하나만 처리한다. */
-  let isChangingYoutubeOverlay = false;
+  /** 최근 요청 표시 정보와 항목 행동. */
+  const recentRequestActions = createPopupRecentRequestActions(dependencies);
+  /** 썸네일 버튼 권한 창구. 바뀐 권한 상태를 바로 화면에 반영한다. */
+  const youtubeOverlayPermission = createYoutubeOverlayPermission(dependencies.youtubeOverlay, (youtubeOverlay) =>
+    refresh({ youtubeOverlay }),
+  );
 
   /** 한 영상의 요청이 제출 중이거나 아직 끝나지 않았는지 확인한다. 같은 영상의 중복 제출을 막는 데 쓴다. */
   function isVideoInProgress(videoId: string | null, jobs: readonly DownloadJob[]): boolean {
@@ -435,18 +388,11 @@ export function createPopupDownloadModel(
       downloading: base.jobs.some(isUnsettledJob),
       retentionDays: base.jobs[0]?.retentionDays ?? DEFAULT_RETENTION_DAYS,
       fileExtension: getFileExtension(base.options.mode),
-      recentRequests: base.jobs.map((job) => {
-        /** 도출한 표시 정보. */
-        const request = deriveRecentRequest(job, Date.now());
-
-        return {
-          ...request,
-          locked:
-            (request.action === 'retry' || request.action === 'rerequest') &&
-            isVideoInProgress(request.videoId, base.jobs),
-          pending: pendingRecentJobIds.has(job.jobId),
-        };
-      }),
+      recentRequests: recentRequestActions.describe(
+        base.jobs,
+        (videoId) => isVideoInProgress(videoId, base.jobs),
+        Date.now(),
+      ),
       stageFilename: resolveStageFilename(
         base.options.filename,
         stageSource,
@@ -578,8 +524,6 @@ export function createPopupDownloadModel(
     async initialize() {
       /** 저장된 option. */
       let options = DEFAULT_DOWNLOAD_OPTIONS;
-      /** YouTube 썸네일 Overlay 권한 상태. */
-      let youtubeOverlay = createYoutubeOverlaySnapshot('checking');
 
       try {
         options = await dependencies.storage.loadOptions();
@@ -588,14 +532,8 @@ export function createPopupDownloadModel(
         options = mergeStoredDownloadOptions({});
       }
 
-      try {
-        /** 선택 Host Permission 활성화 여부. */
-        const enabled = await dependencies.youtubeOverlay.isEnabled();
-
-        youtubeOverlay = createYoutubeOverlaySnapshot(enabled ? 'enabled' : 'disabled');
-      } catch {
-        youtubeOverlay = createYoutubeOverlaySnapshot('error');
-      }
+      /** YouTube 썸네일 Overlay 권한 상태. */
+      const youtubeOverlay = await youtubeOverlayPermission.readInitial();
 
       /** 활성 탭에서 자동 지정할 원본 URL. YouTube 영상 탭이 아니거나 읽지 못하면 비운다. */
       let tabSourceUrl = '';
@@ -642,62 +580,11 @@ export function createPopupDownloadModel(
       });
       isInitialized = true;
     },
-    async activateYoutubeOverlay() {
-      if (isChangingYoutubeOverlay) {
-        return;
-      }
-
-      isChangingYoutubeOverlay = true;
-      refresh({ youtubeOverlay: createYoutubeOverlaySnapshot('requesting') });
-
-      try {
-        /** 권한 요청과 현재 탭 Overlay 활성화 결과. */
-        const enabled = await dependencies.youtubeOverlay.requestAndEnable();
-
-        refresh({ youtubeOverlay: createYoutubeOverlaySnapshot(enabled ? 'enabled' : 'denied') });
-      } catch {
-        refresh({ youtubeOverlay: createYoutubeOverlaySnapshot('error', YOUTUBE_OVERLAY_ENABLE_FAILED_MESSAGE) });
-      } finally {
-        isChangingYoutubeOverlay = false;
-      }
+    activateYoutubeOverlay() {
+      return youtubeOverlayPermission.activate();
     },
-    async deactivateYoutubeOverlay() {
-      if (isChangingYoutubeOverlay) {
-        return;
-      }
-
-      isChangingYoutubeOverlay = true;
-
-      try {
-        /** Chrome이 권한을 실제로 해제했는지 여부. */
-        let removed = false;
-
-        try {
-          removed = await dependencies.youtubeOverlay.disable();
-        } catch {
-          removed = false;
-        }
-
-        if (removed) {
-          refresh({ youtubeOverlay: createYoutubeOverlaySnapshot('disabled') });
-          return;
-        }
-
-        // 해제 실패를 '오류'로 보이면 권한이 남아 자동 주입이 계속되는데도 켜기 요청만 남는다.
-        // 실제 권한 상태를 다시 읽어 그대로 보여 주고, 남아 있으면 끄지 못한 이유만 알린다.
-        /** 해제 실패 뒤의 실제 권한 상태. */
-        const stillEnabled = await dependencies.youtubeOverlay.isEnabled();
-
-        refresh({
-          youtubeOverlay: stillEnabled
-            ? { ...createYoutubeOverlaySnapshot('enabled'), turnOffError: YOUTUBE_OVERLAY_DISABLE_FAILED_MESSAGE }
-            : createYoutubeOverlaySnapshot('disabled'),
-        });
-      } catch {
-        refresh({ youtubeOverlay: createYoutubeOverlaySnapshot('error') });
-      } finally {
-        isChangingYoutubeOverlay = false;
-      }
+    deactivateYoutubeOverlay() {
+      return youtubeOverlayPermission.deactivate();
     },
     openView(view) {
       // 이전 화면에서 실패한 최근 요청 행동의 이유는 다른 화면으로 옮겨 가면 의미가 없다.
@@ -714,41 +601,17 @@ export function createPopupDownloadModel(
       /** 그 요청의 원본 job. */
       const job = snapshot.jobs.find((item) => item.jobId === jobId);
 
-      if (!request?.action || !job || request.locked || pendingRecentJobIds.has(jobId)) {
+      if (!recentRequestActions.canRun(request) || !job) {
         return;
       }
 
-      pendingRecentJobIds.add(jobId);
-      refresh({ recentActionResult: null });
-
-      /** 행동이 실패한 이유. 성공하면 null이다. */
-      let failureMessage: string | null = null;
-      /** 재제출로 새로 생긴 job. */
-      let submittedJob: DownloadJob | null = null;
-
-      try {
-        if (request.action === 'redownload') {
-          // 보관 기간 안의 완료 파일은 재처리 없이 같은 주소에서 로컬 다운로드만 다시 시작한다.
-          await dependencies.downloads.startDownload(
-            job.downloadUrl ?? '',
-            buildDefaultLocalFilename(job) || undefined,
-          );
-        } else {
-          // 알림의 다시 시도와 같은 Background 제출 경로로, job의 원본·형식·품질과 기본 이름을 쓴다.
-          submittedJob = await dependencies.downloadJobs.submitJob({
-            apiBaseUrl: snapshot.options.apiBaseUrl,
-            localFilename: buildDefaultLocalFilename(job),
-            mode: job.type,
-            quality: job.quality,
-            sourceUrl: job.sourceUrl ?? '',
-          });
-        }
-      } catch (error) {
-        failureMessage =
-          error instanceof Error && error.message ? error.message : '요청을 처리하지 못했어요.';
-      }
-
-      pendingRecentJobIds.delete(jobId);
+      /** 행동 결과와 새로 생긴 job. */
+      const { result, submittedJob } = await recentRequestActions.run(
+        request,
+        job,
+        snapshot.options.apiBaseUrl,
+        () => refresh({ recentActionResult: null }),
+      );
 
       if (submittedJob) {
         // 이번 Popup이 보낸 job이므로 무대 영상과 같으면 완료·실패 덮개까지 지켜본다.
@@ -758,12 +621,7 @@ export function createPopupDownloadModel(
 
       refresh({
         jobs: submittedJob && acceptJobUpdate(submittedJob) ? upsertJob(submittedJob) : snapshot.jobs,
-        recentActionResult: failureMessage
-          ? { kind: 'failed', message: failureMessage }
-          : {
-              kind: 'started',
-              message: request.action === 'redownload' ? '다운로드를 다시 시작했어요' : '다시 요청했어요',
-            },
+        recentActionResult: result,
       });
     },
     subscribe(listener) {
@@ -889,16 +747,6 @@ function resolveStageFilename(
   const sanitized = sanitizeFilenameStem(withoutExtension);
 
   return sanitized || buildTitleFilenameStem(stageSource.title ?? '', stageSource.videoId);
-}
-
-/** 최근 요청을 다시 받을 때 쓸 기본 파일명. 제목 기반 정리(실패 시 영상 ID)에 형식 확장자를 붙이고, 영상 ID를 모르면 서버 기본 이름을 쓰도록 비운다. */
-function buildDefaultLocalFilename(job: DownloadJob): string {
-  /** job 원본의 영상 ID. */
-  const videoId = getDownloadJobVideoId(job);
-
-  return videoId
-    ? `${buildTitleFilenameStem(job.title ?? '', videoId)}.${getFileExtension(job.type)}`
-    : '';
 }
 
 /** 로컬 저장에 넘길 파일명. 입력칸 옆에 보인 확장자를 그대로 붙인다. */
