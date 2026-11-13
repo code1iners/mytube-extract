@@ -1,13 +1,13 @@
 import { type DownloadMode, parseYoutubeVideoId } from '../download-options/download-options';
+import { type DownloadQuality } from '../download-options/quality-options';
+
+export type { DownloadQuality };
 
 /** 다운로드 job 실제 상태. */
 export type DownloadJobStatus = 'queued' | 'processing' | 'completed' | 'failed';
 
 /** 만료를 반영한 화면 표시 상태. */
 export type DownloadJobDisplayStatus = DownloadJobStatus | 'expired';
-
-/** 다운로드 화질 값. */
-export type DownloadQuality = '128' | '192' | '320' | '360' | '720' | '1080';
 
 /** 다운로드 job 실패 코드. */
 export type DownloadJobErrorCode =
@@ -64,6 +64,34 @@ export type CreateDownloadJobInput = {
 /** job의 원본 주소에서 YouTube 영상 ID를 얻는다. 원본 주소가 없는 예전 job이나 지원하지 않는 주소면 null이다. */
 export function getDownloadJobVideoId(job: Pick<DownloadJob, 'sourceUrl'>): string | null {
   return job.sourceUrl ? parseYoutubeVideoId(job.sourceUrl) : null;
+}
+
+/** job 목록을 요청 생성 시각 최신순으로 정렬한 새 목록을 만든다. 시각이 같으면 원래 순서를 유지한다. */
+export function sortDownloadJobsNewestFirst(jobs: readonly DownloadJob[]): DownloadJob[] {
+  return [...jobs].sort((left, right) => right.createdAt.localeCompare(left.createdAt));
+}
+
+/** 영상 ID별 가장 최신 job을 고른다. 원본 영상을 모르는 예전 job은 빠진다. */
+export function selectLatestJobByVideoId(jobs: readonly DownloadJob[]): Map<string, DownloadJob> {
+  /** 영상 ID별 최신 job. */
+  const latestJobs = new Map<string, DownloadJob>();
+
+  // 최신순으로 돌기 때문에 영상마다 처음 만난 job이 가장 최신이다.
+  sortDownloadJobsNewestFirst(jobs).forEach((job) => {
+    /** job 원본 영상 ID. */
+    const videoId = getDownloadJobVideoId(job);
+
+    if (videoId && !latestJobs.has(videoId)) {
+      latestJobs.set(videoId, job);
+    }
+  });
+
+  return latestJobs;
+}
+
+/** 한 영상의 가장 최신 job을 찾는다. 없으면 null이다. */
+export function findLatestVideoJob(jobs: readonly DownloadJob[], videoId: string): DownloadJob | null {
+  return selectLatestJobByVideoId(jobs).get(videoId) ?? null;
 }
 
 /** storage에 남아 있는 job 값. 원본 주소·제목 필드가 생기기 전 버전이 저장한 job에는 두 필드가 없다. */

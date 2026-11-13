@@ -3,7 +3,7 @@ import {
   type DownloadQuality,
   getDownloadJobVideoId,
 } from '../download-job/download-job';
-import { type DownloadMode, getYoutubeThumbnailUrl } from '../download-options/download-options';
+import { type DownloadMode, DOWNLOAD_MODE_LABELS, getYoutubeThumbnailUrl } from '../download-options/download-options';
 
 /** 무대 아래 최근 요청 줄에 보이는 썸네일 최대 개수. 나머지는 더보기로 `recent` 화면에서 본다. */
 export const RECENT_REQUEST_STRIP_LIMIT = 3;
@@ -109,7 +109,7 @@ export function deriveRecentRequest(job: DownloadJob, now: number): RecentReques
     state,
     stateLabel: STATE_LABELS[state],
     thumbnailUrl: videoId ? getYoutubeThumbnailUrl(videoId) : null,
-    title: job.title ?? videoId ?? (job.type === 'audio' ? '오디오 MP3' : '비디오 MP4'),
+    title: job.title ?? videoId ?? DOWNLOAD_MODE_LABELS[job.type],
     videoId,
   };
 }

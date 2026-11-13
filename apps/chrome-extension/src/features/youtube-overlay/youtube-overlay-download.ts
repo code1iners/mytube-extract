@@ -1,9 +1,6 @@
-import {
-  type CreateDownloadJobInput,
-  type DownloadQuality,
-} from '../../domain/download-job/download-job';
+import { type CreateDownloadJobInput } from '../../domain/download-job/download-job';
 import { getFileExtension, isYoutubeVideoId } from '../../domain/download-options/download-options';
-import { isQualityOption } from '../../domain/download-options/quality-options';
+import { isQualityOption, toDownloadQuality } from '../../domain/download-options/quality-options';
 import { DEFAULT_API_BASE_URL } from '../../shared/constants';
 import { sanitizeFilenameStem } from '../../shared/sanitize-filename';
 import { type YoutubeOverlayDownloadRequest } from './youtube-overlay-message';
@@ -52,7 +49,7 @@ export function createYoutubeOverlayDownloadJobInput(
   return {
     apiBaseUrl: DEFAULT_API_BASE_URL,
     localFilename,
-    quality: String(input.quality) as DownloadQuality,
+    quality: toDownloadQuality(input.quality),
     sourceUrl,
     type: input.mode,
   };

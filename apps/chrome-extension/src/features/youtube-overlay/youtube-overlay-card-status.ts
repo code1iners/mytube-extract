@@ -1,7 +1,10 @@
 import { type DownloadJobStorageAdapter } from '../../adapters/chrome/download-job-storage';
-import { type DownloadJob, getDownloadJobVideoId } from '../../domain/download-job/download-job';
-import { type DownloadMode } from '../../domain/download-options/download-options';
-import { isQualityOption, type QualityOption } from '../../domain/download-options/quality-options';
+import {
+  type DownloadJob,
+  selectLatestJobByVideoId,
+  sortDownloadJobsNewestFirst,
+} from '../../domain/download-job/download-job';
+import { parseQualityOption, type QualitySelection } from '../../domain/download-options/quality-options';
 import { isDownloadJobExpired } from '../../domain/recent-request/recent-request';
 
 /** 완료 배지를 썸네일 위에 남겨 두는 시간(ms). */
@@ -13,14 +16,10 @@ export type OverlayCardStatus =
       /** 대기·처리·완료 상태. */
       state: 'queued' | 'processing' | 'completed';
     }
-  | {
-      /** 실패 상태. 배지가 다시 시도 버튼이 된다. */
+  | ({
+      /** 실패 상태. 배지가 다시 시도 버튼이 된다. 형식·품질은 다시 제출할 조건이다. */
       state: 'failed';
-      /** 다시 제출할 형식. */
-      mode: DownloadMode;
-      /** 다시 제출할 품질. */
-      quality: QualityOption;
-    };
+    } & QualitySelection);
 
 /** 저장된 최근 job 목록으로 카드별 상태를 고르는 tracker. 페이지마다 하나 둔다. */
 export type OverlayCardStatusTracker = {
@@ -55,20 +54,10 @@ export function createOverlayCardStatusTracker(): OverlayCardStatusTracker {
     update(jobs, now) {
       // 저장된 목록이 곧 Background 보관 목록이다. 진행 중 job은 5건을 넘어서도 보관되므로 다시 자르지 않는다.
       /** 생성 시각 최신순으로 정렬한 최근 job. */
-      const recentJobs = [...jobs].sort((left, right) =>
-        right.createdAt.localeCompare(left.createdAt),
-      );
+      const recentJobs = sortDownloadJobsNewestFirst(jobs);
 
-      latestJobByVideoId = new Map();
+      latestJobByVideoId = selectLatestJobByVideoId(recentJobs);
       recentJobs.forEach((job) => {
-        /** job 원본 영상 ID. */
-        const videoId = getDownloadJobVideoId(job);
-
-        // 최신순으로 돌기 때문에 영상마다 처음 만난 job이 가장 최신이다.
-        if (videoId && !latestJobByVideoId.has(videoId)) {
-          latestJobByVideoId.set(videoId, job);
-        }
-
         // 페이지를 연 뒤 완료로 바뀌었거나 완료 상태로 처음 나타난 job에만 완료 배지를 띄운다.
         // 처음 읽은 목록의 완료 job은 이미 끝난 일이라 다시 알리지 않는다.
         /** 직전 상태. 직전 목록에 없던 job이면 undefined다. */
@@ -107,11 +96,9 @@ export function createOverlayCardStatusTracker(): OverlayCardStatusTracker {
           return getVisibleCompletedAt(job, now) === null ? null : { state: 'completed' };
         case 'failed': {
           /** 저장된 품질 문자열을 Overlay 메시지 품질 값으로 바꾼 값. */
-          const quality = Number(job.quality);
+          const quality = parseQualityOption(job.type, job.quality);
 
-          return isQualityOption(job.type, quality)
-            ? { mode: job.type, quality, state: 'failed' }
-            : null;
+          return quality === null ? null : { mode: job.type, quality, state: 'failed' };
         }
       }
     },

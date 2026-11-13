@@ -1,8 +1,14 @@
 import { DEFAULT_API_BASE_URL } from '../../shared/constants';
-import { DEFAULT_QUALITY_OPTION, isQualityOption } from './quality-options';
+import { DEFAULT_QUALITY_OPTION, parseQualityOption } from './quality-options';
 
 /** 지원하는 다운로드 모드. */
 export type DownloadMode = 'audio' | 'video';
+
+/** 형식의 접근 가능한 이름. 형식 아이콘만 보이는 자리와 제목을 모르는 요청의 대체 제목에 쓴다. */
+export const DOWNLOAD_MODE_LABELS: Record<DownloadMode, string> = {
+  audio: '오디오 MP3',
+  video: '비디오 MP4',
+};
 
 /** 저장 파일 확장자. 다운로드 모드와 1:1로 대응한다. */
 export type FileExtension = 'mp3' | 'mp4';
@@ -66,12 +72,10 @@ function resolveStoredQualityOption(
   mode: DownloadMode,
   storedValue: string | undefined,
 ): string {
-  /** 저장된 값을 숫자로 바꾼 값. */
-  const numericValue = typeof storedValue === 'string' ? Number(storedValue) : NaN;
+  /** 저장된 값을 고정 품질로 읽은 값. */
+  const quality = typeof storedValue === 'string' ? parseQualityOption(mode, storedValue) : null;
 
-  return isQualityOption(mode, numericValue)
-    ? String(numericValue)
-    : String(DEFAULT_QUALITY_OPTION[mode]);
+  return String(quality ?? DEFAULT_QUALITY_OPTION[mode]);
 }
 
 /** API base URL을 fetch/download에 사용할 수 있는 형태로 정규화한다. */

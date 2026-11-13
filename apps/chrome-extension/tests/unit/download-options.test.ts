@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { mergeStoredDownloadOptions } from '../../src/domain/download-options/download-options';
+import { DOWNLOAD_MODE_LABELS, mergeStoredDownloadOptions } from '../../src/domain/download-options/download-options';
 
 describe('mergeStoredDownloadOptions', () => {
   it('keeps stored bitrate and resolution when they are valid fixed quality options', () => {
@@ -31,5 +31,11 @@ describe('mergeStoredDownloadOptions', () => {
       bitrate: '192',
       resolution: '720',
     });
+  });
+});
+
+describe('download mode labels', () => {
+  it('names each format with its file type', () => {
+    expect(DOWNLOAD_MODE_LABELS).toEqual({ audio: '오디오 MP3', video: '비디오 MP4' });
   });
 });

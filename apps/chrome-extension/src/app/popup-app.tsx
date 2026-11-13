@@ -1,6 +1,6 @@
 import { type ChangeEvent, type FormEvent, type KeyboardEvent, type RefObject, useEffect, useRef, useState } from 'react';
-import { type DownloadMode, type FileExtension } from '../domain/download-options/download-options';
-import { getQualityOptions } from '../domain/download-options/quality-options';
+import { type DownloadMode, type FileExtension, DOWNLOAD_MODE_LABELS } from '../domain/download-options/download-options';
+import { getQualityOptions, getQualityUnit } from '../domain/download-options/quality-options';
 import { type PopupView, type StagePhase, type StageSource, hasStageVideo, isStagePhaseBusy, isStagePhaseProblem } from '../domain/popup-state/popup-state';
 import { type RecentRequestAction, type RecentRequestState, RECENT_REQUEST_STRIP_LIMIT } from '../domain/recent-request/recent-request';
 import { type PopupDownloadModel, type PopupDownloadSnapshot, type PopupRecentRequest, type RecentActionResult, type YoutubeOverlaySnapshot, type YoutubeOverlayStatus, createChromePopupDownloadModel } from '../features/popup-download/popup-download-model';
@@ -19,8 +19,8 @@ type ExtractButtonView = {
 
 /** 형식 버튼 정의. */
 const MODE_OPTIONS: ReadonlyArray<{ /** 다운로드 형식. */ mode: DownloadMode; /** 형식 아이콘. */ icon: PopupIconName; /** 접근 가능한 이름. */ label: string }> = [
-  { icon: 'audio', label: '오디오 MP3', mode: 'audio' },
-  { icon: 'video', label: '비디오 MP4', mode: 'video' },
+  { icon: 'audio', label: DOWNLOAD_MODE_LABELS.audio, mode: 'audio' },
+  { icon: 'video', label: DOWNLOAD_MODE_LABELS.video, mode: 'video' },
 ];
 
 /** 최근 요청 상태별 배지·상태 아이콘. 상태는 색만으로 구분하지 않도록 상태마다 다른 아이콘을 쓴다. */
@@ -464,7 +464,7 @@ function QualityBars(props: { /** 진행 중 잠금 여부. */ disabled: boolean
   /** 선택 품질의 순서. */
   const selectedIndex = options.findIndex((option) => String(option) === props.value);
   /** 접근 가능한 이름에 붙일 단위. */
-  const unit = props.mode === 'audio' ? ' kbps' : 'p';
+  const unit = getQualityUnit(props.mode);
 
   return <div aria-label="품질" className="quality-bars" role="radiogroup">
     {options.map((option, index) => <label key={option} className={index <= selectedIndex ? 'quality-bars__option is-filled' : 'quality-bars__option'}>
@@ -591,7 +591,7 @@ function RecentRequestList(props: { /** 최신순 최근 요청. */ requests: Po
 /** 최근 요청 한 줄: 썸네일, 제목, 형식·품질과 요청 시각, 상태, 행동 하나. */
 function RecentRequestRow(props: { /** 그릴 최근 요청. */ request: PopupRecentRequest; /** 항목 행동 실행. */ onAction: (jobId: string) => void }) {
   /** 화면에는 숫자만 두고 스크린리더에만 읽힐 품질 단위. */
-  const qualityUnit = props.request.mode === 'audio' ? ' kbps' : 'p';
+  const qualityUnit = getQualityUnit(props.request.mode);
 
   return <li className="recent-row" data-job-id={props.request.jobId} data-state={props.request.state}>
     <RecentThumbnail request={props.request} />
@@ -599,7 +599,7 @@ function RecentRequestRow(props: { /** 그릴 최근 요청. */ request: PopupRe
       <strong className="recent-row__title" title={props.request.title}>{props.request.title}</strong>
       <span className="recent-row__option">
         <PopupIcon name={props.request.mode} />
-        <span className="visually-hidden">{props.request.mode === 'audio' ? '오디오 MP3' : '비디오 MP4'}</span>
+        <span className="visually-hidden">{DOWNLOAD_MODE_LABELS[props.request.mode]}</span>
         <span>{props.request.quality}<span className="visually-hidden">{qualityUnit}</span></span>
         <span aria-hidden="true">·</span>
         <time dateTime={props.request.createdAt}>{formatRecentJobTime(props.request.createdAt)}</time>

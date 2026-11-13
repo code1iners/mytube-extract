@@ -1,11 +1,13 @@
 import { createDownloadJobStorageAdapter } from '../../adapters/chrome/download-job-storage';
 import {
+  DOWNLOAD_MODE_LABELS,
   getYoutubeThumbnailUrl,
   type DownloadMode,
 } from '../../domain/download-options/download-options';
 import {
   DEFAULT_QUALITY_OPTION,
   getQualityOptions,
+  getQualityUnit,
   type QualityOption,
 } from '../../domain/download-options/quality-options';
 import { parseStandardYoutubeWatchUrl } from './youtube-card-url';
@@ -43,12 +45,6 @@ const DEFAULT_OVERLAY_MODE: DownloadMode = 'video';
 
 /** 접수 Toast가 자동으로 닫히기까지의 시간(ms). */
 const ACCEPTED_TOAST_DISMISS_MS = 4000;
-
-/** 형식 버튼의 접근 가능한 이름. */
-const MODE_LABELS: Record<DownloadMode, string> = {
-  audio: '오디오 MP3',
-  video: '비디오 MP4',
-};
 
 /** 카드 상태별 접근 가능한 이름. 승인 시안의 문장을 따른다. */
 const STATUS_LABELS: Record<OverlayCardStatus['state'], string> = {
@@ -542,7 +538,7 @@ function mountCardOverlay(
 
     button.className = 'format';
     button.type = 'button';
-    button.setAttribute('aria-label', MODE_LABELS[mode]);
+    button.setAttribute('aria-label', DOWNLOAD_MODE_LABELS[mode]);
     button.append(createIcon(mode));
     button.addEventListener('click', function handleModeButtonClick(event) {
       // 썸네일 링크 안에 있으므로 영상 페이지로 이동하지 않게 막는다.
@@ -579,7 +575,7 @@ function mountCardOverlay(
     button.toggleAttribute('data-filled', filled);
     button.setAttribute(
       'aria-label',
-      String(quality) + (mode === 'audio' ? ' kbps' : 'p') + ' 추출',
+      String(quality) + getQualityUnit(mode) + ' 추출',
     );
     bar.setAttribute('aria-hidden', 'true');
     value.textContent = String(quality);

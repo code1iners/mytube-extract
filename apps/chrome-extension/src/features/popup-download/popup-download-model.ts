@@ -15,7 +15,9 @@ import {
   type DownloadJob,
   type DownloadJobStatus,
   type DownloadQuality,
+  findLatestVideoJob,
   getDownloadJobVideoId,
+  sortDownloadJobsNewestFirst,
 } from '../../domain/download-job/download-job';
 import {
   type DownloadMode,
@@ -28,6 +30,11 @@ import {
   normalizeSourceUrl,
   parseYoutubeVideoId,
 } from '../../domain/download-options/download-options';
+import {
+  DEFAULT_QUALITY_OPTION,
+  parseQualityOption,
+  toDownloadQuality,
+} from '../../domain/download-options/quality-options';
 import {
   CHECKING_SERVER_STATUS,
   DOWNLOAD_STARTED_STATUS,
@@ -254,11 +261,6 @@ type StageProgress = {
 /** 아직 끝나지 않은 job인지 확인한다. */
 function isUnsettledJob(job: DownloadJob): boolean {
   return job.status === 'queued' || job.status === 'processing';
-}
-
-/** Popup 목록을 최신 job부터 정렬한다. */
-function sortJobs(jobs: readonly DownloadJob[]): DownloadJob[] {
-  return [...jobs].sort((left, right) => right.createdAt.localeCompare(left.createdAt));
 }
 
 /** Chrome runtime용 popup model을 만든다. */
@@ -514,7 +516,7 @@ export function createPopupDownloadModel(
 
   /** 저장소에서 온 목록의 각 job을 순서 역행 없이 병합한다. */
   function mergeJobList(jobs: readonly DownloadJob[]): DownloadJob[] {
-    return sortJobs(
+    return sortDownloadJobsNewestFirst(
       jobs.map((job) => {
         observeJob(job);
 
@@ -529,7 +531,7 @@ export function createPopupDownloadModel(
 
     jobsById.set(job.jobId, job);
 
-    return sortJobs([...jobsById.values()]);
+    return sortDownloadJobsNewestFirst([...jobsById.values()]);
   }
 
   /** 지금 무대에서 보낼 제출 입력을 만든다. 실패를 다시 시도하면 실패한 요청의 조건을 그대로 쓴다. */
@@ -859,19 +861,17 @@ export function createPopupDownloadModel(
   };
 }
 
-/** 최신순 job 목록에서 한 영상의 최신 job을 찾는다. */
-function findLatestVideoJob(jobs: readonly DownloadJob[], videoId: string): DownloadJob | null {
-  return jobs.find((job) => getDownloadJobVideoId(job) === videoId) ?? null;
-}
-
 /** 무대에 올라온 영상 ID를 얻는다. 붙여넣기 칸 상태면 null이다. */
 function getStageVideoId(stageSource: StageSource): string | null {
   return hasStageVideo(stageSource) ? stageSource.videoId : null;
 }
 
-/** 현재 모드에 해당하는 고정 품질 값을 job 생성 입력값으로 바꾼다. 팝업은 서버가 지원하는 고정 선택지만 노출하므로 항상 유효한 값이다. */
+/** 현재 모드에 해당하는 고정 품질 값을 job 생성 입력값으로 바꾼다. 팝업은 서버가 지원하는 고정 선택지만 노출하므로 기본값으로 돌아가는 일은 없다. */
 function resolveJobQuality(options: DownloadOptions): DownloadQuality {
-  return (options.mode === 'audio' ? options.bitrate : options.resolution) as DownloadQuality;
+  /** 현재 모드의 선택 품질 문자열. */
+  const selectedQuality = options.mode === 'audio' ? options.bitrate : options.resolution;
+
+  return toDownloadQuality(parseQualityOption(options.mode, selectedQuality) ?? DEFAULT_QUALITY_OPTION[options.mode]);
 }
 
 /** 무대 영상의 저장 파일명(확장자 제외)을 정한다. 편집값을 정리해 쓰고, 비거나 상대 경로 표기만 남으면 제목 기반 기본 이름(실패 시 영상 ID)으로 돌아간다. */
