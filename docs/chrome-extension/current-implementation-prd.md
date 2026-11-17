@@ -31,7 +31,7 @@ API 서버 제품 개요는 `docs/api/current-implementation-prd.md`, endpoint�
 13. 처음 기능을 사용하는 사용자로서, 나는 Popup 설정 화면의 썸네일 버튼 스위치로 YouTube 권한을 한 번 허용하고, 원하면 같은 스위치로 다시 해제하고 싶다. 그래서 지원 페이지에서 썸네일 버튼을 쓸지 스스로 정할 수 있다.
 14. 썸네일에서 추출한 사용자로서, 나는 그 썸네일 위에 대기·처리 링, 완료 체크, 실패 다시 시도 배지가 남기를 원한다. 그래서 페이지를 떠나지 않고 그 영상이 어떻게 됐는지 알 수 있다.
 15. 진행을 확인하는 사용자로서, 나는 처리 중에 숫자 없는 회전 링을 보고 싶다. 그래서 실제가 아닌 진행률에 속지 않는다.
-16. 최근 요청을 확인하는 사용자로서, 나는 상태 배지를 단 썸네일 줄과 펼친 목록에서 다시 내려받기·다시 시도·다시 요청을 하고 싶다. 그래서 같은 조건을 다시 입력하지 않는다.
+16. 최근 요청을 확인하는 사용자로서, 나는 상태 배지를 단 썸네일 줄과 펼친 목록에서 다시 다운로드·다시 시도·다시 요청을 하고 싶다. 그래서 같은 조건을 다시 입력하지 않는다.
 
 ## Implementation Decisions
 
@@ -46,7 +46,7 @@ API 서버 제품 개요는 `docs/api/current-implementation-prd.md`, endpoint�
 - 입력한 원본 URL은 기본적으로 Chrome storage에 저장하지 않는다.
 - 확장 아이콘 클릭으로 부여되는 `activeTab`으로 Popup을 열 때 활성 탭 URL·제목을 한 번 읽는다. manifest 권한은 늘리지 않는다.
 - 썸네일 기능은 Popup 설정 화면의 썸네일 버튼 스위치를 켤 때 `https://www.youtube.com/*` optional Host Permission을 요청하고, 스위치를 끄면 그 권한을 해제해 이후 자동 주입을 멈춘다. 이미 열린 탭의 버튼은 다음 이동이나 새로고침 때 사라진다. 거부해도 Popup 흐름은 유지한다.
-- 테마 선호, 썸네일 버튼 스위치, 정책 안내, 완료 파일 보관 기간 안내는 Popup 내부 설정 화면에 둔다. 헤더 격자 아이콘의 점이 썸네일 버튼 상태(아직 켜지 않음·켜짐·거부)를 보여 준다.
+- 테마 선호, 썸네일 버튼 스위치, 정책 안내, 완료 파일 보관 기간 안내는 Popup 내부 설정 화면에 둔다. 헤더 격자 아이콘의 표시(빨간 점·초록 체크 배지·crimson 느낌표 배지)가 썸네일 버튼 상태(아직 켜지 않음·켜짐·거부)를 보여 준다.
 - 썸네일 Overlay는 홈, 검색 결과, 구독 피드, 시청 페이지 추천 영역, 채널 홈·동영상 탭·채널 안 검색의 표준 영상 카드만 대상으로 하고 Shorts와 재생목록 카드는 제외한다.
 - MP3 품질은 `128/192/320 kbps`, MP4 품질은 `360/720/1080p`이며 숫자 선택 즉시 Background가 job 생성 요청을 만든다. Popup·Overlay message 경계에서도 mode별 조합을 재검증한다.
 - 썸네일 제목은 Background에서 안전한 `filename`으로 정리해 전달한다. 접수·실패는 미니 썸네일·상태 아이콘·형식·품질의 페이지 전역 Toast로 알리고, 실패 Toast와 실패 카드 배지에서 같은 조건으로 다시 요청할 수 있다.
@@ -70,7 +70,7 @@ API 서버 제품 개요는 `docs/api/current-implementation-prd.md`, endpoint�
 - 비디오 모드가 선택되면 `POST /downloads` body에 비디오 type과 선택한 resolution이 전달되는지 검증한다.
 - `filename`은 job 생성 요청에 포함하지 않고 완료 파일을 Chrome에 저장할 때 local filename으로 전달되는지, storage에 저장되지 않고 원본이 바뀌면 비워지는지 검증한다.
 - 제출 후 무대 단계가 서버 확인 → 대기 → 처리 → 완료 → 준비 순서로 바뀌고, job 실패와 서버 연결 실패를 구분하며, 다른 영상의 job은 무대에 영향을 주지 않는지 검증한다.
-- 최근 요청의 다시 내려받기·다시 시도·다시 요청과 썸네일 버튼 권한 켜기·끄기·거부 전이를 검증한다.
+- 최근 요청의 다시 다운로드·다시 시도·다시 요청과 썸네일 버튼 권한 켜기·끄기·거부 전이를 검증한다.
 - 저장된 `bitrate`/`resolution` 값이 고정 선택지를 벗어나면 각 모드 기본값(`192`/`720`)으로 대체되는지 검증한다.
 - Popup과 Overlay message가 mode에 맞지 않는 품질 조합을 거부하는지 검증한다.
 - 여러 job을 동시에 생성해도 active storage의 기록이 서로 덮어써지지 않는지 검증한다.
@@ -112,7 +112,7 @@ API 서버 제품 개요는 `docs/api/current-implementation-prd.md`, endpoint�
 | URL 직접 입력이 기본이고, 현재 탭 URL은 버튼을 누를 때만 가져온다. `activeTab`도 그때만 쓴다. | 이 문서의 이전 판 | Popup을 열 때 활성 탭을 한 번 읽어 지원 YouTube 영상이면 무대에 올린다. 현재 탭 버튼은 없앴다. | `.scratch/chrome-extension-visual-minimal-ui/spec.md` |
 | Overlay는 접수 Toast만 보여 주고, 진행은 데스크톱 알림과 Popup이 담당한다. | `.scratch/chrome-extension-job-based-downloads/spec.md` "오버레이 표시" | Overlay가 저장된 최근 요청 목록을 구독해 카드 위에 대기·처리·완료·실패를 남긴다. 알림과 자동 다운로드는 그대로다. | `.scratch/chrome-extension-visual-minimal-ui/spec.md` |
 | Popup은 항상 새 요청 form 아래에 최근 요청 목록을 함께 보여 준다. | `.scratch/chrome-extension-job-based-downloads/spec.md` "팝업 레이아웃" | 첫 화면에는 최근 요청 썸네일 줄(최신 3건)만 두고, 목록은 Popup 안의 `recent` 화면으로 펼친다. | `.scratch/chrome-extension-visual-minimal-ui/spec.md` |
-| 완료 job은 자동 다운로드만 하고 목록에 다운로드 버튼을 두지 않는다. | `.scratch/chrome-extension-job-based-downloads/spec.md` "자동 다운로드" | 자동 다운로드는 유지하고, 보관 기간 안의 완료 항목에 다시 내려받기를 더했다. | `.scratch/chrome-extension-visual-minimal-ui/spec.md` |
+| 완료 job은 자동 다운로드만 하고 목록에 다운로드 버튼을 두지 않는다. | `.scratch/chrome-extension-job-based-downloads/spec.md` "자동 다운로드" | 자동 다운로드는 유지하고, 보관 기간 안의 완료 항목에 다시 다운로드를 더했다. | `.scratch/chrome-extension-visual-minimal-ui/spec.md` |
 | Popup 파일명은 다른 옵션과 함께 저장한다. | 이 문서의 이전 판 | 파일명은 영상별 값이라 저장하지 않고, 원본이 바뀌면 비운다. | `.scratch/chrome-extension-visual-minimal-ui/spec.md` |
 | 썸네일 버튼 권한은 켜기만 있다. | 이 문서의 이전 판 | 설정 화면 스위치로 권한을 해제할 수 있다. | `.scratch/chrome-extension-visual-minimal-ui/spec.md` |
 

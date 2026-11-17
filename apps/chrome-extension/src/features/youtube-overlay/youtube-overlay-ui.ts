@@ -912,7 +912,7 @@ function createToastController(): ToastController {
 
   /** Toast Shadow Root. */
   const shadowRoot = host.shadowRoot ?? host.attachShadow({ mode: 'open' });
-  /** 화면에 보이는 Toast 박스. 문장 없이 썸네일·아이콘·품질·버튼만 둔다. */
+  /** 화면에 보이는 Toast 박스. 썸네일·아이콘·품질·버튼을 두고, 실패일 때만 이유 한 줄을 더한다. */
   const content = document.createElement('div');
   /** 접수 결과를 읽어 주는 live region. */
   const statusRegion = createLiveRegion('status');
@@ -941,9 +941,12 @@ function createToastController(): ToastController {
     kind: 'pending' | 'accepted' | 'failed',
     request: YoutubeOverlayDownloadRequest,
     retry?: () => void,
+    reason?: string,
   ) {
     hide();
     content.dataset.kind = kind;
+    // 화면 위쪽 고정 상단 바의 조작을 가리지 않게 그 아래에 둔다.
+    host.style.top = readViewportTop() + 16 + 'px';
 
     /** 요청 영상 미니 썸네일 자리. 이미지를 못 불러오면 중립 배경만 남는다. */
     const thumbnailFrame = document.createElement('span');
@@ -971,6 +974,15 @@ function createToastController(): ToastController {
     quality.append(createIcon(request.mode), qualityValue);
     content.append(thumbnailFrame, statusIcon, quality);
 
+    if (reason) {
+      /** 화면에 보이는 실패 이유 한 줄. 낭독은 alert live region이 맡는다. */
+      const reasonText = document.createElement('span');
+
+      reasonText.className = 'toast__reason';
+      reasonText.textContent = reason;
+      content.append(reasonText);
+    }
+
     if (retry) {
       content.append(
         createToastButton('retry', '다시 시도', () => {
@@ -985,7 +997,7 @@ function createToastController(): ToastController {
 
   return {
     showFailure(request, message, retry) {
-      render('failed', request, retry);
+      render('failed', request, retry, message || '추출 요청에 실패했어요.');
       announce(
         alertRegion,
         message ? '추출 요청에 실패했어요. ' + message : '추출 요청에 실패했어요.',
@@ -1083,20 +1095,20 @@ function createOverlayStyle(): HTMLStyleElement {
     createFontFaceRule(),
     '.overlay { position: absolute; top: 8px; right: 8px; display: flex; flex-direction: column; align-items: flex-end; gap: 8px; opacity: 0; pointer-events: none; transition: opacity .12s ease-out; }',
     '.overlay[data-visible] { opacity: 1; pointer-events: auto; }',
-    '.formats { display: flex; gap: 6px; }',
+    '.formats { display: flex; gap: 8px; }',
     'button { margin: 0; padding: 0; border: 0; color: var(--overlay-on-scrim); cursor: pointer; font: inherit; }',
     '.icon { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }',
     '.format { display: grid; width: 44px; height: 44px; place-items: center; border-radius: 9999px; background: var(--overlay-scrim); }',
     '.format:hover { background: var(--overlay-scrim-strong); }',
     // 선택을 색만으로 전달하지 않도록 흰 테두리를 함께 둔다.
     '.format[aria-pressed="true"] { background: var(--overlay-primary); box-shadow: inset 0 0 0 2px var(--overlay-on-scrim); }',
-    '.levels { display: flex; gap: 4px; padding: 4px; border-radius: 10px; background: var(--overlay-scrim); }',
-    '.level { display: flex; flex-direction: column; align-items: center; justify-content: flex-end; gap: 3px; width: 44px; height: 48px; padding-bottom: 4px; border-radius: 6px; background: transparent; }',
+    '.levels { display: flex; gap: 4px; padding: 4px; border-radius: 12px; background: var(--overlay-scrim); }',
+    '.level { display: flex; flex-direction: column; align-items: center; justify-content: flex-end; gap: 4px; width: 44px; height: 48px; padding-bottom: 4px; border-radius: 8px; background: transparent; }',
     '.level:hover { background: var(--overlay-hover); }',
     '.level i { display: block; width: 8px; border-radius: 2px; background: var(--overlay-bar); }',
     '.level:nth-child(1) i { height: 8px; } .level:nth-child(2) i { height: 15px; } .level:nth-child(3) i { height: 22px; }',
     '.level[data-filled] i { background: var(--overlay-primary); }',
-    '.level span { font-size: 11px; font-weight: 600; line-height: 1.2; }',
+    '.level span { font-size: 12px; font-weight: 600; line-height: 1; }',
     // 밝은 썸네일 위에서도 보이도록 파란 outline 안쪽에 흰 띠를 둔다.
     'button:focus-visible { outline: 2px solid var(--overlay-focus); outline-offset: 2px; box-shadow: 0 0 0 2px var(--overlay-on-scrim); }',
     '.format[aria-pressed="true"]:focus-visible { box-shadow: inset 0 0 0 2px var(--overlay-on-scrim), 0 0 0 2px var(--overlay-on-scrim); }',
@@ -1132,7 +1144,7 @@ function createToastStyle(): HTMLStyleElement {
   style.textContent = [
     ':host { --toast-surface: #18191b; --toast-thumb: #3a3b3e; --toast-text: #ffffff; --toast-text-secondary: #c8c8c8; --toast-primary: #e60012; --toast-ok: #8fd6a0; --toast-bad: #ff8a80; --toast-on-status: #18191b; --toast-focus: #a9b4f2; --toast-ring-track: rgba(255, 255, 255, .25); display: block; font-family: "Pretendard Variable", ui-sans-serif, system-ui, sans-serif; }',
     createFontFaceRule(),
-    '.toast { display: flex; align-items: center; gap: 10px; max-width: calc(100vw - 32px); padding: 8px; border-radius: 12px; background: var(--toast-surface); color: var(--toast-text); box-shadow: 0 8px 24px rgba(0, 0, 0, .24); font: 600 13px/1.2 "Pretendard Variable", ui-sans-serif, system-ui, sans-serif; }',
+    '.toast { display: flex; align-items: center; gap: 8px; max-width: calc(100vw - 32px); padding: 8px; border-radius: 12px; background: var(--toast-surface); color: var(--toast-text); box-shadow: 0 8px 24px rgba(0, 0, 0, .24); font: 600 14px/1.4 "Pretendard Variable", ui-sans-serif, system-ui, sans-serif; }',
     '.toast:empty { display: none; }',
     '.icon { width: 16px; height: 16px; flex: none; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }',
     '.toast__thumb { display: block; width: 56px; height: 32px; flex: none; overflow: hidden; border-radius: 4px; background: var(--toast-thumb); }',
@@ -1147,6 +1159,7 @@ function createToastStyle(): HTMLStyleElement {
     '.ring__arc { stroke: var(--toast-text); transform-origin: 50% 50%; animation: mytube-spin 1.4s linear infinite; }',
     '@keyframes mytube-spin { to { transform: rotate(360deg); } }',
     '.toast__quality { display: flex; align-items: center; gap: 4px; color: var(--toast-text-secondary); }',
+    '.toast__reason { min-width: 0; max-width: 200px; overflow-wrap: anywhere; }',
     '.toast__button { display: grid; width: 44px; height: 44px; flex: none; place-items: center; margin: 0; padding: 0; border: 0; border-radius: 9999px; background: transparent; color: var(--toast-text); cursor: pointer; }',
     '.toast__button .icon { width: 18px; height: 18px; }',
     '.toast__button:hover { background: rgba(255, 255, 255, .12); }',

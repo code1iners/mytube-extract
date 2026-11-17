@@ -7,7 +7,7 @@ import { buildTitleFilenameStem } from '../../shared/sanitize-filename';
 
 /** Popup이 그리는 최근 요청 하나. 도출한 표시 정보에 이 Popup에서 행동을 실행 중인지를 더한다. */
 export type PopupRecentRequest = RecentRequest & {
-  /** 다시 내려받기·다시 시도·다시 요청을 실행하는 중인지 여부. 실행 중에는 같은 항목의 행동을 막는다. */
+  /** 다시 다운로드·다시 시도·다시 요청을 실행하는 중인지 여부. 실행 중에는 같은 항목의 행동을 막는다. */
   pending: boolean;
   /** 같은 영상의 다른 요청이 진행 중이라 다시 시도·다시 요청을 잠갔는지 여부. 무대의 같은 영상 제출 잠금과 같은 규칙이다. */
   locked: boolean;
@@ -25,11 +25,11 @@ export type RecentActionResult = {
 export type RecentActionOutcome = {
   /** 화면에 알릴 결과. */
   result: RecentActionResult;
-  /** 다시 시도·다시 요청으로 새로 생긴 job. 다시 내려받기거나 실패했으면 null이다. */
+  /** 다시 시도·다시 요청으로 새로 생긴 job. 다시 다운로드거나 실패했으면 null이다. */
   submittedJob: DownloadJob | null;
 };
 
-/** 최근 요청 목록의 표시 정보와 항목 행동(다시 내려받기·다시 시도·다시 요청)을 맡는다. */
+/** 최근 요청 목록의 표시 정보와 항목 행동(다시 다운로드·다시 시도·다시 요청)을 맡는다. */
 export type PopupRecentRequestActions = {
   /** job 목록을 최근 요청 표시 정보로 바꾼다. `isVideoInProgress`가 참인 영상은 다시 시도·다시 요청을 잠근다. */
   describe(

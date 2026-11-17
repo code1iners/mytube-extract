@@ -34,7 +34,7 @@ const RECENT_STATE_ICONS: Record<RecentRequestState, PopupIconName> = {
 
 /** 최근 요청 행동별 아이콘과 접근 가능한 이름. */
 const RECENT_ACTION_VIEWS: Record<RecentRequestAction, { /** 행동 아이콘. */ icon: PopupIconName; /** 접근 가능한 이름. */ label: string }> = {
-  redownload: { icon: 'down', label: '다시 내려받기' },
+  redownload: { icon: 'down', label: '다시 다운로드' },
   rerequest: { icon: 'retry', label: '다시 요청' },
   retry: { icon: 'retry', label: '다시 시도' },
 };
@@ -46,14 +46,21 @@ const THEME_OPTIONS: ReadonlyArray<{ /** 테마 선호. */ preference: ThemePref
   { icon: 'moon', label: '다크 테마', preference: 'dark' },
 ];
 
-/** 헤더 격자 아이콘의 접근 가능한 이름. 점 색이 전하는 권한 상태를 이름으로도 전한다. */
+/** 헤더 격자 아이콘의 접근 가능한 이름. 누르면 설정 화면이 열리므로 행동(설정)을 먼저 말하고 권한 상태를 덧붙인다. */
 const OVERLAY_BUTTON_LABELS: Record<YoutubeOverlayStatus, string> = {
-  checking: '썸네일 버튼 권한 확인 중',
-  denied: '썸네일 버튼 권한 거부됨',
-  disabled: '썸네일 버튼 켜기',
-  enabled: '썸네일 버튼 켜짐',
-  error: '썸네일 버튼 오류',
-  requesting: '썸네일 버튼 권한 요청 중',
+  checking: '썸네일 버튼 설정, 권한 확인 중',
+  denied: '썸네일 버튼 설정, 권한 거부됨',
+  disabled: '썸네일 버튼 설정, 꺼짐',
+  enabled: '썸네일 버튼 설정, 켜짐',
+  error: '썸네일 버튼 설정, 오류',
+  requesting: '썸네일 버튼 설정, 권한 요청 중',
+};
+
+/** 헤더 권한 표시 안의 아이콘. 색만으로 구분하지 않도록 켜짐은 체크, 거부·오류는 느낌표를 넣고, 꺼짐은 아이콘 없는 점으로 둔다. */
+const OVERLAY_DOT_ICONS: Record<YoutubeOverlaySnapshot['indicator'], PopupIconName | null> = {
+  off: null,
+  on: 'check',
+  problem: 'alert',
 };
 
 /** 화면을 바꾼 뒤 무대로 돌아올 때 포커스를 돌려줄 버튼. */
@@ -273,11 +280,16 @@ export function PopupApp() {
 
 /** 로고와 썸네일 버튼·설정 아이콘을 둔 헤더. 격자 아이콘의 점이 썸네일 버튼 권한 상태를 보여주고, 두 아이콘 모두 설정 화면을 연다. */
 function PopupHeader(props: { /** 썸네일 버튼 권한 상태. */ youtubeOverlay: YoutubeOverlaySnapshot; /** 격자 아이콘 ref. */ overlayButtonRef: RefObject<HTMLButtonElement | null>; /** 설정 아이콘 ref. */ settingsButtonRef: RefObject<HTMLButtonElement | null>; /** 설정 화면 열기. 누른 버튼을 함께 넘긴다. */ onOpenSettings: (opener: ReturnFocusTarget) => void }) {
+  /** 권한 표시 안에 넣을 아이콘. 꺼짐이면 null이다. */
+  const dotIcon = OVERLAY_DOT_ICONS[props.youtubeOverlay.indicator];
+
   return <header className="popup-header">
     <span aria-label="MyTube Extract" className="popup-logo" role="img"><PopupIcon name="down" /></span>
     <button ref={props.overlayButtonRef} aria-label={OVERLAY_BUTTON_LABELS[props.youtubeOverlay.status]} className="icon-button" data-overlay={props.youtubeOverlay.indicator} type="button" onClick={() => props.onOpenSettings('overlay')}>
       <PopupIcon name="grid" />
-      <span aria-hidden="true" className={`overlay-dot overlay-dot--${props.youtubeOverlay.indicator}`} />
+      <span aria-hidden="true" className={`overlay-dot overlay-dot--${props.youtubeOverlay.indicator}`}>
+        {dotIcon ? <PopupIcon name={dotIcon} /> : null}
+      </span>
     </button>
     <button ref={props.settingsButtonRef} aria-label="설정" className="icon-button" type="button" onClick={() => props.onOpenSettings('settings')}><PopupIcon name="sliders" /></button>
   </header>;
@@ -431,7 +443,8 @@ function FilenameLine(props: { /** 지금 저장될 파일명(확장자 제외).
     </div>;
   }
 
-  return <div className="stage-line stage-line--title">
+  // 진행 중에는 연필(전체 이름을 볼 수 있는 편집)이 없으므로 제목을 자르지 않고 줄바꿈해 보여 준다.
+  return <div className="stage-line stage-line--title" data-locked={props.locked || undefined}>
     <p className="stage-line__text" title={props.filename}>{props.filename}</p>
     {props.locked ? null : <button ref={editButtonRef} aria-label="파일명 바꾸기" className="icon-button" type="button" onClick={() => setDraft(props.filename)}><PopupIcon name="pencil" /></button>}
   </div>;
@@ -573,7 +586,7 @@ function RecentThumbnail(props: { /** 그릴 최근 요청. */ request: PopupRec
 /** recent 화면의 최근 요청 목록. 비어 있으면 빈 상자 아이콘만 보여준다. */
 function RecentRequestList(props: { /** 최신순 최근 요청. */ requests: PopupRecentRequest[]; /** 마지막 행동의 결과. */ result: RecentActionResult | null; /** 항목 행동 실행. */ onAction: (jobId: string) => void }) {
   if (!props.requests.length) {
-    return <div className="recent-empty" role="status">
+    return <div className="recent-empty">
       <PopupIcon name="inbox" />
       <span className="visually-hidden">아직 보낸 요청이 없어요</span>
     </div>;
@@ -596,7 +609,7 @@ function RecentRequestRow(props: { /** 그릴 최근 요청. */ request: PopupRe
   return <li className="recent-row" data-job-id={props.request.jobId} data-state={props.request.state}>
     <RecentThumbnail request={props.request} />
     <div className="recent-row__meta">
-      <strong className="recent-row__title" title={props.request.title}>{props.request.title}</strong>
+      <strong className="recent-row__title">{props.request.title}</strong>
       <span className="recent-row__option">
         <PopupIcon name={props.request.mode} />
         <span className="visually-hidden">{DOWNLOAD_MODE_LABELS[props.request.mode]}</span>

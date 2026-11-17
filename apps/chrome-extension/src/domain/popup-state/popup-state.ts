@@ -24,13 +24,13 @@ export type PopupStatus = {
 /** URL 입력 대기 상태. */
 export const MISSING_SOURCE_URL_STATUS: PopupStatus = {
   kind: 'missing-source-url',
-  message: '추출할 URL을 입력하세요.',
+  message: '추출할 YouTube 주소를 입력하세요.',
 };
 
 /** URL 형식 오류 상태. */
 export const INVALID_SOURCE_URL_STATUS: PopupStatus = {
   kind: 'invalid-source-url',
-  message: '유튜브 영상 주소가 아니에요',
+  message: 'YouTube 영상 주소가 아니에요. 주소를 확인해 주세요.',
 };
 
 /** 서버 확인 상태. 메시지는 진행 단계 live region 문장이다. */
@@ -60,7 +60,7 @@ export const DOWNLOAD_STARTED_STATUS: PopupStatus = {
 /** 서버 연결 실패 상태. 서버 메시지 대신 고정 문장을 보여준다. */
 export const SERVER_UNREACHABLE_STATUS: PopupStatus = {
   kind: 'server-unreachable',
-  message: '서버에 연결할 수 없어요',
+  message: '서버에 연결할 수 없어요. 서버 상태를 확인하고 다시 시도하세요.',
 };
 
 /** 형식·품질 저장 실패 상태. 무대 단계와 무관하게 알리기만 한다. */
@@ -73,7 +73,7 @@ export const OPTIONS_SAVE_FAILED_STATUS: PopupStatus = {
 export function createReadyStatus(): PopupStatus {
   return {
     kind: 'ready',
-    message: '추출할 URL이 준비되었습니다.',
+    message: '추출할 주소가 준비됐어요.',
   };
 }
 

@@ -333,7 +333,7 @@ describe('popup download model', () => {
       canDownload: true,
       status: {
         kind: 'ready',
-        message: '추출할 URL이 준비되었습니다.',
+        message: '추출할 주소가 준비됐어요.',
       },
     });
   });
@@ -357,7 +357,7 @@ describe('popup download model', () => {
       canDownload: true,
       status: {
         kind: 'ready',
-        message: '추출할 URL이 준비되었습니다.',
+        message: '추출할 주소가 준비됐어요.',
       },
     });
   });
@@ -375,7 +375,7 @@ describe('popup download model', () => {
       canDownload: false,
       status: {
         kind: 'invalid-source-url',
-        message: '유튜브 영상 주소가 아니에요',
+        message: 'YouTube 영상 주소가 아니에요. 주소를 확인해 주세요.',
       },
     });
   });
@@ -966,7 +966,7 @@ describe('popup settings and thumbnail button permission', () => {
       youtubeOverlay: {
         enabled: false,
         indicator: 'problem',
-        message: '권한이 거부되어 표시하지 않아요',
+        message: '권한이 거부되어 표시하지 않아요. 권한을 다시 요청해 보세요.',
         status: 'denied',
       },
     });
@@ -1211,7 +1211,7 @@ describe('popup stage progress and problems', () => {
     expect(model.getSnapshot()).toMatchObject({
       canDownload: true,
       stagePhase: 'unreachable',
-      status: { kind: 'server-unreachable', message: '서버에 연결할 수 없어요' },
+      status: { kind: 'server-unreachable', message: '서버에 연결할 수 없어요. 서버 상태를 확인하고 다시 시도하세요.' },
     });
 
     await model.submitDownload();
@@ -1668,7 +1668,7 @@ describe('popup recent requests', () => {
     expect(model.getSnapshot()).toMatchObject({ recentActionResult: { kind: 'started', message: '다시 요청했어요' } });
     expect(model.getSnapshot().recentRequests.every((request) => !request.pending)).toBe(true);
 
-    // 다시 내려받기 실패는 그 이유를 recent 화면에 남긴다.
+    // 다시 다운로드 실패는 그 이유를 recent 화면에 남긴다.
     const failingModel = createStageModel({
       downloadJobs: { getJobs: vi.fn().mockResolvedValue([createCompletedJob()]) },
       downloads: { startDownload: vi.fn().mockRejectedValue(new Error('다운로드를 시작하지 못했어요.')) },

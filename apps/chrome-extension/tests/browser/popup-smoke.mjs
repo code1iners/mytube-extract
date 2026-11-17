@@ -310,7 +310,7 @@ async function verifyPasteFieldFlow(origin) {
 
     await sourceInput.fill('https://vimeo.com/76979871');
     await expectPasteKeycaps(page, false);
-    await expectStatusText(page, '유튜브 영상 주소가 아니에요');
+    await expectStatusText(page, 'YouTube 영상 주소가 아니에요. 주소를 확인해 주세요.');
     await expectDownloadButtonDisabled(page, true);
     await expectNoHorizontalOverflow(page);
 
@@ -419,7 +419,7 @@ async function verifyZoom200Flow(origin) {
     await page.evaluate(() => document.documentElement.removeAttribute('data-theme'));
     await page.getByRole('button', { name: '뒤로' }).click();
 
-    await page.getByRole('button', { name: '설정' }).click();
+    await page.getByRole('button', { exact: true, name: '설정' }).click();
     await page.getByRole('heading', { name: '설정' }).waitFor({ timeout: 10000 });
     await expectControlsReachable(page, 'settings');
     await saveScreenshot(page, 'popup-zoom200-settings-light.png');
@@ -512,7 +512,7 @@ async function captureStageScreenshots(origin, outputDirectory) {
 
         if (state === 'invalid') {
           await page.getByLabel('YouTube 주소').fill('https://vimeo.com/76979871/very/long/path/that/keeps/going');
-          await expectStatusText(page, '유튜브 영상 주소가 아니에요');
+          await expectStatusText(page, 'YouTube 영상 주소가 아니에요. 주소를 확인해 주세요.');
           await page.locator('body').click({ position: { x: 1, y: 1 } });
         }
 
@@ -552,7 +552,7 @@ async function verifyServerUnavailableFlow(origin) {
     await page.getByRole('button', { name: '추출 시작' }).click();
     // 서버 연결 실패는 구름 아이콘 덮개와 고정 문장으로 일반 실패와 구분된다.
     await page.locator('figure.stage [data-veil="unreachable"]').waitFor({ timeout: 10000 });
-    await expectAlertText(page, '서버에 연결할 수 없어요');
+    await expectAlertText(page, '서버에 연결할 수 없어요. 서버 상태를 확인하고 다시 시도하세요.');
     // 같은 자리의 추출 버튼이 같은 조건 재시도로 바뀐다.
     await page.getByRole('button', { name: '다시 시도' }).waitFor({ timeout: 10000 });
     await saveScreenshot(page, 'popup-unreachable-light.png');
@@ -690,11 +690,11 @@ async function verifyDownloadFlow(origin) {
     await page.getByRole('button', { name: '최근 요청 모두 보기' }).click();
     await page.getByRole('heading', { name: '최근 요청' }).waitFor({ timeout: 10000 });
     await expectFocused(page, page.getByRole('button', { name: '뒤로' }), 'the back button after opening the recent view');
-    await page.getByRole('button', { name: '다시 내려받기' }).click();
+    await page.getByRole('button', { name: '다시 다운로드' }).click();
     await page.waitForFunction(() => globalThis.__myTubeExtractDownloadUrl !== null, null, { timeout: 10000 });
     await expectLiveText(page, '다운로드를 다시 시작했어요');
 
-    /** 다시 내려받기가 요청한 URL과 파일명. 제목을 모르는 job이라 영상 ID 기반 기본 이름이다. */
+    /** 다시 다운로드가 요청한 URL과 파일명. 제목을 모르는 job이라 영상 ID 기반 기본 이름이다. */
     const redownload = await page.evaluate(() => ({ filename: globalThis.__myTubeExtractDownloadFilename, url: globalThis.__myTubeExtractDownloadUrl }));
 
     if (redownload.url !== `${expectedApiOrigin}/downloads/job-1/file` || redownload.filename !== 'abc123_DEF0.mp4') {
@@ -975,7 +975,7 @@ async function verifyRecentRequestsFlow(origin) {
       { action: null, id: 'job-processing', state: '처리 중', thumbnail: 'image', title: '처리 중인 라이브' },
       { action: '다시 시도', id: 'job-failed', state: '실패', thumbnail: 'image', title: '실패한/뮤직비디오' },
       { action: '다시 요청', id: 'job-expired', state: '만료됨', thumbnail: 'image', title: '만료된 강의' },
-      { action: '다시 내려받기', id: 'job-legacy', state: '완료', thumbnail: 'fallback', title: '비디오 MP4' },
+      { action: '다시 다운로드', id: 'job-legacy', state: '완료', thumbnail: 'fallback', title: '비디오 MP4' },
       { action: null, id: 'job-queued', state: '대기 중', thumbnail: 'image', title: '대기 중인 팟캐스트' },
     ];
 
@@ -1050,7 +1050,7 @@ async function verifySettingsFlow(origin) {
 
     // 아직 켜지 않았으면 격자 아이콘에 빨간 점이 붙는다.
     /** 격자 아이콘. */
-    const offButton = page.getByRole('button', { name: '썸네일 버튼 켜기' });
+    const offButton = page.getByRole('button', { name: '썸네일 버튼 설정, 꺼짐' });
 
     await offButton.waitFor({ timeout: 10000 });
     await expectOverlayDot(page, 'off');
@@ -1096,7 +1096,7 @@ async function verifySettingsFlow(origin) {
     // 뒤로 가면 무대로 돌아오고, 격자 아이콘이 초록 점과 켜짐 이름을 갖고 포커스를 돌려받는다.
     await page.getByRole('button', { name: '뒤로' }).click();
     await page.locator('figure.stage').waitFor({ timeout: 10000 });
-    await expectFocused(page, page.getByRole('button', { name: '썸네일 버튼 켜짐' }), 'thumbnail button header icon');
+    await expectFocused(page, page.getByRole('button', { name: '썸네일 버튼 설정, 켜짐' }), 'thumbnail button header icon');
     await expectOverlayDot(page, 'on');
     await saveScreenshot(page, 'popup-header-on-light.png');
 
@@ -1124,7 +1124,7 @@ async function verifySettingsFlow(origin) {
     await page.getByRole('button', { name: '설정', exact: true }).click();
     await overlaySwitch.click();
     await page.evaluate(() => globalThis.__myTubeExtractAnswerPermissionRequest(false));
-    await expectAlertText(page, '권한이 거부되어 표시하지 않아요');
+    await expectAlertText(page, '권한이 거부되어 표시하지 않아요. 권한을 다시 요청해 보세요.');
     await page.getByRole('button', { name: '권한 다시 요청' }).waitFor({ timeout: 10000 });
     await expectNoHorizontalOverflow(page);
     await saveScreenshot(page, 'popup-settings-denied-light.png');
@@ -1132,11 +1132,11 @@ async function verifySettingsFlow(origin) {
     await saveScreenshot(page, 'popup-settings-denied-dark.png');
     await page.evaluate(() => document.documentElement.setAttribute('data-theme', 'light'));
     await page.getByRole('button', { name: '뒤로' }).click();
-    await page.getByRole('button', { name: '썸네일 버튼 권한 거부됨' }).waitFor({ timeout: 10000 });
+    await page.getByRole('button', { name: '썸네일 버튼 설정, 권한 거부됨' }).waitFor({ timeout: 10000 });
     await expectOverlayDot(page, 'problem');
 
     // 권한 다시 요청을 허용하면 스위치가 켜진 상태로 돌아온다.
-    await page.getByRole('button', { name: '썸네일 버튼 권한 거부됨' }).click();
+    await page.getByRole('button', { name: '썸네일 버튼 설정, 권한 거부됨' }).click();
     await page.getByRole('button', { name: '권한 다시 요청' }).click();
     await page.evaluate(() => globalThis.__myTubeExtractAnswerPermissionRequest(true));
     await expectSwitchChecked(overlaySwitch, true);
@@ -1148,7 +1148,7 @@ async function verifySettingsFlow(origin) {
     await routeYoutubeThumbnails(reopenedPage, { available: true });
     await installFakeChromeApi(reopenedPage, { storedOptions: {}, youtubePermissionGranted: true });
     await reopenedPage.goto(`${origin}/popup.html`, { timeout: 10000, waitUntil: 'domcontentloaded' });
-    await reopenedPage.getByRole('button', { name: '썸네일 버튼 켜짐' }).waitFor({ timeout: 10000 });
+    await reopenedPage.getByRole('button', { name: '썸네일 버튼 설정, 켜짐' }).waitFor({ timeout: 10000 });
     await expectOverlayDot(reopenedPage, 'on');
 
     if ((await reopenedPage.evaluate(() => document.documentElement.dataset.theme)) !== 'light') {

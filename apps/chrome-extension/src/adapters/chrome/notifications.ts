@@ -90,7 +90,7 @@ export function createDownloadNotificationsAdapter(
     showCompleted(job) {
       return createNotification(chromeApi, getNotificationId('completed', job.jobId), {
         iconUrl: chromeApi.runtime.getURL('icon-128.png'),
-        message: '추출한 파일을 다운로드했습니다.',
+        message: '추출한 파일을 다운로드했어요.',
         title: '다운로드 완료',
         type: 'basic',
       });
@@ -106,7 +106,7 @@ export function createDownloadNotificationsAdapter(
         await createNotification(chromeApi, notificationId, {
           buttons: [{ title: '다시 시도' }],
           iconUrl: chromeApi.runtime.getURL('icon-128.png'),
-          message: job.message || '다운로드에 실패했습니다.',
+          message: job.message || '다운로드에 실패했어요.',
           title: '다운로드 실패',
           type: 'basic',
         });

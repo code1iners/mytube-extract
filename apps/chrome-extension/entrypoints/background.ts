@@ -110,7 +110,7 @@ export default defineBackground(() => {
         .catch((error: unknown) => ({
           message: getErrorMessage(
             error,
-            'YouTube 썸네일 버튼을 활성화하지 못했습니다.',
+            'YouTube 썸네일 버튼을 켜지 못했어요.',
           ),
           ok: false,
         }))
@@ -132,7 +132,7 @@ export default defineBackground(() => {
           ok: true,
         }))
         .catch((error: unknown) => ({
-          message: getErrorMessage(error, '추출 요청에 실패했습니다.'),
+          message: getErrorMessage(error, '추출 요청에 실패했어요.'),
           ok: false,
         }))
         .then(sendResponse);

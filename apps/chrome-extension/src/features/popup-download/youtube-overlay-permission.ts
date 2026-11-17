@@ -23,7 +23,7 @@ export type YoutubeOverlaySnapshot = {
 /** 권한 상태별 기본 문장. */
 const YOUTUBE_OVERLAY_MESSAGES: Record<YoutubeOverlayStatus, string> = {
   checking: '썸네일 버튼 권한을 확인하고 있어요.',
-  denied: '권한이 거부되어 표시하지 않아요',
+  denied: '권한이 거부되어 표시하지 않아요. 권한을 다시 요청해 보세요.',
   disabled: '켜면 YouTube 썸네일에서 바로 추출할 수 있어요.',
   enabled: '썸네일 버튼이 켜져 있어요.',
   error: '썸네일 버튼 권한을 확인하지 못했어요.',

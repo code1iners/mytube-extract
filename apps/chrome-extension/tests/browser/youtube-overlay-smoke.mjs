@@ -296,7 +296,8 @@ try {
   assertEqual(failedToast.quality, '720', 'failed toast quality');
   assertEqual(failedToast.buttons.join(','), '다시 시도,닫기', 'failed toast buttons');
   assertEqual(failedToast.alert, '추출 요청에 실패했어요. 서버가 요청을 받지 못했어요.', 'failed live region');
-  assertEqual(failedToast.visibleSentence, false, 'failed toast hides the sentence');
+  // 실패 Toast만 이유 한 줄을 화면에도 보인다.
+  assertEqual(failedToast.reason, '서버가 요청을 받지 못했어요.', 'failed toast shows the reason');
   await saveScreenshot(page, 'overlay-toast-failed.png');
 
   await page.evaluate(() => {
@@ -583,10 +584,12 @@ function readToast(page) {
       hasCheckIcon: Boolean(toast?.querySelector('.toast__status path[d="M5 12.5l4.5 4.5L19 7"]')),
       kind: toast?.getAttribute('data-kind') ?? '',
       quality: toast?.querySelector('.toast__quality')?.textContent?.trim() ?? '',
+      // 실패 Toast에만 있는 이유 한 줄.
+      reason: toast?.querySelector('.toast__reason')?.textContent ?? '',
       status: root?.querySelector('[role="status"]')?.textContent ?? '',
       thumbnailSrc: toast?.querySelector('img')?.getAttribute('src') ?? '',
       visible: Boolean(rect && rect.width > 0 && rect.height > 0),
-      // 화면에 보이는 Toast 박스 안에는 문장이 없어야 한다.
+      // 진행·접수 Toast 박스 안에는 문장이 없어야 한다.
       visibleSentence: /[가-힣]{2,}/.test(toast?.textContent ?? ''),
     };
   });

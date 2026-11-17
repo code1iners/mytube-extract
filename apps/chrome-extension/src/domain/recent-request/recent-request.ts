@@ -14,7 +14,7 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 /** 최근 요청의 상태 배지. 만료는 job 상태가 아니라 보관 기간에서 도출한다. */
 export type RecentRequestState = 'queued' | 'processing' | 'completed' | 'failed' | 'expired';
 
-/** 최근 요청 항목마다 하나씩 두는 행동. 완료는 다시 내려받기, 실패는 다시 시도, 만료는 다시 요청이다. */
+/** 최근 요청 항목마다 하나씩 두는 행동. 완료는 다시 다운로드, 실패는 다시 시도, 만료는 다시 요청이다. */
 export type RecentRequestAction = 'redownload' | 'retry' | 'rerequest';
 
 /** 최근 요청 하나의 표시 정보. job에서 도출하며 화면은 이 값만 그린다. */

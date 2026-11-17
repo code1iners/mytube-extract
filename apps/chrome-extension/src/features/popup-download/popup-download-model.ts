@@ -86,7 +86,7 @@ export type PopupDownloadModelDependencies = {
   tabs: TabsAdapter;
   /** YouTube 썸네일 Overlay 권한 adapter. */
   youtubeOverlay: YoutubeOverlayAdapter;
-  /** 최근 요청의 다시 내려받기에 쓰는 Chrome downloads adapter. */
+  /** 최근 요청의 다시 다운로드에 쓰는 Chrome downloads adapter. */
   downloads: DownloadsAdapter;
 };
 
@@ -143,7 +143,7 @@ export type PopupDownloadModel = {
   returnToForm(): Promise<void>;
   /** Snapshot 변경 구독을 등록한다. */
   subscribe(listener: () => void): () => void;
-  /** 최근 요청 항목의 행동(다시 내려받기·다시 시도·다시 요청)을 실행한다. 행동이 없는 항목이면 아무것도 하지 않는다. */
+  /** 최근 요청 항목의 행동(다시 다운로드·다시 시도·다시 요청)을 실행한다. 행동이 없는 항목이면 아무것도 하지 않는다. */
   runRecentRequestAction(jobId: string): Promise<void>;
   /** 추출을 제출한다. 무대가 실패를 보여 주는 중이면 실패한 요청과 같은 조건으로 다시 제출한다. */
   submitDownload(): Promise<void>;

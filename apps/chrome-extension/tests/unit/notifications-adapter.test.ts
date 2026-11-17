@@ -120,7 +120,7 @@ describe('Chrome download notifications adapter', () => {
       'download-job-completed-job-1',
       {
         iconUrl: 'chrome-extension://test/icon-128.png',
-        message: '추출한 파일을 다운로드했습니다.',
+        message: '추출한 파일을 다운로드했어요.',
         title: '다운로드 완료',
         type: 'basic',
       },
