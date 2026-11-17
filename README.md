@@ -301,10 +301,8 @@ pnpm --filter api run verify:runtime
 
 `git push` 시 husky pre-push 훅은 모든 브랜치에 `pnpm test`, `pnpm test:e2e`, 실제 YouTube 검사, `chrome-extension`의 `test:browser`를 적용한다. 하나라도 실패하면 push가 차단된다. 훅은 루트 `pnpm install` 시 자동 활성화된다.
 
-원격 `refs/heads/main`을 생성·갱신할 때는 테스트 전용 `DATABASE_URL`을 먼저 확인하고, `test:e2e:real`로 실제 데이터베이스 검사까지 수행한다. 현재 checkout 이름이 아닌 원격 대상 ref를 사용하므로 `HEAD:main`과 여러 ref를 함께 보내는 푸시에도 적용된다. main 삭제는 이 데이터베이스 조건의 대상이 아니다. 연결값은 푸시 프로세스의 환경변수로 전달해야 하며 `.env` 파일을 자동으로 불러오지 않는다. 데이터베이스 연결·스키마가 준비되지 않으면 실제 검사는 실패한다.
+실제 YouTube 검사는 `test:e2e:media`로 실행하며, 대상 브랜치와 관계없이 데이터베이스 연결은 요구하지 않는다. 실제 데이터베이스 검사까지 하려면 테스트 전용 `DATABASE_URL`을 넣고 `test:e2e:real`을 직접 실행한다. YouTube 검사의 네트워크 단절·봇 차단 처리 정책은 기존 테스트를 따른다.
 
-다른 원격 브랜치로 푸시할 때는 `test:e2e:media`로 실제 YouTube 검사만 실행하며 데이터베이스 연결은 요구하지 않는다. `test:e2e:real`을 직접 실행하면 브랜치와 무관하게 실제 데이터베이스 검사까지 수행한다. YouTube 검사의 네트워크 단절·봇 차단 처리 정책은 기존 테스트를 따른다.
-
-훅의 브랜치 분기는 `node --test scripts/pre-push.test.mjs`로 외부 서비스 없이 검증한다.
+훅이 실행하는 검사 목록은 `node --test scripts/pre-push.test.mjs`로 외부 서비스 없이 검증한다.
 
 `pnpm test:cov`(루트)는 api(Jest), web·chrome-extension(Vitest), worker·media-downloader(Node 내장 테스트 러너)의 커버리지를 한 번에 출력한다. pre-push 게이트에는 포함되지 않으며, 임계치 강제 없이 리포팅 용도로만 쓴다.
