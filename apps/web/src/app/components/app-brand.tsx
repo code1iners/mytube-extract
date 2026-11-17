@@ -7,7 +7,7 @@ export function AppBrand() {
       <div className="brand-mark size-8 shrink-0 max-[561px]:size-[26px]" aria-hidden="true">
         <AppMark />
       </div>
-      <h1 className="page-title m-0 min-w-0 text-[19px] font-semibold leading-[1.35] text-mytube-text-primary [overflow-wrap:anywhere]">
+      <h1 className="page-title m-0 min-w-0 text-[1.1875rem] font-semibold leading-[1.35] text-mytube-text-primary [overflow-wrap:anywhere]">
         MyTube Extract
       </h1>
     </div>

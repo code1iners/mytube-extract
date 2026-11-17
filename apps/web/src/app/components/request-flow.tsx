@@ -16,7 +16,7 @@ type RequestFlowStepState = 'current' | 'complete' | 'upcoming';
 
 /** 요청 흐름 단계의 공통 Tailwind className. */
 const REQUEST_FLOW_STEP_BASE_CLASS_NAME =
-  'inline-flex min-w-0 items-center justify-center gap-mytube-8 text-[14px] font-semibold leading-[1.4] text-center whitespace-nowrap max-[301px]:justify-start max-[301px]:whitespace-normal';
+  'inline-flex min-w-0 items-center justify-center gap-mytube-8 text-[0.875rem] font-semibold leading-[1.4] text-center whitespace-nowrap max-[301px]:justify-start max-[301px]:whitespace-normal';
 
 /** 요청 흐름 단계 상태별 Tailwind className. */
 const REQUEST_FLOW_STEP_CLASS_NAMES: Record<
@@ -30,7 +30,7 @@ const REQUEST_FLOW_STEP_CLASS_NAMES: Record<
 
 /** 요청 흐름 번호 marker의 공통 Tailwind className. */
 const REQUEST_FLOW_MARKER_BASE_CLASS_NAME =
-  'inline-grid size-6 shrink-0 place-items-center border rounded-mytube-full text-[14px] font-semibold';
+  'inline-grid size-6 shrink-0 place-items-center border rounded-mytube-full text-[0.875rem] font-semibold';
 
 /** 요청 흐름 번호 marker 상태별 Tailwind className. */
 const REQUEST_FLOW_MARKER_CLASS_NAMES: Record<

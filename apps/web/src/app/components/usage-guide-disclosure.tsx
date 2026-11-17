@@ -1,4 +1,5 @@
 import {
+  type FocusEvent,
   type KeyboardEvent,
   type MouseEvent,
   type SyntheticEvent,
@@ -10,6 +11,10 @@ import {
 import { NavLink } from 'react-router';
 import { ROUTE_PATHS } from '../constants/route-paths.constant';
 import { useNavigation } from './navigation-context';
+
+/** 눌렀을 때 스스로 포커스를 받는 요소. 이런 곳을 누르면 포커스를 되돌리지 않는다. */
+const FOCUSABLE_TARGET_SELECTOR =
+  'a[href], button, input, select, textarea, summary, label, [tabindex]';
 
 /** 헤더에서 다시 확인할 수 있는 제품 사용 안내. */
 export function UsageGuideDisclosure() {
@@ -86,7 +91,7 @@ export function UsageGuideDisclosure() {
 
   useEffect(
     function closeDisclosureOnOutsidePointerDown() {
-      /** 바깥 pointer 입력으로 disclosure를 닫고 summary로 포커스를 복귀한다. */
+      /** 바깥 pointer 입력으로 disclosure를 닫는다. */
       function handlePointerDown(event: PointerEvent) {
         const detailsElement = detailsRef.current;
 
@@ -94,7 +99,13 @@ export function UsageGuideDisclosure() {
           return;
         }
 
-        closeDisclosure(true);
+        /** 사용자가 누른 곳이 직접 포커스를 받는 조작인지 여부. */
+        const pressedFocusable =
+          event.target instanceof Element &&
+          event.target.closest(FOCUSABLE_TARGET_SELECTOR) !== null;
+
+        // 입력칸·버튼을 눌렀다면 그쪽 포커스를 빼앗지 않고, 빈 곳을 눌렀을 때만 summary로 되돌린다.
+        closeDisclosure(!pressedFocusable);
       }
 
       document.addEventListener('pointerdown', handlePointerDown);
@@ -103,10 +114,27 @@ export function UsageGuideDisclosure() {
     [],
   );
 
+  /** 키보드로 메뉴 밖으로 나가면 본문을 가린 채 남지 않도록 닫는다. */
+  function handleBlur(event: FocusEvent<HTMLDetailsElement>) {
+    /** 포커스가 옮겨 간 요소. 빈 곳을 누른 경우는 pointer 처리에 맡긴다. */
+    const nextFocused = event.relatedTarget;
+
+    if (
+      !detailsRef.current?.open ||
+      !(nextFocused instanceof Node) ||
+      event.currentTarget.contains(nextFocused)
+    ) {
+      return;
+    }
+
+    closeDisclosure();
+  }
+
   return (
     <details
       className="usage-guide relative z-[3]"
       ref={detailsRef}
+      onBlur={handleBlur}
       onKeyDown={handleKeyDown}
       onToggle={handleToggle}
     >
@@ -114,7 +142,7 @@ export function UsageGuideDisclosure() {
         aria-label="더보기"
         aria-controls={contentId}
         aria-expanded={isOpen}
-        className={`usage-guide__summary relative inline-flex min-h-[44px] min-w-[44px] items-center justify-center rounded-mytube-md px-mytube-8 text-[24px] font-semibold leading-[1.4] text-mytube-text-secondary cursor-pointer list-none whitespace-nowrap outline-mytube-focus hover:bg-mytube-surface-alt hover:text-mytube-text-primary focus-visible:outline-2 focus-visible:[outline-offset:2px] ${isOpen ? 'bg-mytube-surface-alt text-mytube-text-primary' : ''}`}
+        className={`usage-guide__summary relative inline-flex min-h-[44px] min-w-[44px] items-center justify-center rounded-mytube-md px-mytube-8 text-[1.5rem] font-semibold leading-[1.4] text-mytube-text-secondary cursor-pointer list-none whitespace-nowrap outline-mytube-focus hover:bg-mytube-surface-alt hover:text-mytube-text-primary focus-visible:outline-2 focus-visible:[outline-offset:2px] ${isOpen ? 'bg-mytube-surface-alt text-mytube-text-primary' : ''}`}
         id={summaryId}
         ref={summaryRef}
         onClick={handleSummaryClick}
@@ -129,26 +157,26 @@ export function UsageGuideDisclosure() {
       >
         <ul className="m-0 grid list-none gap-mytube-12 p-0">
           <li className="grid gap-mytube-4">
-            <strong className="text-[14px] font-semibold leading-[1.4] text-mytube-text-primary">
+            <strong className="text-[0.875rem] font-semibold leading-[1.4] text-mytube-text-primary">
               요청 상태
             </strong>
-            <span className="text-[14px] leading-[1.4] text-mytube-text-secondary">
+            <span className="text-[0.875rem] leading-[1.4] text-mytube-text-secondary">
               API 응답을 기준으로 표시합니다.
             </span>
           </li>
           <li className="grid gap-mytube-4">
-            <strong className="text-[14px] font-semibold leading-[1.4] text-mytube-text-primary">
+            <strong className="text-[0.875rem] font-semibold leading-[1.4] text-mytube-text-primary">
               요청 내역
             </strong>
-            <span className="text-[14px] leading-[1.4] text-mytube-text-secondary">
+            <span className="text-[0.875rem] leading-[1.4] text-mytube-text-secondary">
               현재 브라우저에만 남습니다.
             </span>
           </li>
           <li className="grid gap-mytube-4">
-            <strong className="text-[14px] font-semibold leading-[1.4] text-mytube-text-primary">
+            <strong className="text-[0.875rem] font-semibold leading-[1.4] text-mytube-text-primary">
               완료 파일
             </strong>
-            <span className="text-[14px] leading-[1.4] text-mytube-text-secondary">
+            <span className="text-[0.875rem] leading-[1.4] text-mytube-text-secondary">
               기본 7일 보관됩니다.
             </span>
           </li>
@@ -159,7 +187,7 @@ export function UsageGuideDisclosure() {
             aria-describedby={
               navigationLocked ? settingsLockDescriptionId : undefined
             }
-            className={`settings-link usage-guide__settings inline-flex min-h-[44px] min-w-[44px] w-full items-center justify-start mt-mytube-16 border-t border-mytube-border pt-mytube-12 px-mytube-8 text-[14px] font-semibold text-mytube-text-primary no-underline whitespace-nowrap aria-[current=page]:underline aria-[current=page]:decoration-mytube-action-primary aria-[current=page]:underline-offset-4 focus-visible:outline-2 focus-visible:outline-mytube-focus focus-visible:[outline-offset:4px] ${navigationLocked ? 'is-disabled cursor-not-allowed text-mytube-text-disabled' : ''}`}
+            className={`settings-link usage-guide__settings inline-flex min-h-[44px] min-w-[44px] w-full items-center justify-start mt-mytube-16 border-t border-mytube-border pt-mytube-12 px-mytube-8 text-[0.875rem] font-semibold text-mytube-text-primary no-underline whitespace-nowrap aria-[current=page]:underline aria-[current=page]:decoration-mytube-action-primary aria-[current=page]:underline-offset-4 focus-visible:outline-2 focus-visible:outline-mytube-focus focus-visible:[outline-offset:4px] ${navigationLocked ? 'is-disabled cursor-not-allowed text-mytube-text-disabled' : ''}`}
             to={ROUTE_PATHS.settings}
             onClick={handleSettingsClick}
           >

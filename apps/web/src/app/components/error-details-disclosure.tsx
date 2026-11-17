@@ -18,7 +18,7 @@ const ERROR_DETAILS_CLASS_NAME = 'error-details grid gap-[10px]';
 
 /** 오류 상세 disclosure 평이한 요약의 Tailwind typography className. */
 const ERROR_DETAILS_SUMMARY_CLASS_NAME =
-  'error-details__summary m-0 text-mytube-text-secondary text-[14px] leading-[1.4] break-keep';
+  'error-details__summary m-0 text-mytube-text-secondary text-[0.875rem] leading-[1.4] break-keep';
 
 /** 오류 상세 disclosure panel의 Tailwind surface className. */
 const ERROR_DETAILS_PANEL_CLASS_NAME =
@@ -26,7 +26,7 @@ const ERROR_DETAILS_PANEL_CLASS_NAME =
 
 /** 오류 상세 disclosure log의 Tailwind typography className. */
 const ERROR_DETAILS_LOG_CLASS_NAME =
-  'm-0 overflow-x-auto text-mytube-text-secondary font-mytube-ui text-[13px] leading-[1.5] whitespace-pre-wrap [word-break:break-word]';
+  'm-0 overflow-x-auto text-mytube-text-secondary font-mytube-ui text-[0.8125rem] leading-[1.5] whitespace-pre-wrap [word-break:break-word]';
 
 /** 클릭하면 열리는 상세 원인 패널. */
 export function ErrorDetailsDisclosure({

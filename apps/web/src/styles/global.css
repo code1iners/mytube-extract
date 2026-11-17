@@ -255,7 +255,8 @@ a {
 
 .video-technical-details {
   min-width: 0;
-  font-size: 14px;
+  font-size: 0.875rem;
+  line-height: 1.5;
   color: var(--color-text-secondary);
 }
 
@@ -278,6 +279,7 @@ a {
 
 .request-readiness-notice p {
   margin: 0;
+  line-height: 1.5;
   overflow-wrap: anywhere;
 }
 
@@ -295,5 +297,7 @@ a {
 
 .request-progress p {
   margin: 0;
+  line-height: 1.5;
+  font-variant-numeric: tabular-nums;
   color: var(--color-text-primary);
 }

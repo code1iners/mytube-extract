@@ -6,7 +6,7 @@ const PANEL_TITLE_ROW_CLASS_NAME =
 
 /** 공통 panel 제목의 Tailwind typography className. */
 const PANEL_TITLE_CLASS_NAME =
-  'm-0 inline-flex items-center gap-mytube-8 text-mytube-text-primary text-[21px] font-semibold leading-[1.4]';
+  'm-0 inline-flex items-center gap-mytube-8 text-mytube-text-primary text-[1.3125rem] font-semibold leading-[1.4]';
 
 /** 상태 갱신 표시의 Tailwind layout·color className. legacy selector는 브라우저 검증 훅으로 보존한다. */
 const PANEL_TITLE_REFRESH_CLASS_NAME =

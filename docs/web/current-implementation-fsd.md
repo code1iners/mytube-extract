@@ -24,7 +24,7 @@
 - `/video`, `/subtitles`, `/history`, `/settings`를 제공한다.
 - `영상 추출`·`자막 추출`·`요청 내역`은 하나의 주요 navigation으로 공유한다. 821px 이상은 왼쪽 240px 로고·세로 메뉴, 820px 이하는 하단 고정 3탭이다. 반대 크기의 메뉴는 `display:none`으로 키보드와 접근성 트리에서 제외한다. 오른쪽 작업 영역은 최대 760px이다.
 - 주요 navigation의 현재 목적지는 `aria-current="page"`와 active 시각 상태로 함께 전달한다.
-- 헤더 오른쪽 `…`(접근성 이름 `더보기`) disclosure 안의 `설정`은 보조 route 링크이며, 테마 radio 선택은 `/settings`에서 layout의 기존 테마 state와 storage 콜백을 사용한다. disclosure는 Enter·Space·Escape와 바깥 pointer 입력을 처리하고 요청 접수 중 설정 링크를 잠근다.
+- 헤더 오른쪽 `…`(접근성 이름 `더보기`) disclosure 안의 `설정`은 보조 route 링크이며, 테마 radio 선택은 `/settings`에서 layout의 기존 테마 state와 storage 콜백을 사용한다. disclosure는 Enter·Space·Escape와 바깥 pointer 입력, 키보드로 메뉴 밖으로 나가는 focus 이동을 처리하고 요청 접수 중 설정 링크를 잠근다. 문서 제목은 route마다 `영상 추출 · MyTube Extract`처럼 갱신한다.
 
 - Web의 버튼·선택 표시·탐색·포커스는 무채색이며 로고 아이콘만 빨강을 유지한다. Web 전용 토큰과 대비 값은 `docs/DESIGN.md`의 Web 전용 계약을 따른다.
 - 하단 탭의 실제 높이를 관찰해 본문 끝 여백에 반영한다. 글자 확대·줄바꿈 이후에도 마지막 조작이 탭과 안전 여백 위에 나타난다.

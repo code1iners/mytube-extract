@@ -148,7 +148,7 @@ async function verifyHistoryLateAcceptanceAfterNavigation() {
       const chooser = await chooserPromise;
       await chooser.setFiles({ name: 'late.mp4', mimeType: 'video/mp4', buffer: Buffer.from('late subtitle') });
       await waitForCondition(async () => completeStarted);
-      await page.getByRole('button', { name: '접수 취소', exact: true }).click();
+      await page.getByRole('button', { name: '요청 취소', exact: true }).click();
       await page.getByRole('link', { name: '영상 추출', exact: true }).click();
       await page.getByLabel('YouTube URL').waitFor();
       await page.getByRole('link', { name: '요청 내역', exact: true }).click();
@@ -218,10 +218,10 @@ async function verifyHistoryAcceptanceAfterSourceRemoval() {
       await waitForHistoryCount(page, 0);
       /** 삭제된 행 대신 목록 위에서 계속 제공하는 접수 조작. */
       const acceptance = page.getByRole('group', { name: '재요청 접수', exact: true });
-      const cancel = acceptance.getByRole('button', { name: '접수 취소', exact: true });
+      const cancel = acceptance.getByRole('button', { name: '요청 취소', exact: true });
       await cancel.waitFor();
       await acceptance.getByText('새 요청을 접수하고 있습니다. 접수 전에는 취소할 수 있습니다.', { exact: true }).waitFor();
-      assert.equal(await page.getByRole('button', { name: '접수 취소', exact: true }).count(), 1);
+      assert.equal(await page.getByRole('button', { name: '요청 취소', exact: true }).count(), 1);
       assert.equal(await page.getByRole('link', { name: '영상 추출', exact: true }).getAttribute('aria-disabled'), 'true');
       assert.equal(await page.getByText('시작할 작업을 선택하세요.', { exact: true }).count(), 0);
       await waitForCondition(async () => acceptance.evaluate((element) => document.activeElement === element));
@@ -283,7 +283,7 @@ async function verifyHistoryUndoAtCapacity() {
     });
     await page.goto(`${staticServer.origin}/history`);
     await page.getByRole('heading', { name: VIDEO_ID, exact: true }).waitFor();
-    /** 가장 오래된 요청을 삭제하고 8초 이내 새 접수와 되돌리기를 수행한다. */
+    /** 가장 오래된 요청을 삭제하고 새 접수 뒤 되돌리기를 수행한다. */
     const oldest = page.locator('article').filter({ has: page.getByRole('heading', { name: VIDEO_ID, exact: true }) });
     await oldest.getByRole('button', { name: /상세/ }).click();
     await oldest.getByRole('button', { name: /내역에서 삭제/ }).click();
@@ -526,9 +526,9 @@ async function verifyHistoryRetryBoundaries() {
       await waitForEnabled(retries.first());
       // 렌더 사이 틈 없이 두 항목을 연달아 눌러도 한 건만 접수한다.
       await retries.evaluateAll((buttons) => { buttons[0].click(); buttons[0].click(); buttons[1].click(); });
-      await page.getByRole('button', { name: '접수 취소', exact: true }).waitFor();
+      await page.getByRole('button', { name: '요청 취소', exact: true }).waitFor();
       /** 새 재요청·취소 조작도 최소 44px의 실제 클릭 영역을 가진다. */
-      const actionSizes = await page.locator('.history-actions button, button').filter({ hasText: /접수 중|접수 취소|다시 요청/ }).evaluateAll((buttons) => buttons.map((button) => {
+      const actionSizes = await page.locator('.history-actions button, button').filter({ hasText: /접수 중|요청 취소|다시 요청/ }).evaluateAll((buttons) => buttons.map((button) => {
         const rect = button.getBoundingClientRect();
         return { width: rect.width, height: rect.height };
       }));
@@ -540,7 +540,7 @@ async function verifyHistoryRetryBoundaries() {
       assert.equal(new URL(page.url()).pathname, '/history');
       assert.equal(creates, 0);
       if (outcome === 'cancel') {
-        await page.getByRole('button', { name: '접수 취소', exact: true }).click();
+        await page.getByRole('button', { name: '요청 취소', exact: true }).click();
         await page.getByText('접수를 중단했습니다. 기존 내역과 작성 중인 입력은 그대로입니다.', { exact: true }).waitFor();
       }
       release();
@@ -707,7 +707,7 @@ async function verifyHistorySubtitleBoundaries() {
       const row = page.locator('article').filter({ has: page.locator(`#history-item-subtitle-${SUBTITLE_ID}`) });
       const retry = row.getByRole('button', { name: '다시 요청', exact: true });
       if (outcome === 'missing-model') {
-        await row.getByText('재요청 조건을 확인할 수 없습니다. 상태를 다시 확인해 주세요.', { exact: true }).waitFor();
+        await row.getByText('다시 요청할 조건을 확인할 수 없습니다. 상태를 다시 확인해 주세요.', { exact: true }).waitFor();
         assert.equal(await retry.isDisabled(), true);
         recovered = true;
         await row.getByRole('button', { name: '다시 확인', exact: true }).click();
@@ -748,7 +748,7 @@ async function verifyHistorySubtitleBoundaries() {
       if (outcome === 'too-large') {
         await row.getByRole('alert').filter({ hasText: '파일이 너무 큽니다' }).waitFor();
       } else {
-        await row.getByRole('button', { name: '접수 취소', exact: true }).waitFor();
+        await row.getByRole('button', { name: '요청 취소', exact: true }).waitFor();
         if (['late-success', 'storage'].includes(outcome)) await waitForCondition(async () => completes === 1);
         else await page.getByRole('progressbar', { name: '원본 업로드 진행률' }).waitFor();
         // 렌더된 비활성 버튼과 같은 이벤트 루프의 반복 클릭 모두 새 요청을 만들지 않는다.
@@ -757,7 +757,7 @@ async function verifyHistorySubtitleBoundaries() {
         assert.equal(await page.getByRole('link', { name: '영상 추출', exact: true }).getAttribute('aria-disabled'), 'true');
         if (process.env.WEB_SMOKE_SCREENSHOTS) await page.screenshot({ path: `${process.env.WEB_SMOKE_SCREENSHOTS}/subtitle-history-${outcome}.png`, fullPage: true });
         if (outcome === 'cancel-upload' || outcome === 'late-success') {
-          await row.getByRole('button', { name: '접수 취소', exact: true }).click();
+          await row.getByRole('button', { name: '요청 취소', exact: true }).click();
           await row.getByText(/접수를 중단했습니다/).waitFor();
           if (outcome === 'late-success') {
             await page.locator('article').filter({ has: page.locator(`#history-item-video-${VIDEO_ID}`) }).getByRole('button', { name: '다시 요청', exact: true }).click();
@@ -2036,6 +2036,8 @@ async function verifyVideoRequestCancellation() {
       .getByText('요청을 중단했습니다. 입력한 설정은 그대로입니다. 다시 요청할 수 있습니다.', {
         exact: true,
       })
+      // 같은 문구를 담은 스크린리더 전용 공지 영역이 아니라 화면에 보이는 안내를 확인한다.
+      .and(page.locator(':not(.visually-hidden)'))
       .waitFor();
     assert.equal(await receiptCount(page), 0);
     assert.equal(cancelCalls, 0);
@@ -2115,7 +2117,7 @@ async function verifyVideoTaskFirstLayout() {
               action: 'rgb(242, 240, 238)',
               border: 'rgb(133, 133, 133)',
               danger: 'rgb(255, 138, 128)',
-              disabled: 'rgb(92, 89, 85)',
+              disabled: 'rgb(179, 176, 172)', // 비활성 주요 버튼 라벨은 읽을 수 있는 보조 텍스트색이다.
               focus: 'rgb(242, 240, 238)',
               onAction: 'rgb(24, 25, 27)',
               surface: 'rgb(32, 33, 36)',
@@ -2126,7 +2128,7 @@ async function verifyVideoTaskFirstLayout() {
               action: 'rgb(72, 72, 72)',
               border: 'rgb(133, 133, 133)',
               danger: 'rgb(198, 40, 40)',
-              disabled: 'rgb(200, 200, 200)',
+              disabled: 'rgb(104, 104, 104)', // 비활성 주요 버튼 라벨은 읽을 수 있는 보조 텍스트색이다.
               focus: 'rgb(72, 72, 72)',
               onAction: 'rgb(255, 255, 255)',
               surface: 'rgb(248, 248, 248)',
@@ -2977,6 +2979,8 @@ async function verifySubtitleReceiptStorageFallback() {
     await page.getByRole('heading', { name: '영어 자막 파일이 준비되었습니다' }).waitFor();
     await page
       .getByText('요청 내역 저장에 실패했지만 현재 작업은 계속 확인할 수 있습니다.', { exact: true })
+      // 같은 문구를 담은 스크린리더 전용 공지 영역이 아니라 화면에 보이는 안내를 확인한다.
+      .and(page.locator(':not(.visually-hidden)'))
       .waitFor();
 
     /** 저장 실패 job을 가리키는 요청 내역 deep link. */
@@ -3082,6 +3086,8 @@ async function verifySubtitleRequestCancellation() {
       .getByText('요청을 중단했습니다. 선택한 파일과 처리 방식은 그대로입니다. 다시 요청할 수 있습니다.', {
         exact: true,
       })
+      // 같은 문구를 담은 스크린리더 전용 공지 영역이 아니라 화면에 보이는 안내를 확인한다.
+      .and(page.locator(':not(.visually-hidden)'))
       .waitFor();
     await waitForCondition(async () => abortCalls === 1);
     assert.equal(completeCalls, 0);
@@ -3285,7 +3291,7 @@ async function verifySubtitleProcessingChoice() {
             action: 'rgb(242, 240, 238)',
             border: 'rgb(133, 133, 133)',
             danger: 'rgb(255, 138, 128)',
-            disabled: 'rgb(92, 89, 85)',
+            disabled: 'rgb(179, 176, 172)', // 비활성 주요 버튼 라벨은 읽을 수 있는 보조 텍스트색이다.
             onAction: 'rgb(24, 25, 27)',
             surface: 'rgb(32, 33, 36)',
             surfaceAlt: 'rgb(41, 42, 45)',
@@ -3296,7 +3302,7 @@ async function verifySubtitleProcessingChoice() {
             action: 'rgb(72, 72, 72)',
             border: 'rgb(133, 133, 133)',
             danger: 'rgb(198, 40, 40)',
-            disabled: 'rgb(200, 200, 200)',
+            disabled: 'rgb(104, 104, 104)', // 비활성 주요 버튼 라벨은 읽을 수 있는 보조 텍스트색이다.
             onAction: 'rgb(255, 255, 255)',
             surface: 'rgb(248, 248, 248)',
             surfaceAlt: 'rgb(239, 239, 239)',
@@ -4610,7 +4616,8 @@ async function verifyHistoryDeleteUndo() {
     await page
       .getByRole('button', { name: '삭제한 영상 요청 되돌리기' })
       .waitFor();
-    assert.match(await page.locator('.history-undo').textContent(), /8초/);
+    assert.match(await page.locator('.history-undo').textContent(), /되돌릴 수 있습니다/);
+    assert.doesNotMatch(await page.locator('.history-undo').textContent(), /초/);
     await waitForCondition(
       async () =>
         await page.locator('.history-actions a').nth(1).evaluate(
@@ -4693,13 +4700,13 @@ async function verifyHistoryDeleteUndo() {
       { acceptedAt: '2026-08-11T00:01:00.000Z' },
     );
 
-    /** undo 시간이 지나면 동작이 닫히고 삭제가 유지되는지 확인한다. */
+    /** 시간이 지나도 undo 동작은 남아 있고(시간 제한 없음) 삭제는 유지되는지 확인한다. */
     await page.locator('.history-details-toggle').first().click();
     await page.locator('.history-remove-button').first().click();
     await waitForHistoryCount(page, 1);
     await page.getByRole('button', { name: '삭제한 영상 요청 되돌리기' }).waitFor();
     await page.waitForTimeout(8_200);
-    assert.equal(await page.getByRole('button', { name: /되돌리기/ }).count(), 0);
+    assert.equal(await page.getByRole('button', { name: /되돌리기/ }).count(), 1);
     assert.equal(
       await page.evaluate((key) => localStorage.getItem(key), receiptKey('video', VIDEO_ID)),
       null,
@@ -5133,7 +5140,7 @@ async function verifyEmptyHistoryProductModel() {
         assert.equal(await page.getByRole('heading', { name: '요청 내역' }).count(), 1);
         assert.equal(
           await page
-            .getByText('이 브라우저에서 접수한 최근 요청 20건입니다.', {
+            .getByText('이 브라우저에서 접수한 최근 요청을 20건까지 보여 줍니다.', {
               exact: true,
             })
             .count(),
@@ -5168,7 +5175,7 @@ async function verifyEmptyHistoryProductModel() {
         assert.equal(
           await page
             .getByText(
-              'YouTube URL로 영상(MP4) 또는 오디오(MP3)를 받습니다.',
+              'YouTube URL로 비디오(MP4) 또는 오디오(MP3)를 받습니다.',
               { exact: true },
             )
             .count(),
@@ -5185,7 +5192,7 @@ async function verifyEmptyHistoryProductModel() {
         assert.equal(
           await page
             .getByText(
-              '이력은 이 브라우저에만 저장되며, 완료 파일은 7일 동안 보관됩니다.',
+              '요청 내역은 이 브라우저에만 저장되며, 완료 파일은 7일 동안 보관됩니다.',
               { exact: true },
             )
             .count(),
@@ -6205,7 +6212,7 @@ async function verifySettingsSurface(page, width) {
   assert.equal(
     await page
       .getByText(
-        '이 설정의 화면 표시 선택만 이 브라우저에 저장하며, 요청 URL과 파일 정보는 저장하지 않습니다.',
+        '화면 표시, 마지막으로 고른 형식·품질·처리 방식, 요청 내역을 이 브라우저에 저장합니다. 요청 URL과 파일 정보는 저장하지 않습니다.',
         { exact: true },
       )
       .count(),

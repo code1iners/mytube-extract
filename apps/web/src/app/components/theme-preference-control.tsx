@@ -5,7 +5,7 @@ import {
 
 /** 테마 preference fieldset의 Tailwind layout·typography className. */
 const THEME_CONTROL_CLASS_NAME =
-  'theme-control theme-control--settings grid min-w-0 gap-mytube-12 m-0 border-0 p-0 text-mytube-text-secondary text-[14px]';
+  'theme-control theme-control--settings grid min-w-0 gap-mytube-12 m-0 border-0 p-0 text-mytube-text-secondary text-[0.875rem]';
 /** 테마 선택지 묶음의 Tailwind layout className. */
 const THEME_TOGGLE_CLASS_NAME = 'theme-toggle inline-flex w-full';
 /** 테마 선택지 label의 Tailwind layout className. */
@@ -65,7 +65,7 @@ export function ThemePreferenceControl({
 
   return (
     <fieldset className={THEME_CONTROL_CLASS_NAME}>
-      <legend className="text-mytube-text-primary text-[16px] font-semibold leading-[1.4]">
+      <legend className="text-mytube-text-primary text-[1rem] font-semibold leading-[1.4]">
         화면 표시
       </legend>
       <div className={THEME_TOGGLE_CLASS_NAME}>

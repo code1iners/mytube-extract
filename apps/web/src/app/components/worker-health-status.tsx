@@ -54,7 +54,7 @@ const WORKER_HEALTH_STATUS_MAIN_CLASS_NAME =
 
 /** worker health notice 메시지의 공통 Tailwind typography className. */
 const WORKER_HEALTH_STATUS_MESSAGE_BASE_CLASS_NAME =
-  'worker-health-status__message m-0 text-mytube-text-secondary text-[14px] leading-[1.4] break-keep';
+  'worker-health-status__message m-0 text-mytube-text-secondary text-[0.875rem] leading-[1.4] break-keep';
 
 /** worker health notice 메시지의 expanded Tailwind typography className. */
 const WORKER_HEALTH_STATUS_EXPANDED_MESSAGE_CLASS_NAME =
@@ -74,11 +74,11 @@ const WORKER_HEALTH_STATUS_ACTIONS_CLASS_NAME =
 
 /** worker health 마지막 확인 시각의 Tailwind typography className. */
 const WORKER_HEALTH_STATUS_LAST_CHECKED_CLASS_NAME =
-  'worker-health-status__last-checked m-0 text-mytube-text-secondary text-[14px] leading-[1.4] whitespace-nowrap';
+  'worker-health-status__last-checked m-0 text-mytube-text-secondary text-[0.875rem] leading-[1.4] whitespace-nowrap';
 
 /** worker health 재확인 button의 공통 Tailwind className. */
 const WORKER_HEALTH_STATUS_RETRY_CLASS_NAME =
-  'worker-health-status__retry min-h-[44px] gap-mytube-8 px-mytube-12 !text-[14px]';
+  'worker-health-status__retry min-h-[44px] gap-mytube-8 px-mytube-12 !text-[0.875rem]';
 
 /** worker health 정상 상태 재확인 button의 저강조 Tailwind className. */
 const WORKER_HEALTH_STATUS_QUIET_RETRY_CLASS_NAME =
@@ -182,7 +182,7 @@ export function WorkerHealthStatusNotice({
         </span>
         <div>
           <h3
-            className="m-0 text-mytube-text-primary text-[16px] font-semibold leading-[1.4]"
+            className="m-0 text-mytube-text-primary text-[1rem] font-semibold leading-[1.4]"
             id={id}
           >
             서비스 상태

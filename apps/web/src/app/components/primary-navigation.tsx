@@ -98,7 +98,7 @@ export function PrimaryNavigation({
         /** 목적지의 active·disabled 상태를 하나의 판정 결과로 공유한다. */
         const navigationLinkClassName = [
           'primary-navigation__link',
-          'inline-flex min-w-0 min-h-[48px] items-center justify-center gap-mytube-8 border-b border-transparent text-[14px] font-semibold leading-[1.4] no-underline whitespace-normal focus-visible:outline-2 focus-visible:outline-mytube-focus focus-visible:[outline-offset:-2px]',
+          'inline-flex min-w-0 min-h-[48px] items-center justify-center gap-mytube-8 border-b border-transparent text-[0.875rem] font-semibold leading-[1.4] no-underline whitespace-normal focus-visible:outline-2 focus-visible:outline-mytube-focus focus-visible:[outline-offset:-2px]',
           linkClassName,
           isActive ? 'is-active' : '',
           isActive

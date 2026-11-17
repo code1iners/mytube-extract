@@ -25,19 +25,19 @@ const VIDEO_REQUEST_FORM_CLASS_NAME = 'download-form grid gap-mytube-16';
 const VIDEO_URL_FIELD_CLASS_NAME = 'field field--wide grid gap-mytube-8';
 /** 영상 URL field label의 Tailwind typography className. */
 const VIDEO_URL_FIELD_LABEL_CLASS_NAME =
-  'field-label text-mytube-text-primary text-[16px] font-semibold leading-[1.4]';
+  'field-label text-mytube-text-primary text-[1rem] font-semibold leading-[1.4]';
 /** 영상 URL 입력 frame의 Tailwind layout·state className. */
 const VIDEO_URL_INPUT_FRAME_CLASS_NAME =
   'url-input-frame grid min-h-[48px] w-full grid-cols-[28px_minmax(0,1fr)_auto] items-center border border-mytube-border rounded-mytube-md bg-mytube-surface focus-within:border-mytube-focus focus-within:outline-2 focus-within:outline-mytube-focus focus-within:outline-offset-2';
 /** 영상 URL input의 Tailwind reset·typography className. */
 const VIDEO_URL_INPUT_CLASS_NAME =
-  'w-full min-w-0 min-h-[44px] border-0 bg-transparent py-[9px] pr-[13px] pl-0 text-mytube-text-primary outline-none focus-visible:!outline-none';
+  'w-full min-w-0 min-h-[44px] border-0 bg-transparent py-[9px] pr-[13px] pl-0 text-mytube-text-primary placeholder:text-mytube-text-secondary outline-none focus-visible:!outline-none';
 /** 영상 URL 지우기 button의 Tailwind state className. */
 const VIDEO_URL_RESET_CLASS_NAME =
-  'url-reset-button min-w-[44px] min-h-[44px] mr-mytube-8 px-mytube-8 border border-mytube-border rounded-mytube-sm bg-mytube-surface-alt text-mytube-text-secondary cursor-pointer text-[14px] font-semibold focus-visible:outline-2 focus-visible:outline-mytube-focus focus-visible:outline-offset-2 hover:bg-mytube-surface-alt hover:text-mytube-text-primary';
+  'url-reset-button min-w-[44px] min-h-[44px] mr-mytube-8 px-mytube-8 border border-mytube-border rounded-mytube-sm bg-mytube-surface-alt text-mytube-text-secondary cursor-pointer text-[0.875rem] font-semibold focus-visible:outline-2 focus-visible:outline-mytube-focus focus-visible:outline-offset-2 hover:bg-mytube-surface-alt hover:text-mytube-text-primary';
 /** 영상 URL 입력 피드백의 Tailwind typography className. */
 const VIDEO_FIELD_FEEDBACK_CLASS_NAME =
-  'field-feedback m-[-2px_0_0] text-mytube-text-secondary text-[14px] leading-[1.4]';
+  'field-feedback m-[-2px_0_0] text-mytube-text-secondary text-[0.875rem] leading-[1.4]';
 /** 영상 요청 fieldset의 Tailwind layout className. */
 const VIDEO_OPTION_FIELDSET_CLASS_NAME =
   'grid min-w-0 gap-y-[12px] gap-x-mytube-8 m-0 border-0 p-0';
@@ -49,7 +49,7 @@ const VIDEO_QUALITY_FIELDSET_CLASS_NAME =
   `quality-grid ${VIDEO_OPTION_FIELDSET_CLASS_NAME} grid-cols-3`;
 /** 영상 option legend의 Tailwind typography className. */
 const VIDEO_OPTION_LEGEND_CLASS_NAME =
-  'col-span-full m-0 mb-mytube-12 p-0 text-mytube-text-primary text-[16px] font-semibold leading-[1.4]';
+  'col-span-full m-0 mb-mytube-12 p-0 text-mytube-text-primary text-[1rem] font-semibold leading-[1.4]';
 /** 영상 option label의 공통 Tailwind layout·state className. */
 const VIDEO_OPTION_BASE_CLASS_NAME =
   'flex min-h-[48px] items-center justify-center gap-mytube-8 px-mytube-8 py-mytube-8 text-center flex-wrap border border-mytube-border rounded-mytube-md bg-mytube-surface text-mytube-text-secondary cursor-pointer font-semibold focus-within:outline-2 focus-within:outline-mytube-focus focus-within:outline-offset-2 hover:bg-mytube-surface-alt hover:text-mytube-text-primary';
@@ -61,7 +61,7 @@ const VIDEO_OPTION_INPUT_CLASS_NAME =
   'absolute h-px w-px opacity-0';
 /** 영상 제출 button의 Tailwind state className. */
 const VIDEO_SUBMIT_BUTTON_CLASS_NAME =
-  'video-submit-button inline-flex w-full min-h-[48px] items-center justify-center gap-mytube-8 border border-mytube-action-primary rounded-mytube-md bg-mytube-action-primary text-mytube-on-primary cursor-pointer text-[18px] font-semibold leading-[1] shadow-mytube-soft focus-visible:outline-2 focus-visible:outline-mytube-focus focus-visible:outline-offset-2 enabled:hover:brightness-[0.92] enabled:active:brightness-[0.84] disabled:border-mytube-border disabled:bg-mytube-surface-alt disabled:text-mytube-text-disabled disabled:cursor-not-allowed disabled:!shadow-none';
+  `video-submit-button w-full ${PRIMARY_BUTTON_UTILITY_CLASS_NAME}`;
 /** 영상 생명주기 panel의 Tailwind surface·layout className. */
 const VIDEO_STATUS_PANEL_CLASS_NAME =
   'video-status-panel grid min-w-0 w-full max-w-none m-0 gap-[18px] border border-mytube-border rounded-mytube-lg bg-mytube-surface p-[20px] shadow-mytube-soft max-[821px]:p-mytube-16';
@@ -75,10 +75,10 @@ const VIDEO_STATUS_ICON_CLASS_NAME =
 const VIDEO_STATUS_COPY_CLASS_NAME = 'min-w-0';
 /** 영상 상태 제목의 Tailwind typography className. */
 const VIDEO_STATUS_TITLE_CLASS_NAME =
-  'm-0 text-[21px] font-semibold leading-[1.3] max-[821px]:text-[19px]';
+  'm-0 text-[1.125rem] font-semibold leading-[1.3]';
 /** 영상 상태 설명의 Tailwind typography·overflow className. */
 const VIDEO_STATUS_MESSAGE_CLASS_NAME =
-  'm-[6px_0_0] text-mytube-text-secondary text-[16px] leading-[1.4] break-keep break-words';
+  'm-[6px_0_0] text-mytube-text-secondary text-[1rem] leading-[1.4] break-keep break-words';
 /** 영상 상태 제목·아이콘 tone에 적용할 Tailwind className 묶음. */
 type VideoStatusToneClassNames = {
   /** 상태 아이콘의 테두리·색상. */
@@ -120,19 +120,19 @@ const VIDEO_STATUS_DETAIL_ROW_CLASS_NAME =
   'grid min-w-0 grid-cols-[minmax(0,1fr)_auto] gap-mytube-16 border-b border-mytube-border py-[11px]';
 /** 영상 상태 상세 label의 Tailwind typography className. */
 const VIDEO_STATUS_DETAIL_LABEL_CLASS_NAME =
-  'm-0 text-mytube-text-secondary text-[14px] font-normal';
+  'm-0 text-mytube-text-secondary text-[0.875rem] font-normal';
 /** 영상 상태 상세 value의 Tailwind typography·overflow className. */
 const VIDEO_STATUS_DETAIL_VALUE_CLASS_NAME =
-  'm-0 min-w-0 text-mytube-text-primary text-[14px] font-semibold text-right [overflow-wrap:anywhere]';
+  'm-0 min-w-0 text-mytube-text-primary text-[0.875rem] font-semibold text-right [overflow-wrap:anywhere]';
 /** 영상 완료 결과 보조 문구의 Tailwind typography·overflow className. */
 const VIDEO_RESULT_CONTEXT_CLASS_NAME =
-  'm-0 text-mytube-text-secondary text-[14px] leading-[1.4] break-keep [overflow-wrap:anywhere]';
+  'm-0 text-mytube-text-secondary text-[0.875rem] leading-[1.4] break-keep [overflow-wrap:anywhere]';
 /** 영상 완료 결과 action 영역의 Tailwind layout className. */
 const VIDEO_RESULT_ACTIONS_CLASS_NAME =
   'video-result-actions grid min-w-0 grid-cols-[minmax(0,1fr)_160px] gap-mytube-12 mt-[20px] max-[561px]:grid-cols-1';
 /** 영상 완료 결과 다운로드 link의 Tailwind button className. */
 const VIDEO_DOWNLOAD_BUTTON_CLASS_NAME =
-  'video-download-button inline-flex w-full min-h-[48px] items-center justify-center gap-mytube-8 border border-mytube-action-primary rounded-mytube-md bg-mytube-action-primary text-mytube-on-primary cursor-pointer text-[18px] font-semibold leading-[1] no-underline shadow-mytube-soft focus-visible:outline-2 focus-visible:outline-mytube-focus focus-visible:outline-offset-2 hover:brightness-[0.92] active:brightness-[0.84]';
+  `video-download-button w-full ${PRIMARY_BUTTON_UTILITY_CLASS_NAME}`;
 /** 영상 보조 button의 공통 Tailwind className. */
 const VIDEO_SECONDARY_BUTTON_CLASS_NAME =
   SECONDARY_BUTTON_UTILITY_CLASS_NAME;
@@ -141,21 +141,42 @@ const VIDEO_NEW_REQUEST_BUTTON_CLASS_NAME =
   `${VIDEO_SECONDARY_BUTTON_CLASS_NAME} min-h-[48px] gap-mytube-8 px-mytube-16`;
 /** 영상 오류 재시도·복귀 primary button의 Tailwind className. */
 const VIDEO_PRIMARY_BUTTON_CLASS_NAME =
-  `${PRIMARY_BUTTON_UTILITY_CLASS_NAME} leading-[1]`;
+  PRIMARY_BUTTON_UTILITY_CLASS_NAME;
 /** 영상 접수 중 취소 button의 Tailwind width className. */
 const VIDEO_CANCEL_BUTTON_CLASS_NAME =
   `${VIDEO_SECONDARY_BUTTON_CLASS_NAME} w-full`;
 /** 영상 접수 중 경계 안내의 Tailwind typography className. */
 const VIDEO_CANCEL_BOUNDARY_CLASS_NAME =
-  'video-cancel-boundary m-0 text-mytube-text-secondary text-[14px] leading-[1.5] break-keep [overflow-wrap:anywhere]';
+  'video-cancel-boundary m-0 text-mytube-text-secondary text-[0.875rem] leading-[1.5] break-keep [overflow-wrap:anywhere]';
 /** 영상 요청 경합 결과 안내의 Tailwind typography className. */
 const VIDEO_REQUEST_NOTICE_CLASS_NAME =
-  'video-request-notice m-0 text-mytube-text-primary text-[14px] leading-[1.5] break-keep [overflow-wrap:anywhere]';
+  'video-request-notice m-0 text-mytube-text-primary text-[0.875rem] leading-[1.5] break-keep [overflow-wrap:anywhere]';
 
 /** 영상 추출 route page. */
 export function VideoExtractPage() {
   // Hooks.
 
+  /** 영상 요청 form, job 상태, 사용자 동작. */
+  const logic = useVideoExtractLogic();
+
+  return (
+    <>
+      {/* 화면 단계가 바뀌어도 남아 있어야 새 안내를 스크린리더가 읽는다. */}
+      <p aria-atomic="true" className="visually-hidden" role="status">
+        {logic.requestNotice ?? ''}
+      </p>
+      <VideoExtractPhase logic={logic} />
+    </>
+  );
+}
+
+/** 요청·접수·처리·결과·오류 중 현재 단계의 화면. */
+function VideoExtractPhase({
+  logic,
+}: {
+  /** page가 한 번만 만든 화면 상태와 동작. */
+  logic: ReturnType<typeof useVideoExtractLogic>;
+}) {
   /** 영상 추출 form, job 상태, 사용자 동작. */
   const {
     canSubmit,
@@ -189,7 +210,7 @@ export function VideoExtractPage() {
     workerHealthDetail,
     workerHealthIsFetching,
     workerHealthStatus,
-  } = useVideoExtractLogic();
+  } = logic;
 
   if (viewPhase === 'request') {
     return (
@@ -369,7 +390,7 @@ function StatusHead(props: { /** 상태 아이콘. */ icon: AppIconName; /** 상
   return <div className={VIDEO_STATUS_HEAD_CLASS_NAME}><span className={`${VIDEO_STATUS_ICON_CLASS_NAME} ${toneClassNames.icon}`} aria-hidden="true"><AppIcon name={props.icon} /></span><div className={VIDEO_STATUS_COPY_CLASS_NAME}><h3 className={`${VIDEO_STATUS_TITLE_CLASS_NAME} ${toneClassNames.title}`}>{props.title}</h3><p className={VIDEO_STATUS_MESSAGE_CLASS_NAME} role={props.isAlert ? 'alert' : 'status'} aria-live="polite">{props.message}</p></div></div>;
 }
 
-/** 요청 중단·접수 경쟁 결과를 현재 화면에 알린다. */
+/** 요청 중단·접수 경쟁 결과를 화면에 보인다. 낭독은 화면 전환과 무관하게 유지되는 live region이 맡는다. */
 function RequestNotice(props: { /** 사용자에게 전달할 안내 문구. */ message: string }) {
-  return <p className={VIDEO_REQUEST_NOTICE_CLASS_NAME} role="status" aria-live="polite">{props.message}</p>;
+  return <p className={VIDEO_REQUEST_NOTICE_CLASS_NAME}>{props.message}</p>;
 }

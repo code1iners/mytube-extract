@@ -9,10 +9,10 @@ const SETTINGS_PANEL_CLASS_NAME =
   'phase-panel settings-panel grid min-w-0 w-full max-w-none m-0 gap-mytube-24 border-0 rounded-none bg-transparent p-0 [box-shadow:none] min-[821px]:self-start';
 /** 설정 화면 설명의 Tailwind typography className. */
 const SETTINGS_DESCRIPTION_CLASS_NAME =
-  'settings-description m-0 text-mytube-text-secondary text-[16px] leading-[1.6]';
+  'settings-description m-0 text-mytube-text-secondary text-[1rem] leading-[1.6]';
 /** 설정 화면의 제품 맥락 안내 className. */
 const SETTINGS_CONTEXT_CLASS_NAME =
-  'settings-context flex items-start gap-mytube-8 m-0 text-mytube-text-primary text-[14px] leading-[1.5]';
+  'settings-context flex items-start gap-mytube-8 m-0 text-mytube-text-primary text-[0.875rem] leading-[1.5]';
 /** 설정 화면의 제품 맥락 아이콘 className. */
 const SETTINGS_CONTEXT_ICON_CLASS_NAME =
   '!size-5 shrink-0 text-mytube-action-primary';
@@ -39,8 +39,8 @@ export function SettingsPage() {
         설정
       </PanelTitle>
       <p className={SETTINGS_DESCRIPTION_CLASS_NAME}>
-        이 설정의 화면 표시 선택만 이 브라우저에 저장하며, 요청 URL과 파일 정보는
-        저장하지 않습니다.
+        화면 표시, 마지막으로 고른 형식·품질·처리 방식, 요청 내역을 이 브라우저에
+        저장합니다. 요청 URL과 파일 정보는 저장하지 않습니다.
       </p>
       <p className={SETTINGS_CONTEXT_CLASS_NAME}>
         <AppIcon className={SETTINGS_CONTEXT_ICON_CLASS_NAME} name="download" />

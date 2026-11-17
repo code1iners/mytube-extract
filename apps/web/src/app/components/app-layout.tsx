@@ -1,5 +1,6 @@
 import { Suspense, useEffect, useState } from 'react';
-import { Outlet } from 'react-router';
+import { Outlet, useLocation } from 'react-router';
+import { ROUTE_PATHS } from '../constants/route-paths.constant';
 import { AppSidebar } from './app-sidebar';
 import { AppHero } from './app-hero';
 import { BottomTabBar } from './bottom-tab-bar';
@@ -20,8 +21,24 @@ export const APP_SHELL_CLASS_NAME =
 export const WORKSPACE_CLASS_NAME =
   'workspace mx-auto grid min-w-0 content-start w-full max-w-[var(--layout-content-max-width)] gap-mytube-16 max-[821px]:gap-[14px] min-[821px]:gap-[var(--layout-route-top-gap)]';
 
+/** 문서 제목에 붙이는 서비스 이름. */
+const DOCUMENT_TITLE_SUFFIX = 'MyTube Extract';
+
+/** route별 문서 제목. 탭 목록·방문 기록·스크린리더가 화면을 구분하는 근거다. */
+const ROUTE_DOCUMENT_TITLES: Record<string, string> = {
+  [ROUTE_PATHS.video]: '영상 추출',
+  [ROUTE_PATHS.subtitles]: '자막 추출',
+  [ROUTE_PATHS.history]: '요청 내역',
+  [ROUTE_PATHS.settings]: '설정',
+};
+
 /** 모든 web route가 공유하는 화면 레이아웃. */
 export function AppLayout() {
+  // Hooks.
+
+  /** 현재 route. 문서 제목을 맞추는 데 쓴다. */
+  const { pathname } = useLocation();
+
   // States.
 
   /** 사용자가 선택한 전체 앱 theme 방식. */
@@ -29,6 +46,18 @@ export function AppLayout() {
     useState<ThemePreference>(getThemePreference);
 
   // Effects.
+
+  useEffect(
+    function synchronizeDocumentTitle() {
+      /** 현재 route의 화면 이름. redirect 중인 경로에는 없다. */
+      const routeTitle = ROUTE_DOCUMENT_TITLES[pathname];
+
+      document.title = routeTitle
+        ? `${routeTitle} · ${DOCUMENT_TITLE_SUFFIX}`
+        : DOCUMENT_TITLE_SUFFIX;
+    },
+    [pathname],
+  );
 
   useEffect(
     function synchronizeThemePreference() {
@@ -88,7 +117,7 @@ function RouteLoadingFallback() {
       className="phase-panel route-loading grid min-h-[96px] w-full max-w-none place-items-center m-0 min-[821px]:self-start"
       aria-label="화면 불러오기"
     >
-      <p className="m-0 text-mytube-text-secondary text-[14px] leading-[1.5]" role="status">
+      <p className="m-0 text-mytube-text-secondary text-[0.875rem] leading-[1.5]" role="status">
         화면을 불러오는 중입니다.
       </p>
     </section>

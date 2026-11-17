@@ -48,11 +48,11 @@ describe('request history query contract', () => {
     expect(markup).toContain('href="/video"');
     expect(markup).toContain('href="/subtitles"');
     expect(markup).toContain(
-      'YouTube URL로 영상(MP4) 또는 오디오(MP3)를 받습니다.',
+      'YouTube URL로 비디오(MP4) 또는 오디오(MP3)를 받습니다.',
     );
     expect(markup).toContain('로컬 영상으로 영어 자막 파일(SRT)을 만듭니다.');
     expect(markup).toContain(
-      '이력은 이 브라우저에만 저장되며, 완료 파일은 7일 동안 보관됩니다.',
+      '요청 내역은 이 브라우저에만 저장되며, 완료 파일은 7일 동안 보관됩니다.',
     );
     expect(markup).not.toContain(
       '아직 이 브라우저에서 접수한 요청이 없습니다.',

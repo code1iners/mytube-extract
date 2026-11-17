@@ -33,7 +33,7 @@ const READINESS_PANEL_CLASS_NAME =
 
 /** readiness gate 보조 안내의 Tailwind typography className. */
 const READINESS_NOTE_CLASS_NAME =
-  'm-0 text-mytube-text-secondary text-[14px] leading-[1.5]';
+  'm-0 text-mytube-text-secondary text-[0.875rem] leading-[1.5]';
 
 /** 서버가 준비될 때까지 폼 대신 상태와 복구 동작을 먼저 표시한다. */
 export function RequestReadinessPanel({

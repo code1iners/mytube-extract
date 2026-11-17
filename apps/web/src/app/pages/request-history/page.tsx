@@ -11,6 +11,7 @@ import { validateSubtitleFile, type SubtitleWhisperModel, type SubtitleJobRespon
 import { AppIcon, type AppIconName } from '../../components/app-icon';
 import { createHistoryRequestAdapter, type HistoryRequest } from '../../adapters/history-request.adapter';
 import { useNavigation } from '../../components/navigation-context';
+import { PRIMARY_BUTTON_UTILITY_CLASS_NAME } from '../../components/button-class-names';
 import { RequestReadinessNotice } from '../../components/request-readiness-notice';
 import { useHistoryAcceptance } from './use-history-acceptance';
 import { PanelTitle } from '../../components/panel-title';
@@ -48,7 +49,7 @@ const HISTORY_FOCUSABLE_TITLE_CLASS_NAME =
   'focus:outline-2 focus:outline-mytube-focus focus:[outline-offset:2px]';
 /** 요청 내역 설명의 Tailwind typography className. */
 const HISTORY_DESCRIPTION_CLASS_NAME =
-  'history-description m-0 text-mytube-text-secondary text-[16px] leading-[1.5]';
+  'history-description m-0 text-mytube-text-secondary text-[1rem] leading-[1.5]';
 /** 저장 실패 안내의 Tailwind layout·surface className. */
 const HISTORY_STORAGE_NOTICE_CLASS_NAME =
   'notice-box grid min-w-0 grid-cols-[28px_minmax(0,1fr)] gap-x-[10px] gap-y-mytube-4 p-[13px] border border-mytube-border rounded-mytube-md bg-mytube-surface-alt';
@@ -57,13 +58,13 @@ const HISTORY_STORAGE_NOTICE_ICON_CLASS_NAME =
   'row-span-2 grid size-6 place-items-center text-mytube-text-secondary';
 /** 저장 실패 안내 문장의 Tailwind typography className. */
 const HISTORY_STORAGE_NOTICE_MESSAGE_CLASS_NAME =
-  'm-0 text-mytube-text-secondary text-[14px] leading-[1.4] break-keep';
+  'm-0 text-mytube-text-secondary text-[0.875rem] leading-[1.4] break-keep';
 /** 빈 요청 내역의 Tailwind layout className. */
 const HISTORY_EMPTY_CLASS_NAME =
   'history-empty grid min-w-0 gap-mytube-16';
 /** 빈 요청 내역의 시작 문구 className. */
 const HISTORY_EMPTY_PROMPT_CLASS_NAME =
-  'history-empty__prompt m-0 text-mytube-text-primary text-[18px] font-semibold leading-[1.4]';
+  'history-empty__prompt m-0 text-mytube-text-primary text-[1.125rem] font-semibold leading-[1.4]';
 /** 빈 요청 내역의 시작 링크 목록 className. */
 const HISTORY_EMPTY_LINKS_CLASS_NAME =
   'history-empty__links grid min-w-0 grid-cols-2 gap-0 border-y border-mytube-border max-[561px]:grid-cols-1';
@@ -78,10 +79,10 @@ const HISTORY_EMPTY_LINK_COPY_CLASS_NAME =
   'history-empty__link-copy grid min-w-0 gap-mytube-8';
 /** 빈 요청 내역 시작 링크 제목의 typography className. */
 const HISTORY_EMPTY_LINK_TITLE_CLASS_NAME =
-  'text-[18px] leading-[1.4]';
+  'text-[1.125rem] leading-[1.4]';
 /** 빈 요청 내역 시작 링크 설명의 typography className. */
 const HISTORY_EMPTY_LINK_DESCRIPTION_CLASS_NAME =
-  'text-mytube-text-secondary text-[14px] leading-[1.5] break-keep';
+  'text-mytube-text-secondary text-[0.875rem] leading-[1.5] break-keep';
 /** 빈 요청 내역 보관 안내의 Tailwind surface className. */
 const HISTORY_EMPTY_NOTE_CLASS_NAME =
   'history-empty__note flex min-w-0 items-start gap-mytube-8 m-0 p-mytube-12 border border-mytube-border rounded-mytube-md bg-mytube-surface-alt';
@@ -103,16 +104,16 @@ const HISTORY_ITEM_HEADER_CLASS_NAME =
   'history-item__header grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-start gap-mytube-12';
 /** 요청 내역 항목 제목의 typography·focus className. */
 const HISTORY_ITEM_TITLE_CLASS_NAME =
-  'm-0 text-[18px] font-semibold leading-[1.4] [overflow-wrap:anywhere] focus:outline-2 focus:outline-mytube-focus focus:[outline-offset:2px]';
+  'm-0 text-[1.125rem] font-semibold leading-[1.4] [overflow-wrap:anywhere] focus:outline-2 focus:outline-mytube-focus focus:[outline-offset:2px]';
 /** 제목이 없는 영상 요청의 원본 링크 className. */
 const HISTORY_SOURCE_LINK_CLASS_NAME =
   'text-mytube-text-primary underline decoration-1 underline-offset-2 focus-visible:outline-2 focus-visible:outline-mytube-focus focus-visible:[outline-offset:2px] [overflow-wrap:anywhere]';
 /** 요청 내역 항목의 API 메타 className. */
 const HISTORY_ITEM_DETAIL_CLASS_NAME =
-  'history-item__header-detail m-0 mt-[4px] text-mytube-text-secondary text-[14px] leading-[1.5] [overflow-wrap:anywhere]';
+  'history-item__header-detail m-0 mt-[4px] text-mytube-text-secondary text-[0.875rem] leading-[1.5] [overflow-wrap:anywhere]';
 /** 요청 내역 상태 label의 공통 Tailwind className. */
 const HISTORY_STATUS_CLASS_NAME =
-  'history-status inline-flex items-center gap-[6px] text-[14px] font-semibold leading-[1.4]';
+  'history-status inline-flex items-center gap-[6px] text-[0.875rem] font-semibold leading-[1.4]';
 /** 요청 내역 상태 tone. */
 type HistoryStatusTone =
   | 'queued'
@@ -130,13 +131,13 @@ const HISTORY_STATUS_TONE_CLASS_NAMES: Record<HistoryStatusTone, string> = {
 };
 /** 요청 내역 진행률의 Tailwind layout className. */
 const HISTORY_PROGRESS_CLASS_NAME =
-  'history-progress grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-[10px] text-mytube-text-secondary text-[14px]';
+  'history-progress grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-[10px] text-mytube-text-secondary text-[0.875rem]';
 /** 요청 내역 진행률 native control의 Tailwind className. */
 const HISTORY_PROGRESS_BAR_CLASS_NAME =
   'w-full [accent-color:var(--color-status-processing)]';
 /** 요청 내역 상태 메시지의 typography·overflow className. */
 const HISTORY_MESSAGE_CLASS_NAME =
-  'history-message m-0 mt-[4px] text-mytube-text-secondary text-[14px] leading-[1.5] [overflow-wrap:anywhere]';
+  'history-message m-0 mt-[4px] text-mytube-text-secondary text-[0.875rem] leading-[1.5] [overflow-wrap:anywhere]';
 /** 요청 내역 오류 메시지의 semantic token className. */
 const HISTORY_ERROR_MESSAGE_CLASS_NAME = 'text-mytube-status-failed';
 /** 요청 내역 action row의 Tailwind layout className. */
@@ -144,28 +145,28 @@ const HISTORY_ACTIONS_CLASS_NAME =
   'history-actions flex min-w-0 flex-wrap items-stretch gap-mytube-8';
 /** 요청 내역 primary result link의 Tailwind button className. */
 const HISTORY_PRIMARY_ACTION_CLASS_NAME =
-  'history-primary-action inline-flex min-w-[44px] min-h-[44px] items-center justify-center gap-mytube-8 border border-mytube-action-primary rounded-mytube-md bg-mytube-action-primary px-[14px] text-mytube-on-primary cursor-pointer text-[14px] font-semibold leading-[1] no-underline shadow-mytube-soft focus-visible:outline-2 focus-visible:outline-mytube-focus focus-visible:[outline-offset:2px] [@media(hover:hover)]:hover:brightness-[0.92] active:brightness-[0.84]';
+  `history-primary-action min-w-[44px] !min-h-[44px] px-[14px] !text-[0.875rem] ${PRIMARY_BUTTON_UTILITY_CLASS_NAME}`;
 /** 요청 내역 secondary action이 공유하는 Tailwind button className. */
 const HISTORY_SECONDARY_BUTTON_BASE_CLASS_NAME =
-  'inline-flex min-w-[44px] min-h-[44px] items-center justify-center gap-mytube-8 border border-mytube-border rounded-mytube-md bg-mytube-surface text-mytube-text-primary cursor-pointer text-[14px] font-semibold leading-[1.4] no-underline focus-visible:outline-2 focus-visible:outline-mytube-focus focus-visible:[outline-offset:2px] [@media(hover:hover)]:hover:bg-mytube-surface-alt [@media(hover:hover)]:hover:text-mytube-text-primary disabled:text-mytube-text-disabled disabled:cursor-not-allowed';
+  'inline-flex min-w-[44px] min-h-[44px] items-center justify-center gap-mytube-8 border border-mytube-border rounded-mytube-md bg-mytube-surface text-mytube-text-primary cursor-pointer text-[0.875rem] font-semibold leading-[1.4] no-underline focus-visible:outline-2 focus-visible:outline-mytube-focus focus-visible:[outline-offset:2px] [@media(hover:hover)]:hover:bg-mytube-surface-alt [@media(hover:hover)]:hover:text-mytube-text-primary disabled:text-mytube-text-disabled disabled:cursor-not-allowed';
 /** 요청 상태 재확인 action의 Tailwind button className. */
 const HISTORY_SECONDARY_ACTION_CLASS_NAME = `${HISTORY_SECONDARY_BUTTON_BASE_CLASS_NAME} history-secondary-action px-[14px]`;
 /** 요청 내역 삭제 action의 Tailwind button className. */
 const HISTORY_REMOVE_ACTION_CLASS_NAME = `${HISTORY_SECONDARY_BUTTON_BASE_CLASS_NAME} history-remove-button px-[14px]`;
-/** 삭제 직후 표시하는 undo 안내의 Tailwind layout·surface className. */
+/** 다음 삭제나 화면 이동 전까지 유지하는 undo 안내의 Tailwind layout·surface className. */
 const HISTORY_UNDO_CLASS_NAME =
   'history-undo flex min-w-0 items-center justify-between gap-mytube-12 p-mytube-12 border border-mytube-border rounded-mytube-md bg-mytube-surface-alt max-[561px]:items-stretch max-[561px]:flex-col';
 /** 삭제 직후 표시하는 undo 안내 문장의 Tailwind typography className. */
 const HISTORY_UNDO_MESSAGE_CLASS_NAME =
-  'history-undo__message m-0 min-w-0 text-mytube-text-primary text-[14px] leading-[1.4]';
+  'history-undo__message m-0 min-w-0 text-mytube-text-primary text-[0.875rem] leading-[1.4]';
 /** 삭제 직후 표시하는 undo button의 Tailwind button className. */
 const HISTORY_UNDO_BUTTON_CLASS_NAME = `${HISTORY_SECONDARY_BUTTON_BASE_CLASS_NAME} history-undo__button flex-none px-mytube-12 max-[561px]:w-full`;
 /** 삭제·복원 결과를 보조 기술에만 전달하는 live region utility className. */
 const HISTORY_ANNOUNCEMENT_CLASS_NAME =
   'history-announcement absolute size-px overflow-hidden whitespace-nowrap [clip:rect(0_0_0_0)]';
 
-/** 삭제한 접수증을 되돌릴 수 있는 제한 시간. */
-const HISTORY_UNDO_WINDOW_MS = 8_000;
+/** 접수 시작을 화면과 live region에 같은 문장으로 알린다. */
+const HISTORY_ACCEPTING_MESSAGE = '새 요청을 접수하고 있습니다. 접수 전에는 취소할 수 있습니다.';
 
 /** 요청 내역 변경 결과를 전달할 live region 역할. */
 type AnnouncementRole = 'status' | 'alert';
@@ -248,6 +249,7 @@ export function RequestHistoryPage() {
     setSelectingFile(false);
     if (target) {
       setFileFeedback({ receipt: target.receipt, message });
+      announce(message);
       window.requestAnimationFrame(() => document.getElementById(getHistoryTitleId(target.receipt))?.focus());
     }
   }
@@ -306,6 +308,8 @@ export function RequestHistoryPage() {
   /** 비활성화된 실행 버튼에서 실패 안내의 시작 위치로 포커스를 복구한다. */
   const wasAccepting = useRef(false);
   useEffect(function focusFailedAcceptance() {
+    // 행 안의 안내는 문구와 함께 생기므로 접수 시작은 항상 떠 있는 공지 영역으로 알린다.
+    if (!wasAccepting.current && accepting) announce(HISTORY_ACCEPTING_MESSAGE);
     if (wasAccepting.current && !accepting && acceptance.lifecycle.error && acceptance.source) {
       focusHistorySource(acceptance.source);
     }
@@ -397,28 +401,6 @@ export function RequestHistoryPage() {
   );
 
   useEffect(
-    function expireHistoryUndo() {
-      if (!undoReceipt) {
-        return;
-      }
-
-      /** 현재 삭제의 undo 동작을 닫을 timer ID. */
-      const timeoutId = window.setTimeout(() => {
-        // 만료된 삭제가 최신 undo 상태를 덮어쓰지 않도록 identity를 확인한다.
-        setUndoReceipt((current) =>
-          current &&
-          getReceiptIdentity(current) === getReceiptIdentity(undoReceipt)
-            ? null
-            : current,
-        );
-      }, HISTORY_UNDO_WINDOW_MS);
-
-      return () => window.clearTimeout(timeoutId);
-    },
-    [undoReceipt],
-  );
-
-  useEffect(
     function removeMissingReceipts() {
       if (!notFoundKeys) {
         return;
@@ -494,7 +476,7 @@ export function RequestHistoryPage() {
     );
     setUndoReceipt(receipt);
     announce(
-      `${formatKind(receipt.kind)} 요청을 내역에서 삭제했습니다. 8초 동안 되돌릴 수 있습니다.`,
+      `${formatKind(receipt.kind)} 요청을 내역에서 삭제했습니다. 되돌릴 수 있습니다.`,
     );
 
     window.requestAnimationFrame(function focusAfterHistoryRemoval() {
@@ -601,7 +583,7 @@ export function RequestHistoryPage() {
       <p className={HISTORY_DESCRIPTION_CLASS_NAME}>
         {visibleReceipts.length > 20
           ? '이 브라우저에서 접수한 최근 요청과 되돌린 내역입니다.'
-          : '이 브라우저에서 접수한 최근 요청 20건입니다.'}
+          : '이 브라우저에서 접수한 최근 요청을 20건까지 보여 줍니다.'}
       </p>
       {storageFailed ? (
         <div className={HISTORY_STORAGE_NOTICE_CLASS_NAME} role="status">
@@ -640,8 +622,7 @@ export function RequestHistoryPage() {
       {undoReceipt ? (
         <div className={HISTORY_UNDO_CLASS_NAME}>
           <p className={HISTORY_UNDO_MESSAGE_CLASS_NAME}>
-            {formatKind(undoReceipt.kind)} 요청을 삭제했습니다. 8초 동안 되돌릴 수
-            있습니다.
+            {formatKind(undoReceipt.kind)} 요청을 삭제했습니다. 되돌릴 수 있습니다.
           </p>
           <button
             aria-label={`삭제한 ${formatKind(undoReceipt.kind)} 요청 되돌리기`}
@@ -700,7 +681,7 @@ function HistoryEmptyState() {
           <span className={HISTORY_EMPTY_LINK_COPY_CLASS_NAME}>
             <strong className={HISTORY_EMPTY_LINK_TITLE_CLASS_NAME}>영상 추출</strong>
             <span className={HISTORY_EMPTY_LINK_DESCRIPTION_CLASS_NAME}>
-              YouTube URL로 영상(MP4) 또는 오디오(MP3)를 받습니다.
+              YouTube URL로 비디오(MP4) 또는 오디오(MP3)를 받습니다.
             </span>
           </span>
         </NavLink>
@@ -720,7 +701,7 @@ function HistoryEmptyState() {
       <p className={HISTORY_EMPTY_NOTE_CLASS_NAME}>
         <AppIcon className={HISTORY_EMPTY_NOTE_ICON_CLASS_NAME} name="info" />
         <span>
-          이력은 이 브라우저에만 저장되며, 완료 파일은 7일 동안 보관됩니다.
+          요청 내역은 이 브라우저에만 저장되며, 완료 파일은 7일 동안 보관됩니다.
         </span>
       </p>
     </div>
@@ -888,7 +869,7 @@ function HistoryItem(props: {
             {!isConnectionError && (job?.displayStatus === 'failed' ||
             job?.displayStatus === 'expired') ? (
               <button
-                className={`${HISTORY_PRIMARY_ACTION_CLASS_NAME} disabled:opacity-60 disabled:cursor-not-allowed`}
+                className={HISTORY_PRIMARY_ACTION_CLASS_NAME}
                 type="button"
                 disabled={props.accepting || props.selectingFile || !lifecycle.canSubmit || needsRetryConditions}
                 aria-describedby={isRetrySource ? `${titleId}-acceptance` : lifecycle.readiness.status.kind !== 'ready' ? 'history-readiness' : undefined}
@@ -919,12 +900,12 @@ function HistoryItem(props: {
             ) : null}
           </div>
         </div>
-        {props.fileFeedback ? <p className={HISTORY_MESSAGE_CLASS_NAME} role="status">{props.fileFeedback}</p> : null}
+        {props.fileFeedback ? <p className={HISTORY_MESSAGE_CLASS_NAME}>{props.fileFeedback}</p> : null}
         {isRetrySource ? (
           <HistoryAcceptanceStatus acceptance={props.acceptance} uploadProgress={props.uploadProgress} />
         ) : null}
         {needsRetryConditions && !isConnectionError ? (
-          <p className={HISTORY_MESSAGE_CLASS_NAME} role="alert">재요청 조건을 확인할 수 없습니다. 상태를 다시 확인해 주세요.</p>
+          <p className={HISTORY_MESSAGE_CLASS_NAME} role="alert">다시 요청할 조건을 확인할 수 없습니다. 상태를 다시 확인해 주세요.</p>
         ) : null}
         {progress !== null ? (
           <div className={HISTORY_PROGRESS_CLASS_NAME}>
@@ -936,7 +917,7 @@ function HistoryItem(props: {
             >
               {progress}%
             </progress>
-            <span>{progress}%</span>
+            <span className="tabular-nums">{progress}%</span>
           </div>
         ) : null}
         {isConnectionError ? (
@@ -1014,11 +995,11 @@ function HistoryAcceptanceStatus(props: {
     <div id={`${getHistoryTitleId(source)}-acceptance`} className="grid min-w-0 gap-mytube-8">
       {lifecycle.phase === 'accepting' ? (
         <>
-          <p className={HISTORY_MESSAGE_CLASS_NAME} role="status">새 요청을 접수하고 있습니다. 접수 전에는 취소할 수 있습니다.</p>
+          <p className={HISTORY_MESSAGE_CLASS_NAME}>{HISTORY_ACCEPTING_MESSAGE}</p>
           {source.kind === 'subtitle' && props.uploadProgress !== null ? (
             <div className={HISTORY_PROGRESS_CLASS_NAME}>
               <progress aria-label="원본 업로드 진행률" className={HISTORY_PROGRESS_BAR_CLASS_NAME} max={100} value={props.uploadProgress} />
-              <span>{props.uploadProgress}%</span>
+              <span className="tabular-nums">{props.uploadProgress}%</span>
             </div>
           ) : null}
           <button
@@ -1028,7 +1009,7 @@ function HistoryAcceptanceStatus(props: {
               lifecycle.actions.cancel?.();
               window.requestAnimationFrame(() => focusHistorySource(source));
             }}
-          >접수 취소</button>
+          >요청 취소</button>
         </>
       ) : (
         <>

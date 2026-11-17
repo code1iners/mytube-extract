@@ -27,11 +27,11 @@ const ERROR_FALLBACK_CLASS_NAME =
 
 /** 화면 오류 fallback heading의 Tailwind typography className. */
 const ERROR_FALLBACK_HEADING_CLASS_NAME =
-  'm-0 text-mytube-status-failed text-[28px] font-semibold leading-[1.3]';
+  'm-0 text-mytube-status-failed text-[1.75rem] font-semibold leading-[1.3]';
 
 /** 화면 오류 fallback 안내 문구의 Tailwind typography className. */
 const ERROR_FALLBACK_MESSAGE_CLASS_NAME =
-  'm-0 text-mytube-text-secondary text-[16px] leading-[1.4] break-keep';
+  'm-0 text-mytube-text-secondary text-[1rem] leading-[1.4] break-keep';
 
 /** 화면 오류 fallback action 영역의 Tailwind layout className. */
 const ERROR_FALLBACK_ACTIONS_CLASS_NAME = 'error-actions grid gap-[14px]';

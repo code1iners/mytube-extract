@@ -36,7 +36,7 @@ describe('settings page', () => {
       /<fieldset\b[^>]*>[\s\S]*<legend\b[^>]*>화면 표시<\/legend>/,
     );
     expect(markup).toContain(
-      '이 설정의 화면 표시 선택만 이 브라우저에 저장하며, 요청 URL과 파일 정보는 저장하지 않습니다.',
+      '화면 표시, 마지막으로 고른 형식·품질·처리 방식, 요청 내역을 이 브라우저에 저장합니다. 요청 URL과 파일 정보는 저장하지 않습니다.',
     );
     expect(markup).toContain('개인 추출 콘솔입니다.');
     expect(markup.match(/type="radio"/g)).toHaveLength(3);
