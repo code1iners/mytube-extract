@@ -7,7 +7,10 @@ import { type DownloadDisplayStatus } from '../../../domain/download-request/dow
 import { ErrorDetailsDisclosure } from '../../components/error-details-disclosure';
 import { AppIcon, type AppIconName } from '../../components/app-icon';
 import { PanelTitle } from '../../components/panel-title';
-import { RequestReadinessNotice } from '../../components/request-readiness-notice';
+import {
+  RequestReadinessCheckingLabel,
+  RequestReadinessNotice,
+} from '../../components/request-readiness-notice';
 import { RequestProgress } from '../../components/request-progress';
 import { useVideoExtractLogic } from './_hooks/use-video-extract-logic';
 
@@ -290,8 +293,14 @@ function VideoExtractPhase({
             disabled={!canSubmit}
             type="submit"
           >
-            <AppIcon name="download" />
-            {isDownloadPending ? '요청 중' : '추출 요청'}
+            {workerHealthStatus.kind === 'checking' ? (
+              <RequestReadinessCheckingLabel />
+            ) : (
+              <>
+                <AppIcon name="download" />
+                {isDownloadPending ? '요청 중' : '추출 요청'}
+              </>
+            )}
           </button>
           <details className="video-technical-details">
             <summary>형식과 품질 안내</summary>

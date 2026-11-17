@@ -60,6 +60,39 @@ describe('video extract page', () => {
     expect(markup).not.toContain('url-reset-button');
   });
 
+  it('shows readiness checking inside the submit button without a visible notice', () => {
+    videoExtractLogic.mockReturnValue({
+      canSubmit: false,
+      draft: { mode: 'audio', quality: '320', sourceUrl: 'https://youtu.be/abc123_DEF0' },
+      handleDownloadFormSubmit: () => undefined,
+      handleModeChange: () => undefined,
+      handleSourceUrlReset: () => undefined,
+      qualityOptions: [],
+      register: () => ({ onChange: () => undefined }),
+      retryWorkerHealth: () => undefined,
+      submitDisabledReason: '서비스 상태를 확인하는 동안 요청할 수 없습니다.',
+      validation: { kind: 'ready', message: '' },
+      viewPhase: 'request',
+      workerHealthCheckedAt: 0,
+      workerHealthIsFetching: true,
+      workerHealthStatus: {
+        kind: 'checking',
+        label: '확인 중',
+        message: '서비스 상태를 확인하고 있습니다.',
+        role: 'status',
+      },
+    });
+
+    /** 준비 확인 중 요청 화면의 정적 HTML. */
+    const markup = renderToStaticMarkup(<VideoExtractPage />);
+
+    expect(markup).toContain('서비스 확인 중</button>');
+    expect(markup).not.toContain('추출 요청</button>');
+    expect(markup).not.toContain('request-readiness-notice');
+    expect(markup).toContain('class="visually-hidden" id="video-worker-health-title"');
+    expect(markup).toContain('aria-describedby="video-worker-health-title"');
+  });
+
   it('uses the expanded API-failure guidance as the submit description', () => {
     videoExtractLogic.mockReturnValue({
       canSubmit: false,

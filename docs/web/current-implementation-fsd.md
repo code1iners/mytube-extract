@@ -31,7 +31,7 @@
 
 ## 요청 접수
 
-- 영상·자막은 준비 상태와 무관하게 입력을 표시한다. 제출 위치의 `RequestReadinessNotice`는 정상일 때 숨긴다. 제출 직전 준비 확인 실패는 생명주기의 request phase에서 처리하고, 실제 생성 요청 실패만 접수 오류로 처리한다. 영상 adapter가 `POST /downloads`를 수행한다.
+- 영상·자막은 준비 상태와 무관하게 입력을 표시한다. 제출 위치의 `RequestReadinessNotice`는 정상일 때 숨기고, 확인 중에는 화면 자리를 차지하지 않는 상태 문장만 남긴다(제출 버튼이 `서비스 확인 중`을 표시). 제출 직전 준비 확인 실패는 생명주기의 request phase에서 처리하고, 실제 생성 요청 실패만 접수 오류로 처리한다. 영상 adapter가 `POST /downloads`를 수행한다.
 - 자막은 upload session, R2 part PUT, complete 전체가 성공한 뒤 접수증을 추가한다.
 - 접수증 key는 `mytube-extract:job-receipt:v2:<kind>:<jobId>`다.
 - value는 JSON `{ "acceptedAt": "<ISO timestamp>" }`만 저장한다.

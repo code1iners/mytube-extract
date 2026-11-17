@@ -1598,7 +1598,9 @@ async function verifyVideoMinimalReadiness() {
     await input.fill('https://youtu.be/abc123_DEF0');
     await page.getByRole('radio', { name: /비디오/ }).check();
     await page.getByRole('radio', { name: '720p', exact: true }).check();
-    assert.equal(await submit.isDisabled(), true);
+    // 확인 중에는 제출 버튼이 이름 대신 진행 표시를 보여 주고 따로 줄을 차지하지 않는다.
+    assert.equal(await page.getByRole('button', { name: '서비스 확인 중', exact: true }).isDisabled(), true);
+    assert.equal(await page.locator('.request-readiness-notice').count(), 0);
     assert.equal(requests.length, 0);
     releaseHealth();
     await waitForEnabled(submit);
@@ -1659,13 +1661,20 @@ async function verifyRequestReadinessStatus() {
         /** 준비 확인 중에도 편집 가능한 실제 입력. */
         const input = page.locator('input[type="file"]');
         const submit = page.getByRole('button', { name: '영어 SRT 생성', exact: true });
-        await page.getByText('확인 중', { exact: true }).waitFor();
+        /** 확인 중에 이름 대신 진행 표시를 보여 주는 제출 버튼. */
+        const checkingSubmit = page.getByRole('button', { name: '서비스 확인 중', exact: true });
+        await checkingSubmit.waitFor();
         await input.setInputFiles({ buffer: Buffer.from('video'), mimeType: 'video/mp4', name: 'before-ready.mp4' });
         await page.getByRole('radio', { name: /정확도 우선/ }).check();
-        assert.equal(await submit.isDisabled(), true);
+        /** 입력을 마친 뒤 확인 중 제출 버튼의 세로 위치. 준비된 뒤와 같아야 한다. */
+        const checkingSubmitTop = (await checkingSubmit.boundingBox()).y;
+        assert.equal(await checkingSubmit.isDisabled(), true);
+        assert.equal(await page.locator('.request-readiness-notice').count(), 0);
         assert.equal(submitCalls, 0);
         releaseHealth();
         await waitForEnabled(submit);
+        // 확인 중에서 준비됨으로 넘어갈 때 제출 버튼이 밀리지 않는다.
+        assert.equal((await submit.boundingBox()).y, checkingSubmitTop);
         assert.equal(await page.getByText('준비됨', { exact: true }).count(), 0);
         assert.equal(await page.getByRole('button', { name: '서비스 상태 다시 확인' }).count(), 0);
         await submit.click();
