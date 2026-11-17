@@ -504,6 +504,8 @@ describe('request lifecycle adapter seam', () => {
   });
 
   it('exposes readiness retry after submit-time health failure', async () => {
+    /** 재확인 응답 gate. 응답 전까지 직전 실패 상태가 유지되는지 본다. */
+    const retryReadinessResponse = createDeferred<RequestReadinessResponse>();
     /** readiness adapter 호출 횟수. */
     let readinessCall = 0;
     /** hook에서 관찰한 최신 lifecycle 값. */
@@ -518,6 +520,10 @@ describe('request lifecycle adapter seam', () => {
 
         if (readinessCall === 2) {
           throw new Error('health temporarily unavailable');
+        }
+
+        if (readinessCall === 3) {
+          return retryReadinessResponse.promise;
         }
 
         return readyResponse;
@@ -564,6 +570,17 @@ describe('request lifecycle adapter seam', () => {
 
     await act(async () => {
       latest?.actions.retryReadiness?.();
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    // 재확인 응답 전에는 실패 안내를 그대로 두어 화면이 흔들리지 않게 한다.
+    expect(latest?.readiness.status.kind).toBe('failed');
+    expect(latest?.readiness.isFetching).toBe(true);
+
+    await act(async () => {
+      retryReadinessResponse.resolve(readyResponse);
       await Promise.resolve();
       await Promise.resolve();
       await Promise.resolve();

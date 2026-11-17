@@ -7,10 +7,8 @@ import { ErrorDetailsDisclosure } from '../../components/error-details-disclosur
 import { AppIcon, type AppIconName } from '../../components/app-icon';
 import { PanelTitle } from '../../components/panel-title';
 import { RequestProgress } from '../../components/request-progress';
-import {
-  RequestReadinessCheckingLabel,
-  RequestReadinessNotice,
-} from '../../components/request-readiness-notice';
+import { RequestReadinessNotice } from '../../components/request-readiness-notice';
+import { RequestSubmitLabel } from '../../components/request-submit-label';
 import { type SubtitleStatusTone, useSubtitlesExtractLogic } from './_hooks/use-subtitles-extract-logic';
 
 /** 선택 화면에서 안내할 자막 처리 방식. */
@@ -419,14 +417,10 @@ function SubtitlesExtractPhase({
           disabled={!canSubmit}
           type="submit"
         >
-          {workerHealthStatus.kind === 'checking' ? (
-            <RequestReadinessCheckingLabel />
-          ) : (
-            <>
-              <AppIcon name="subtitle" />
-              {isSubtitlePending ? '요청 중' : '영어 SRT 생성'}
-            </>
-          )}
+          <RequestSubmitLabel status={workerHealthStatus}>
+            <AppIcon name="subtitle" />
+            {isSubtitlePending ? '요청 중' : '영어 SRT 생성'}
+          </RequestSubmitLabel>
         </button>
           <details className={SUBTITLE_PROCESSING_DETAILS_CLASS_NAME}>
             <summary className={SUBTITLE_PROCESSING_SUMMARY_CLASS_NAME}>기술적인 처리 정보</summary>

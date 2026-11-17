@@ -93,6 +93,48 @@ describe('subtitles extract page', () => {
     expect(markup).toContain('서비스가 응답했지만 지금은 요청을 시작할 수 없습니다. 다시 확인해 주세요.');
   });
 
+  it('shows readiness checking inside the submit button without a visible notice', () => {
+    subtitlesExtractLogic.mockReturnValue({
+      canChangeWhisperModel: true,
+      canSubmit: false,
+      clearSelectedFile: () => undefined,
+      fileInputRef: { current: null },
+      fileFeedbackIsError: false,
+      fileFeedbackMessage: '',
+      filePickerButtonRef: { current: null },
+      handleDropzoneDragOver: () => undefined,
+      handleDropzoneDrop: () => undefined,
+      handleFileInputChange: () => undefined,
+      handleFilePickerOpen: () => undefined,
+      handleSubtitleSubmit: () => undefined,
+      handleWhisperModelChange: () => undefined,
+      retryWorkerHealth: () => undefined,
+      selectedFile: new File(['video'], 'sample-video.mp4', { type: 'video/mp4' }),
+      selectedFileMeta: '5B',
+      selectedWhisperModel: 'base_en',
+      submitDisabledReason: '서비스 상태를 확인하는 동안 요청할 수 없습니다.',
+      validation: { kind: 'ready', message: '영어 SRT 생성을 시작할 수 있습니다.' },
+      viewPhase: 'request',
+      workerHealthCheckedAt: 0,
+      workerHealthIsFetching: true,
+      workerHealthStatus: {
+        kind: 'checking',
+        label: '확인 중',
+        message: '서비스 상태를 확인하고 있습니다.',
+        role: 'status',
+      },
+    });
+
+    /** 준비 확인 중 자막 요청 화면의 정적 HTML. */
+    const markup = renderToStaticMarkup(<SubtitlesExtractPage />);
+
+    expect(markup).toContain('서비스 확인 중</button>');
+    expect(markup).not.toContain('영어 SRT 생성</button>');
+    expect(markup).not.toContain('request-readiness-notice');
+    expect(markup).toContain('class="visually-hidden" id="subtitle-worker-health-title"');
+    expect(markup).toContain('aria-describedby="subtitle-worker-health-title"');
+  });
+
   it('uses the expanded API-failure guidance as the submit description', () => {
     subtitlesExtractLogic.mockReturnValue({
       canChangeWhisperModel: true,

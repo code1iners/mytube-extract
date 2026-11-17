@@ -20,6 +20,13 @@ export type WorkerHealthStatus = {
   role: WorkerHealthNoticeRole;
 };
 
+/** 최초 준비 확인 동안 제출 버튼이 원래 이름 대신 보여 주는 문구. */
+export const WORKER_HEALTH_CHECKING_SUBMIT_LABEL = '서비스 확인 중';
+/** 재확인이 진행되는 동안 재확인 버튼이 보여 주는 문구. */
+export const WORKER_HEALTH_RECHECKING_LABEL = '확인 중';
+/** 재확인 버튼의 평소 문구. */
+export const WORKER_HEALTH_RECHECK_LABEL = '다시 확인';
+
 /** worker health 상태 설명을 가리킬 id를 만든다. */
 export function getWorkerHealthStatusMessageId(headingId: string) {
   return `${headingId}-message`;

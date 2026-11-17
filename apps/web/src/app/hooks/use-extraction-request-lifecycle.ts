@@ -465,9 +465,6 @@ export function useExtractionRequestLifecycle<
 
       /** 새 readiness 요청 번호. */
       const requestId = ++readinessRequestIdRef.current;
-      /** readiness 시작 시 이전 성공 form을 보존할지 여부. */
-      const preservesReadyForm =
-        stateRef.current.readiness.status.kind === 'ready';
 
       updateState((current) => ({
         ...current,
@@ -475,15 +472,9 @@ export function useExtractionRequestLifecycle<
           ...current.readiness,
           error: null,
           isFetching: true,
-          status: preservesReadyForm
-            ? current.readiness.status
-            : getWorkerHealthStatus({
-                apiReady: undefined,
-                hasError: false,
-                isInitialChecking: true,
-                unavailableMessage,
-                workerAvailable: undefined,
-              }),
+          // 재확인 동안 직전 상태를 유지한다. 확인 중으로 되돌리면 실패 안내가 주기 확인마다 사라졌다 다시 나타난다.
+          // 응답이 한 번도 없었다면 초기 상태가 이미 확인 중이다.
+          status: current.readiness.status,
         },
       }));
 

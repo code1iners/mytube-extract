@@ -13,6 +13,7 @@ import { createHistoryRequestAdapter, type HistoryRequest } from '../../adapters
 import { useNavigation } from '../../components/navigation-context';
 import { PRIMARY_BUTTON_UTILITY_CLASS_NAME } from '../../components/button-class-names';
 import { RequestReadinessNotice } from '../../components/request-readiness-notice';
+import { RequestSubmitLabel } from '../../components/request-submit-label';
 import { useHistoryAcceptance } from './use-history-acceptance';
 import { PanelTitle } from '../../components/panel-title';
 import { ROUTE_PATHS } from '../../constants/route-paths.constant';
@@ -879,7 +880,9 @@ function HistoryItem(props: {
                   if (conditions) props.onRetry(receipt, conditions);
                 }}
               >
-                {isRetrySource && props.accepting ? '접수 중' : '다시 요청'}
+                <RequestSubmitLabel status={lifecycle.readiness.status}>
+                  {isRetrySource && props.accepting ? '접수 중' : '다시 요청'}
+                </RequestSubmitLabel>
               </button>
             ) : null}
             {(isConnectionError || isCompletedWithoutUrl || needsRetryConditions) &&

@@ -65,6 +65,7 @@ try {
   await run('video actual progress stops readiness after acceptance', verifyVideoActualProgress);
   await run('video minimal readiness keeps editable input', verifyVideoMinimalReadiness);
   await run('request routes expose worker readiness and guarded refresh', verifyRequestReadinessStatus);
+  await run('readiness checks keep request controls in place', verifyReadinessLayoutStability);
   await run('global usage guide disclosure stays accessible', verifyUsageGuideDisclosure);
   await run('desktop route headings share one top rhythm', verifyDesktopRouteHeadingAlignment);
   await run('video request keeps the task flow first across viewports', verifyVideoTaskFirstLayout);
@@ -1693,6 +1694,129 @@ async function verifyRequestReadinessStatus() {
         assert.equal(await page.getByRole('radio', { name: /속도 우선/ }).isChecked(), true);
         assert.equal(await page.getByText('retry.mp4', { exact: true }).count(), 1);
         assert.equal(submitCalls, 0);
+        assertNoRuntimeErrors();
+      } finally {
+        releaseHealth();
+        await context.close();
+      }
+    }
+  }
+}
+
+/** 준비 확인과 재확인이 진행되는 동안 요청 control이 제자리에 있는지 확인한다. */
+async function verifyReadinessLayoutStability() {
+  for (const width of [320, 1280]) {
+    // 영상: 최초 확인 중 → 준비됨에서 제출 버튼이 움직이지 않는다.
+    {
+      const context = await createContext({ viewport: { width, height: 844 } });
+      const { page, assertNoRuntimeErrors } = await createPage(context);
+      /** 최초 준비 확인을 붙잡는 gate. */
+      let releaseHealth;
+      const gate = new Promise((resolve) => { releaseHealth = resolve; });
+      try {
+        await routeApi(page, async ({ route, url }) => {
+          if (url.pathname === '/health') {
+            await gate;
+            return fulfillJson(route, healthResponse());
+          }
+          return fulfillJson(route, {}, 404);
+        });
+        await page.goto(`${staticServer.origin}/video`);
+        /** 확인 중에 이름 대신 진행 표시를 보여 주는 제출 버튼. */
+        const checkingSubmit = page.getByRole('button', { name: '서비스 확인 중', exact: true });
+        await checkingSubmit.waitFor();
+        await page.getByRole('textbox', { name: 'YouTube URL', exact: true }).fill('https://youtu.be/abc123_DEF0');
+        /** 확인 중 제출 버튼의 위치와 크기. */
+        const checkingBox = await checkingSubmit.boundingBox();
+        releaseHealth();
+        /** 준비된 뒤 원래 이름으로 돌아온 제출 버튼. */
+        const submit = page.getByRole('button', { name: '추출 요청', exact: true });
+        await waitForEnabled(submit);
+        assert.deepEqual(await submit.boundingBox(), checkingBox);
+        assertNoRuntimeErrors();
+      } finally {
+        releaseHealth();
+        await context.close();
+      }
+    }
+
+    // 영상: 실패 뒤 재확인하는 동안 실패 안내가 그대로 남아 제출 버튼이 움직이지 않는다.
+    {
+      const context = await createContext({ viewport: { width, height: 844 } });
+      const { page, assertNoRuntimeErrors } = await createPage(context, { ignoreHttpErrors: true });
+      /** 재확인 응답을 붙잡는 gate. */
+      let releaseRetry;
+      const gate = new Promise((resolve) => { releaseRetry = resolve; });
+      /** 준비 확인 횟수. */
+      let healthCalls = 0;
+      try {
+        await routeApi(page, async ({ route, url }) => {
+          if (url.pathname === '/health') {
+            healthCalls += 1;
+            if (healthCalls === 1) return fulfillJson(route, {}, 503);
+            await gate;
+            return fulfillJson(route, healthResponse());
+          }
+          return fulfillJson(route, {}, 404);
+        });
+        await page.goto(`${staticServer.origin}/video`);
+        await page.getByText('확인 실패', { exact: true }).waitFor();
+        await page.getByRole('textbox', { name: 'YouTube URL', exact: true }).fill('https://youtu.be/abc123_DEF0');
+        /** 준비 전후로 이름이 같은 제출 버튼. */
+        const submit = page.getByRole('button', { name: '추출 요청', exact: true });
+        /** 재확인 버튼. */
+        const retry = page.getByRole('button', { name: '서비스 상태 다시 확인' });
+        /** 실패 안내가 보이는 동안의 제출 버튼 위치. */
+        const failedBox = await submit.boundingBox();
+        /** 재확인 전 재확인 버튼 크기. */
+        const retryBox = await retry.boundingBox();
+        await retry.click();
+        await waitForCondition(async () => retry.isDisabled());
+        assert.equal(await retry.innerText(), '확인 중');
+        assert.equal(await page.getByText('확인 실패', { exact: true }).count(), 1);
+        assert.deepEqual(await submit.boundingBox(), failedBox);
+        assert.deepEqual(await retry.boundingBox(), retryBox);
+        releaseRetry();
+        await waitForEnabled(submit);
+        assert.equal(await page.locator('.request-readiness-notice').count(), 0);
+        assertNoRuntimeErrors();
+      } finally {
+        releaseRetry();
+        await context.close();
+      }
+    }
+
+    // 요청 내역: 확인 중에는 재요청 버튼이 진행 표시를 보여 주고, 준비된 뒤에도 항목 위치와 높이가 같다.
+    {
+      const context = await createContext({ viewport: { width, height: 844 } });
+      const { page, assertNoRuntimeErrors } = await createPage(context);
+      /** 최초 준비 확인을 붙잡는 gate. */
+      let releaseHealth;
+      const gate = new Promise((resolve) => { releaseHealth = resolve; });
+      try {
+        await seedReceipts(page, [['video', VIDEO_ID, '2026-08-11T00:00:00.000Z']]);
+        await routeApi(page, async ({ route, url }) => {
+          if (url.pathname === '/health') {
+            await gate;
+            return fulfillJson(route, healthResponse());
+          }
+          if (url.pathname === `/downloads/${VIDEO_ID}`) return fulfillJson(route, videoJob(VIDEO_ID, 'failed'));
+          return fulfillJson(route, {}, 404);
+        });
+        await page.goto(`${staticServer.origin}/history`);
+        /** 확인 중인 재요청 버튼. */
+        const checkingRetry = page.getByRole('button', { name: '서비스 확인 중', exact: true });
+        await checkingRetry.waitFor();
+        assert.equal(await checkingRetry.isDisabled(), true);
+        /** 재요청 버튼이 속한 내역 항목. */
+        const item = page.locator('li', { has: checkingRetry });
+        /** 확인 중 내역 항목의 위치와 크기. */
+        const checkingItemBox = await item.boundingBox();
+        releaseHealth();
+        /** 준비된 뒤 원래 이름으로 돌아온 재요청 버튼. */
+        const retry = page.getByRole('button', { name: '다시 요청', exact: true });
+        await retry.waitFor();
+        assert.deepEqual(await page.locator('li', { has: retry }).boundingBox(), checkingItemBox);
         assertNoRuntimeErrors();
       } finally {
         releaseHealth();
