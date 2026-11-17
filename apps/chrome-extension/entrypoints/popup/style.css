@@ -55,6 +55,7 @@
 }
 
 * { box-sizing: border-box; }
+/* Popup 창은 문서 폭에 맞춰 크기가 정해진다. 폭을 viewport 단위나 폭 media query로 정하면 창과 문서가 서로를 기준 삼아 찌그러지므로 고정 폭만 쓴다. */
 body { width: 360px; margin: 0; background: var(--color-canvas); }
 button, input, select { font: inherit; }
 button { cursor: pointer; }
@@ -216,5 +217,4 @@ button:disabled { cursor: not-allowed; }
 .switch[aria-checked='true']::after { transform: translateX(20px); }
 .switch:disabled::before { background: var(--color-text-disabled); }
 :focus-visible { outline: 2px solid var(--color-focus); outline-offset: 2px; }
-@media (max-width: 400px) { body { width: 100vw; } }
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; transition: none !important; } }
