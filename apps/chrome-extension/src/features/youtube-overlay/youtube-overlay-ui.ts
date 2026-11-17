@@ -30,13 +30,24 @@ const YOUTUBE_CARD_SELECTORS = [
   'ytd-rich-item-renderer',
   'ytd-video-renderer',
   'ytd-compact-video-renderer',
+  // 채널 홈 shelf처럼 위 renderer로 감싸지 않은 카드. 감싼 카드와 겹쳐 잡혀도 같은 썸네일이라 한 번만 붙는다.
+  'yt-lockup-view-model',
 ];
+
+/** transform transition 하나를 따라가는 최대 시간. 목록을 미는 transition은 이보다 짧다. */
+const TRANSITION_FOLLOW_MAX_MS = 1000;
 
 /** 카드별 Overlay mount marker. */
 const OVERLAY_MARKER_ATTRIBUTE = 'data-mytube-extract-overlay';
 
 /** 페이지 전역 Toast mount marker. */
 const TOAST_MARKER_ATTRIBUTE = 'data-mytube-extract-toast';
+
+/** 카드 Overlay host의 z-index. Toast(최댓값) 바로 아래에서 호버 미리보기 레이어보다 위에 둔다. */
+const OVERLAY_Z_INDEX = '2147483646';
+
+/** 썸네일 element별로 mount된 Overlay host. 카드 밖(body)에 붙기 때문에 따로 기억한다. */
+const mountedHosts = new WeakMap<HTMLElement, HTMLElement>();
 
 /** 한 페이지에 Overlay를 한 번만 mount하기 위한 Window key. */
 const OVERLAY_MOUNTED_WINDOW_KEY = '__myTubeExtractOverlayMounted';
@@ -75,8 +86,18 @@ type YoutubeCardInfo = {
 
 /** 같은 페이지의 카드 Overlay가 함께 쓰는 상태. 저장소에 남기지 않는다. */
 type OverlayPageState = {
+  /** 카드별 위치·호버 판정 함수. scroll·resize·pointer 이동 때 한 프레임에 한 번 실행한다. */
+  layouts: Set<() => void>;
   /** 마지막으로 고른 형식. */
   mode: DownloadMode;
+  /** 마지막 pointer 위치. 창 밖이면 null. */
+  pointer: { x: number; y: number } | null;
+  /** 위치·호버 판정을 다음 프레임에 예약한다. */
+  scheduleLayout: () => void;
+  /** 썸네일 크기가 바뀌면 위치·호버 판정을 다시 예약하는 observer. */
+  sizeObserver: ResizeObserver;
+  /** 고정 상단 바가 가리는 viewport 위쪽 높이. 프레임마다 한 번 읽는다. */
+  viewportTop: number;
   /** 형식이 바뀌면 다시 그릴 카드별 render 함수. */
   renderers: Set<() => void>;
   /** 저장된 최근 job으로 고른 카드별 상태. */
@@ -120,15 +141,73 @@ export function mountYoutubeOverlay(): void {
   const toast = createToastController();
   /** 카드 Overlay가 공유하는 형식 선택. */
   const pageState: OverlayPageState = {
+    layouts: new Set(),
     mode: DEFAULT_OVERLAY_MODE,
+    pointer: null,
     renderers: new Set(),
+    scheduleLayout,
+    sizeObserver: new ResizeObserver(scheduleLayout),
     statuses: createOverlayCardStatusTracker(),
     statusRenderers: new Set(),
+    viewportTop: 0,
   };
   /** 카드 변경을 감시하는 observer. */
   const observer = new MutationObserver(scheduleScan);
   /** 예약된 카드 scan timer. */
   let scanTimer: number | undefined;
+  /** 예약된 위치·호버 판정 frame. */
+  let layoutFrame: number | undefined;
+  /** transform transition을 따라가는 frame. 따라가지 않을 때는 undefined. */
+  let transitionFollowFrame: number | undefined;
+  /** transition 따라가기를 멈출 시각(`performance.now()` 기준). */
+  let transitionFollowUntil = 0;
+
+  /** 카드 Overlay의 위치와 호버 판정을 다음 프레임에 한 번만 갱신한다. */
+  function scheduleLayout() {
+    if (layoutFrame !== undefined) {
+      return;
+    }
+
+    layoutFrame = window.requestAnimationFrame(() => {
+      layoutFrame = undefined;
+      pageState.viewportTop = readViewportTop();
+      // 순회 중 카드가 detach 되어 Set이 바뀌어도 안전하도록 복사해서 돈다.
+      [...pageState.layouts].forEach((layout) => layout());
+    });
+  }
+
+  /** transform transition이 시작되면 끝날 때까지 매 프레임 위치를 갱신하고, 끝나면 한 번 더 맞춘다. */
+  function followTransformTransition(event: TransitionEvent) {
+    if (event.propertyName !== 'transform' && event.propertyName !== 'translate') {
+      return;
+    }
+
+    scheduleLayout();
+
+    if (event.type !== 'transitionrun') {
+      return;
+    }
+
+    // 요소가 transition 도중 제거되면 끝 이벤트가 오지 않으므로, 이벤트가 알려 준 시간에 여유를 더해 스스로 멈춘다.
+    transitionFollowUntil = Math.max(
+      transitionFollowUntil,
+      performance.now() + TRANSITION_FOLLOW_MAX_MS,
+    );
+
+    if (transitionFollowFrame === undefined) {
+      transitionFollowFrame = window.requestAnimationFrame(followTransitionFrame);
+    }
+  }
+
+  /** transition을 따라가는 동안 프레임마다 위치 갱신을 예약한다. */
+  function followTransitionFrame() {
+    transitionFollowFrame = undefined;
+    scheduleLayout();
+
+    if (performance.now() < transitionFollowUntil) {
+      transitionFollowFrame = window.requestAnimationFrame(followTransitionFrame);
+    }
+  }
 
   /** 현재 DOM의 YouTube 카드에 Overlay를 붙인다. */
   function scanCards() {
@@ -166,6 +245,28 @@ export function mountYoutubeOverlay(): void {
   observer.observe(document.documentElement, {
     childList: true,
     subtree: true,
+  });
+  // 유튜브 호버 미리보기는 카드 밖 레이어라 썸네일 링크의 pointerleave가 먼저 오므로, 호버는 좌표로 판정한다.
+  document.addEventListener(
+    'pointermove',
+    (event) => {
+      pageState.pointer = { x: event.clientX, y: event.clientY };
+      scheduleLayout();
+    },
+    { capture: true, passive: true },
+  );
+  document.documentElement.addEventListener('pointerleave', () => {
+    pageState.pointer = null;
+    scheduleLayout();
+  });
+  window.addEventListener('scroll', scheduleLayout, { capture: true, passive: true });
+  window.addEventListener('resize', scheduleLayout);
+  // 채널 홈 shelf처럼 scroll 없이 transform transition으로 카드를 미는 목록도 썸네일을 따라가게 한다.
+  document.addEventListener('transitionrun', followTransformTransition, { capture: true, passive: true });
+  document.addEventListener('transitionend', followTransformTransition, { capture: true, passive: true });
+  document.addEventListener('transitioncancel', followTransformTransition, {
+    capture: true,
+    passive: true,
   });
   window.addEventListener('popstate', scheduleScan);
   window.addEventListener('yt-navigate-finish', scheduleScan);
@@ -220,6 +321,72 @@ function subscribeRecentJobs(pageState: OverlayPageState): void {
   }
 }
 
+/** 화면 위쪽을 가리는 고정 상단 바의 아래 경계. 상단 바가 없거나 위에 붙어 있지 않으면 0. */
+function readViewportTop(): number {
+  /** YouTube 상단 바. */
+  const masthead = document.querySelector('ytd-masthead');
+
+  if (!masthead) {
+    return 0;
+  }
+
+  /** 상단 바 viewport 좌표. */
+  const rect = masthead.getBoundingClientRect();
+
+  return rect.top <= 0 ? Math.max(0, rect.bottom) : 0;
+}
+
+/** 화면에서 실제로 보이는 썸네일 영역의 viewport 좌표. */
+type VisibleRect = { bottom: number; left: number; right: number; top: number };
+
+/**
+ * 썸네일에서 viewport 밖, 고정 상단 바 아래, overflow가 자르는 부모 밖 영역을 뺀 보이는 영역을 구한다.
+ * 보이는 영역이 없으면 null이다. 카드 밖(body)에 붙은 Overlay가 이전처럼 부모에 잘리게 하는 용도다.
+ */
+function getVisibleRect(element: HTMLElement, viewportTop: number): VisibleRect | null {
+  /** 썸네일 자체의 viewport 좌표. */
+  const rect = element.getBoundingClientRect();
+  /** 깎아 나갈 보이는 영역. */
+  const visible: VisibleRect = {
+    bottom: Math.min(rect.bottom, window.innerHeight),
+    left: Math.max(rect.left, 0),
+    right: Math.min(rect.right, window.innerWidth),
+    top: Math.max(rect.top, viewportTop),
+  };
+
+  for (
+    let parent = element.parentElement;
+    parent && parent !== document.body;
+    parent = parent.parentElement
+  ) {
+    /** 부모의 overflow 설정. */
+    const style = window.getComputedStyle(parent);
+    /** 가로로 자르는지 여부. */
+    const clipsX = style.overflowX !== 'visible';
+    /** 세로로 자르는지 여부. */
+    const clipsY = style.overflowY !== 'visible';
+
+    if (!clipsX && !clipsY) {
+      continue;
+    }
+
+    /** 부모 viewport 좌표. */
+    const parentRect = parent.getBoundingClientRect();
+
+    if (clipsX) {
+      visible.left = Math.max(visible.left, parentRect.left);
+      visible.right = Math.min(visible.right, parentRect.right);
+    }
+
+    if (clipsY) {
+      visible.top = Math.max(visible.top, parentRect.top);
+      visible.bottom = Math.min(visible.bottom, parentRect.bottom);
+    }
+  }
+
+  return visible.right > visible.left && visible.bottom > visible.top ? visible : null;
+}
+
 /** YouTube 카드에서 표준 watch URL과 제목·썸네일을 읽는다. */
 function readYoutubeCardInfo(card: Element): YoutubeCardInfo | null {
   /** 카드의 표준 썸네일 링크. */
@@ -233,6 +400,11 @@ function readYoutubeCardInfo(card: Element): YoutubeCardInfo | null {
     return null;
   }
 
+  // 재생목록·믹스 카드는 첫 영상의 watch 주소를 쓰지만 영상 카드가 아니므로 제외한다.
+  if (thumbnailLink.querySelector('yt-collection-thumbnail-view-model')) {
+    return null;
+  }
+
   /** 카드 안에서 우선적으로 읽을 제목 element. */
   const titleElement = card.querySelector<HTMLElement>(
     '#video-title, #video-title-link, a#video-title-link',
@@ -241,6 +413,8 @@ function readYoutubeCardInfo(card: Element): YoutubeCardInfo | null {
   const title =
     titleElement?.textContent?.trim() ||
     thumbnailLink.getAttribute('aria-label')?.trim() ||
+    // `yt-lockup-view-model` 카드는 위 두 곳이 비어 있고 제목이 heading의 title 속성에 있다.
+    card.querySelector('h3[title]')?.getAttribute('title')?.trim() ||
     '';
   /** Overlay를 mount할 썸네일 element. */
   const thumbnail =
@@ -261,33 +435,29 @@ function mountCardOverlay(
   toast: ToastController,
 ): void {
   /** 이 썸네일에 이미 붙은 Overlay host. */
-  const existingHost = cardInfo.thumbnail.querySelector<HTMLElement>(
-    '[' + OVERLAY_MARKER_ATTRIBUTE + ']',
-  );
+  const existingHost = mountedHosts.get(cardInfo.thumbnail);
 
-  if (existingHost?.dataset.videoId === cardInfo.videoId) {
+  if (existingHost?.isConnected && existingHost.dataset.videoId === cardInfo.videoId) {
     return;
   }
 
   // YouTube가 카드 element를 다른 영상에 재사용하면 이전 영상의 Overlay와 상태를 떼고 다시 붙인다.
   existingHost?.remove();
 
-  /** 썸네일 전체를 덮는 Overlay host. 빈 영역의 pointer는 YouTube 썸네일로 통과시킨다. */
+  /**
+   * 썸네일 위치를 따라가는 Overlay host. YouTube 호버 미리보기 레이어보다 위에 있으려면 카드 밖(body)에 붙여야 한다.
+   * 빈 영역의 pointer는 아래 요소로 통과시킨다.
+   */
   const host = document.createElement('span');
 
   host.setAttribute(OVERLAY_MARKER_ATTRIBUTE, 'true');
   host.dataset.videoId = cardInfo.videoId;
-  host.style.position = 'absolute';
-  host.style.inset = '0';
-  host.style.display = 'block';
+  host.style.position = 'fixed';
+  host.style.display = 'none';
   host.style.pointerEvents = 'none';
-  host.style.zIndex = '2';
+  host.style.zIndex = OVERLAY_Z_INDEX;
   // 작은 썸네일(사이드바 카드)에서 control 크기를 줄이기 위한 container query 기준이다.
   host.style.containerType = 'size';
-
-  if (window.getComputedStyle(cardInfo.thumbnail).position === 'static') {
-    cardInfo.thumbnail.style.position = 'relative';
-  }
 
   /** 카드별 Shadow Root. */
   const shadowRoot = host.attachShadow({ mode: 'open' });
@@ -308,7 +478,7 @@ function mountCardOverlay(
     audio: createModeButton('audio'),
     video: createModeButton('video'),
   };
-  /** 썸네일 위에 pointer가 있는지 여부. */
+  /** 마지막 판정에서 pointer가 썸네일 영역 안에 있었는지 여부. */
   let hovered = false;
   /** Background 응답을 기다리는 중인지 여부. */
   let pending = false;
@@ -325,19 +495,62 @@ function mountCardOverlay(
   levels.setAttribute('aria-label', '품질을 누르면 바로 추출');
   formats.append(modeButtons.audio, modeButtons.video);
   overlay.append(formats, levels);
-  cardInfo.thumbnail.append(host);
+  document.body.append(host);
+  mountedHosts.set(cardInfo.thumbnail, host);
 
-  /** 호버나 포커스가 썸네일 안에 있을 때만 호버 UI를 보인다. */
-  function updateVisibility() {
-    // YouTube가 카드를 제거하면 리스너가 누적되지 않도록 함께 해제한다.
-    if (!host.isConnected) {
+  /**
+   * host를 썸네일의 보이는 영역에 맞추고, 호버·포커스일 때만 호버 UI를 보인다.
+   * 호버는 보이는 영역 안의 pointer 좌표로 판정해 미리보기 레이어가 덮어도 유지한다.
+   */
+  function syncLayout() {
+    // YouTube가 카드를 제거하거나 다른 영상에 재사용하면 리스너가 누적되지 않도록 함께 해제한다.
+    if (!host.isConnected || !cardInfo.thumbnail.isConnected) {
       detach();
       return;
     }
 
+    /** 현재 썸네일의 viewport 좌표. */
+    const rect = cardInfo.thumbnail.getBoundingClientRect();
+    /** 마지막 pointer 위치. */
+    const pointer = pageState.pointer;
+    /** pointer가 썸네일 좌표 안에 있는지 여부. 부모에 잘린 영역은 아래에서 따로 뺀다. */
+    const pointerInRect =
+      pointer !== null &&
+      pointer.x >= rect.left &&
+      pointer.x <= rect.right &&
+      pointer.y >= rect.top &&
+      pointer.y <= rect.bottom;
     /** 키보드 포커스가 썸네일 링크나 Overlay 안에 있는지 여부. */
-    const focused = cardInfo.hoverTarget.matches(':focus-within');
+    const focused =
+      cardInfo.hoverTarget.matches(':focus-within') || host.matches(':focus-within');
+    /** 상태 배지가 있어 호버와 관계없이 보여야 하는지 여부. */
+    const hasStatus = status.hasChildNodes();
+    // 보이는 영역 계산은 부모를 거슬러 올라가 비싸므로, 화면에 보여야 하는 카드에서만 한다.
+    /** 보이는 썸네일 영역. 숨겨도 되는 카드나 가려진 카드는 null. */
+    const visible =
+      rect.width > 0 && rect.height > 0 && (pointerInRect || focused || hasStatus)
+        ? getVisibleRect(cardInfo.thumbnail, pageState.viewportTop)
+        : null;
 
+    hovered =
+      visible !== null &&
+      pointer !== null &&
+      pointer.x >= visible.left &&
+      pointer.x <= visible.right &&
+      pointer.y >= visible.top &&
+      pointer.y <= visible.bottom;
+
+    if (!visible) {
+      host.style.display = 'none';
+      overlay.removeAttribute('data-visible');
+      return;
+    }
+
+    host.style.display = 'block';
+    host.style.left = visible.left + 'px';
+    host.style.top = visible.top + 'px';
+    host.style.width = visible.right - visible.left + 'px';
+    host.style.height = visible.bottom - visible.top + 'px';
     overlay.toggleAttribute('data-visible', hovered || focused);
   }
 
@@ -389,11 +602,13 @@ function mountCardOverlay(
     if (!cardStatus) {
       status.replaceChildren();
       status.removeAttribute('data-state');
+      syncLayout();
       return;
     }
 
     status.dataset.state = cardStatus.state;
     status.replaceChildren(createStatusContent(cardStatus));
+    syncLayout();
   }
 
   /** 상태별 배지를 만든다. 실패 배지만 누를 수 있다. */
@@ -449,6 +664,9 @@ function mountCardOverlay(
   /** 이 카드의 page 리스너와 형식·상태 render 구독을 해제한다. */
   function detach() {
     listeners.abort();
+    host.remove();
+    pageState.sizeObserver.unobserve(cardInfo.thumbnail);
+    pageState.layouts.delete(syncLayout);
     pageState.renderers.delete(render);
     pageState.statusRenderers.delete(renderStatus);
   }
@@ -570,32 +788,75 @@ function mountCardOverlay(
     return button;
   }
 
+  // 브라우저가 레이아웃 변화 뒤 pointermove 없이 보내는 pointerenter에서도 pointer 위치를 얻는다.
   cardInfo.hoverTarget.addEventListener(
     'pointerenter',
-    () => {
-      hovered = true;
-      updateVisibility();
+    (event) => {
+      pageState.pointer = { x: event.clientX, y: event.clientY };
+      pageState.scheduleLayout();
     },
     { signal: listeners.signal },
   );
+  // 키보드 포커스: 링크나 Overlay 버튼에 포커스가 있으면 보인다. focusout 시점에는 다음 포커스 대상이 아직 정해지지 않아 한 tick 뒤에 판정한다.
+  for (const focusTarget of [cardInfo.hoverTarget, host]) {
+    focusTarget.addEventListener('focusin', syncLayout, { signal: listeners.signal });
+    focusTarget.addEventListener(
+      'focusout',
+      () => window.setTimeout(syncLayout, 0),
+      { signal: listeners.signal },
+    );
+  }
+  // Overlay host가 카드 밖이라 Tab 순서가 끊기므로, 링크 → Overlay 버튼 → 링크 다음 요소로 직접 이어 준다.
   cardInfo.hoverTarget.addEventListener(
-    'pointerleave',
-    () => {
-      hovered = false;
-      updateVisibility();
+    'keydown',
+    (event) => {
+      if (event.key !== 'Tab' || event.shiftKey) {
+        return;
+      }
+
+      /** 지금 누를 수 있는 Overlay 버튼 목록. */
+      const buttons = getOverlayButtons();
+
+      if (buttons.length === 0 || !overlay.hasAttribute('data-visible')) {
+        return;
+      }
+
+      event.preventDefault();
+      buttons[0].focus();
     },
     { signal: listeners.signal },
   );
-  cardInfo.hoverTarget.addEventListener('focusin', updateVisibility, {
-    signal: listeners.signal,
-  });
-  // focusout 시점에는 다음 포커스 대상이 아직 정해지지 않아 한 tick 뒤에 판정한다.
-  cardInfo.hoverTarget.addEventListener(
-    'focusout',
-    () => window.setTimeout(updateVisibility, 0),
+  host.addEventListener(
+    'keydown',
+    (event) => {
+      if (event.key !== 'Tab') {
+        return;
+      }
+
+      /** 지금 누를 수 있는 Overlay 버튼 목록. */
+      const buttons = getOverlayButtons();
+      /** 포커스가 있는 Overlay 버튼의 순서. */
+      const index = buttons.findIndex((button) => button === shadowRoot.activeElement);
+
+      if (event.shiftKey && index === 0) {
+        event.preventDefault();
+        cardInfo.hoverTarget.focus();
+      } else if (!event.shiftKey && index === buttons.length - 1) {
+        // preventDefault 없이 포커스만 링크로 돌려 두면 브라우저가 링크 다음 요소로 이동한다.
+        cardInfo.hoverTarget.focus();
+      }
+    },
     { signal: listeners.signal },
   );
 
+  /** 지금 누를 수 있는 Overlay 버튼을 DOM 순서대로 돌려준다. */
+  function getOverlayButtons(): HTMLButtonElement[] {
+    return [...shadowRoot.querySelectorAll<HTMLButtonElement>('.overlay button:not(:disabled)')];
+  }
+
+  pageState.layouts.add(syncLayout);
+  pageState.sizeObserver.observe(cardInfo.thumbnail);
+  syncLayout();
   pageState.renderers.add(render);
   pageState.statusRenderers.add(renderStatus);
   render();

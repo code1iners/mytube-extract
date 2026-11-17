@@ -115,12 +115,14 @@ spec에 따로 적히지 않았거나 해석이 갈리는 아래 동작은 현�
 
 - Popup 설정 화면의 썸네일 버튼 스위치를 켤 때 `https://www.youtube.com/*` optional Host Permission을 요청하고, 끌 때 해제한다.
 - 권한을 거부해도 Popup의 무대·붙여넣기·파일명 편집·오류 복구 흐름은 계속 사용할 수 있다.
-- 권한이 허용되면 홈, 검색 결과, 구독 피드, 시청 페이지 추천 영역의 일반 영상 카드에만 Overlay를 표시한다. Shorts URL은 제외한다.
+- 권한이 허용되면 홈, 검색 결과, 구독 피드, 시청 페이지 추천 영역, 채널 홈·동영상 탭·채널 안 검색(`/@handle`, `/channel/<id>`, `/c/<name>`, `/user/<name>` 아래의 탭 없음·`featured`·`videos`·`search`)의 일반 영상 카드에만 Overlay를 표시한다. Shorts URL과 재생목록·믹스 카드는 제외한다. 채널의 Shorts·라이브·재생목록 등 다른 탭에는 표시하지 않는다.
 - 썸네일에 마우스를 올리거나 키보드로 포커스하면 오른쪽 위에 형식 원형 아이콘 버튼 두 개(오디오·비디오)와 품질 막대 세 개가 나타난다. 오디오를 고르면 막대 숫자가 `128 / 192 / 320`(kbps), 비디오면 `360 / 720 / 1080`(p)이 된다. 형식 선택은 같은 페이지 안에서만 기억한다.
 - 품질 막대를 누르면 별도 패널 없이 바로 기존 `youtube-overlay-download` 메시지로 접수한다.
 - 카드 제목을 파일명 후보로 전달하고 Background에서 경로 구분자·제어 문자를 제거한다. 제목이 비어 있거나 `.`/`..`이면 video ID를 사용한다.
 - 카드 진행 상태: Overlay 스크립트가 저장된 최근 요청 목록(`recentDownloadJobs`)의 storage 변경을 구독하고, 카드 영상 ID와 같은 영상의 최신 job 상태를 카드 왼쪽 위에 그린다(시안은 오른쪽 위지만 호버 조작과 겹치지 않게 왼쪽 위로 두기로 사용자가 정했다). 대기는 시계와 회전 링, 처리는 회전 링, 완료는 초록 체크 배지(약 3초 뒤 사라짐), 실패는 crimson 다시 시도 버튼 배지다. 실패 배지를 누르면 같은 형식·품질로 다시 접수한다. 배지는 호버와 관계없이 보이고, 카드가 다시 그려져도 같은 매칭으로 다시 표시한다. 최근 5건 보관 목록에 있는 job만 표시하고, 만료된 job은 표시하지 않는다. 새 background→content 메시지는 쓰지 않는다. 페이지를 연 뒤 첫 목록 읽기가 끝나기 전에 온 storage 변경은 모아 두었다가 첫 목록 다음에 비교하므로, 그 사이 완료된 job에도 완료 배지가 뜬다.
 - 페이지에는 단일 전역 Toast를 사용한다. 진행·접수·실패 Toast는 미니 썸네일, 상태 아이콘, 형식 아이콘과 품질, 닫기 버튼으로 구성하고 실패 Toast에는 다시 시도 버튼을 더한다. 품질 막대를 누르면 Background 응답을 기다리는 동안 중립 회전 링 진행 Toast(live region `요청을 보내고 있어요`)를 보이고, 접수 응답을 받은 뒤 체크 접수 Toast(`요청을 접수했어요`, 약 4초 뒤 닫힘)로, 실패하면 실패 Toast로 바꾼다. 문장은 화면에 보이지 않고 live region으로만 전달한다. 백분율 진행률은 표시하지 않는다.
+- Overlay 배치와 호버 판정: 카드마다 Shadow Root host를 하나씩 만들어 카드 안이 아니라 `body` 직하위 `position:fixed` 레이어(`z-index` 2147483646, Toast 바로 아래)에 둔다. YouTube 호버 미리보기(썸네일 재생)는 카드 밖 레이어가 썸네일을 덮고 포인터를 받아, 썸네일 링크의 `pointerleave`가 먼저 오기 때문이다. 그래서 호버는 링크 이벤트 대신 document `pointermove`(와 링크 `pointerenter`) 좌표가 썸네일의 보이는 영역 안에 있는지로 판정한다. host는 썸네일에서 viewport 밖, 고정 상단 바(`ytd-masthead`) 아래, `overflow`가 자르는 부모 밖을 뺀 영역에 맞춰 놓는다. 위치·판정은 scroll·resize·pointer 이동·썸네일 크기 변화(`ResizeObserver`)를 `requestAnimationFrame` 한 번으로 묶어 갱신한다. 채널 홈 shelf처럼 scroll 없이 `transform` transition으로 카드를 미는 목록은 `transitionrun`부터 끝날 때까지(최대 1초) 프레임마다 따라간다. 카드가 사라지거나 다른 영상에 재사용되면 host도 지운다. 한계: 모달·메뉴처럼 썸네일을 덮는 다른 요소와 scroll·크기 변화·`transform` transition 없이 일어나는 위치 이동은 판정하지 않는다.
+- 키보드: host가 카드 밖이라 Tab 순서가 끊기므로, 링크에서 Tab을 누르면 Overlay 첫 버튼으로, 첫 버튼에서 Shift+Tab은 링크로, 마지막 버튼에서 Tab은 링크 다음 요소로 직접 이어 준다. 상태 배지만 있는 카드에서는 투명한 Overlay 버튼이 `body` 끝 Tab 순서에 남고, 포커스하면 호버 UI가 보인다.
 - Overlay UI는 카드 Shadow Root에 격리하고, `docs/DESIGN.md`의 "Chrome popup·Overlay 최소 UI 계약"(어두운 scrim 위 흰 아이콘, 44px 조작 영역, blue focus, 줄어든 동작 설정에서 회전 정지)과 `Pretendard Variable`을 적용한다.
 
 ## API 호출 계약
@@ -254,11 +256,12 @@ Chrome 확장 프로그램은 현재 `POST /downloads`와 job 상태·파일 end
 - 개발용 preview는 Chrome extension runtime이 없는 localhost 환경에서만 fake Chrome API를 설치하고, 실제 extension runtime에서는 기존 Chrome API를 그대로 사용해야 한다.
 - `pnpm dev:smoke`는 이미 실행 중인 WXT dev output `.output/chrome-mv3-dev`를 load unpacked로 열어 popup 렌더링을 빠르게 확인한다.
 - `pnpm --filter chrome-extension run build`가 WXT generated manifest, popup asset, 권한, icon 참조를 검증한다.
+- `pnpm --filter chrome-extension run build:production`은 `.env` 값과 관계없이 운영 API 주소(`https://mytube-extract-api.codeliners.cc`)로 같은 빌드를 한다. `test:browser`와 `test:browser:overlay`는 이 빌드를 쓰므로, 검사를 돌린 뒤에도 `.output/chrome-mv3`에는 운영 주소 빌드가 남는다.
 - `pnpm --filter chrome-extension run test`가 URL 검증, job API 매핑, active/recent storage 직렬화·복구, popup 상태 전이, Overlay 품질·메시지·파일명·권한 계약을 검증한다.
 - `pnpm --filter chrome-extension run lint`가 WXT type generation과 TypeScript compile을 검증한다.
 - `pnpm --filter chrome-extension run test:browser`가 실제 API `/health`, WXT load unpacked 렌더링, built popup의 무대 자동 지정·붙여넣기 칸·잘못된 주소·서버 실패·접수 거부·다운로드 시작·파일명 편집·진행 복원·최근 요청 줄과 목록·설정 화면의 테마와 썸네일 버튼 권한 흐름, 그리고 Overlay 스모크를 검증한다. 실제 API에는 `/health` GET만 보내고 나머지 API 응답은 가짜로 대신한다. 붙여넣은 영상의 접수 뒤 API 제목 표시와 200% 확대에서 무대·최근 요청·설정 화면의 조작이 잘리거나 가려지지 않는지도 확인한다. 스모크는 빌드 manifest의 API host permission에서 번들이 쓰는 API origin을 읽어 그 origin을 가로채므로, `.env`에 다른 API 주소가 있어도 기본 실행이 통과한다. `MYTUBE_EXTRACT_POPUP_SCREENSHOT_DIR`·`MYTUBE_EXTRACT_OVERLAY_SCREENSHOT_DIR`를 지정하면 상태별 캡처를 남긴다.
-- `pnpm --filter chrome-extension run test:browser:overlay`가 Overlay unlisted script의 형식 아이콘·품질 막대, 품질 클릭 제출, 저장된 job 변경에 따른 카드 상태 배지, 실패 배지 재시도, 응답 전 진행 Toast와 응답 뒤 접수 Toast를 포함한 전역 Toast, Shorts 제외, 동적 카드, 중복 주입을 검증한다.
-- 실제 Chrome에서 새 프로필로 optional permission을 허용한 뒤 YouTube 홈·검색·구독·시청 추천 영역을 직접 열어 selector와 실제 다운로드를 확인해야 한다. 자동 fixture smoke 통과만으로 실제 YouTube 동작을 완료 처리하지 않는다.
+- `pnpm --filter chrome-extension run test:browser:overlay`가 Overlay unlisted script의 형식 아이콘·품질 막대, 품질 클릭 제출, 썸네일 호버 미리보기 모사 레이어가 덮어도 유지되는 호버 UI와 클릭 전달, 상단 바·`overflow` 부모에 가려진 영역 처리, `pointermove` 전 `pointerenter` 인식, 썸네일 크기 변화 추적, Tab 순서 이음, 저장된 job 변경에 따른 카드 상태 배지, 실패 배지 재시도, 응답 전 진행 Toast와 응답 뒤 접수 Toast를 포함한 전역 Toast, Shorts 제외, 동적 카드, 중복 주입을 검증한다. 이어서 채널 smoke(`youtube-overlay-channel-smoke.mjs`)가 채널 동영상 탭·채널 홈 shelf·채널 안 검색의 `yt-lockup-view-model`·`ytd-video-renderer` 카드에 Overlay가 한 번씩만 붙는지, 카드 제목을 읽어 요청하는지, 재생목록 카드와 지원하지 않는 채널 탭을 제외하는지, shelf를 `transform` transition으로 밀어도 상태 배지가 썸네일을 따라가는지 검증한다.
+- 실제 Chrome에서 새 프로필로 optional permission을 허용한 뒤 YouTube 홈·검색·구독·시청 추천 영역·채널 홈·채널 동영상 탭·채널 안 검색을 직접 열어 selector와 실제 다운로드를 확인해야 한다. 자동 fixture smoke 통과만으로 실제 YouTube 동작을 완료 처리하지 않는다. 특히 썸네일 재생을 켠 상태에서 호버 UI 유지·클릭, 오버레이 버튼으로 포인터를 옮길 때 미리보기가 닫히는지, Tab으로 썸네일에 포커스했을 때 호버 UI가 보이는지는 사람이 확인해야 한다(fixture는 번들 코드를 읽고 모사한 것이다).
 
 ## 후속 보류 사항
 

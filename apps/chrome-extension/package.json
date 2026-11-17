@@ -5,14 +5,15 @@
   "description": "MyTube Extract WXT Chrome extension.",
   "scripts": {
     "build": "wxt build && node tools/verify-extension-package.js",
+    "build:production": "WXT_MYTUBE_EXTRACT_API_BASE_URL=https://mytube-extract-api.codeliners.cc pnpm run build",
     "dev": "node tools/run-wxt-dev-ready.js",
     "lint": "wxt prepare && tsc --noEmit",
     "postinstall": "wxt prepare",
     "test": "vitest run",
     "test:cov": "vitest run --coverage",
-    "test:browser": "wxt build && node tools/verify-extension-package.js && node tests/browser/popup-smoke.mjs && node tests/browser/youtube-overlay-smoke.mjs && node tests/browser/youtube-overlay-visibility-smoke.mjs",
+    "test:browser": "pnpm run build:production && node tests/browser/popup-smoke.mjs && node tests/browser/youtube-overlay-smoke.mjs && node tests/browser/youtube-overlay-visibility-smoke.mjs && node tests/browser/youtube-overlay-channel-smoke.mjs",
     "test:browser:dev": "MYTUBE_EXTRACT_POPUP_SMOKE_MODE=dev node tests/browser/popup-smoke.mjs",
-    "test:browser:overlay": "wxt build && node tools/verify-extension-package.js && node tests/browser/youtube-overlay-smoke.mjs && node tests/browser/youtube-overlay-visibility-smoke.mjs",
+    "test:browser:overlay": "pnpm run build:production && node tests/browser/youtube-overlay-smoke.mjs && node tests/browser/youtube-overlay-visibility-smoke.mjs && node tests/browser/youtube-overlay-channel-smoke.mjs",
     "zip": "wxt zip"
   },
   "dependencies": {

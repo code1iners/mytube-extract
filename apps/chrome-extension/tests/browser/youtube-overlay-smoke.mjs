@@ -1,30 +1,36 @@
 import fs from 'node:fs';
-import http from 'node:http';
 import path from 'node:path';
 import { chromium } from 'playwright';
+import {
+  assertEqual,
+  createFixtureServer,
+  resolveOverlayScriptPath,
+} from './overlay-smoke-support.mjs';
 
-/** WXT production output root. */
-const extensionOutputRoot = path.resolve(
-  process.env.MYTUBE_EXTRACT_EXTENSION_OUTPUT_ROOT ?? '.output/chrome-mv3',
-);
 /** Overlay unlisted script path. */
-const overlayScriptPath = path.join(extensionOutputRoot, 'youtube-overlay.js');
-
-if (!fs.existsSync(overlayScriptPath)) {
-  throw new Error(
-    'Overlay script is missing at ' +
-      overlayScriptPath +
-      '. Run build before the browser smoke.',
-  );
-}
+const overlayScriptPath = resolveOverlayScriptPath();
 
 /** 대표 캡처를 저장할 폴더. 비어 있으면 저장하지 않는다. */
 const screenshotDirectory = process.env.MYTUBE_EXTRACT_OVERLAY_SCREENSHOT_DIR ?? '';
 /** 검사용 썸네일 그림. 실제 이미지 서버 대신 쓴다. */
 const FIXTURE_THUMBNAIL_SVG =
   '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 160 90"><rect width="160" height="90" fill="#3b6ea5"/><circle cx="120" cy="30" r="14" fill="#f2c14e"/></svg>';
+/** Fixture HTML. */
+const FIXTURE_HTML = [
+  '<!doctype html><html><head><style>body{margin:16px;font-family:sans-serif} #cards{display:flex;flex-wrap:wrap;gap:16px;align-items:flex-start} a#thumbnail{display:block} .thumb{width:320px;height:180px;background:#6b7280} ytd-compact-video-renderer .thumb{width:168px;height:94px}</style></head><body><main id="cards">',
+  '<ytd-rich-item-renderer id="audio-card">',
+  '<a id="thumbnail" href="https://www.youtube.com/watch?v=abc123_DEF0"><div class="thumb"></div></a>',
+  '<a id="video-title-link">Fixture audio title</a></ytd-rich-item-renderer>',
+  '<ytd-compact-video-renderer id="video-card">',
+  '<a id="thumbnail" href="https://www.youtube.com/watch?v=video12_XYZ"><div class="thumb"></div></a>',
+  '<a id="video-title-link">Fixture video title</a></ytd-compact-video-renderer>',
+  '<ytd-rich-item-renderer id="shorts-card">',
+  '<a id="thumbnail" href="https://www.youtube.com/shorts/short123_XYZ"><div class="thumb"></div></a>',
+  '<a id="video-title-link">Fixture Shorts title</a></ytd-rich-item-renderer>',
+  '</main></body></html>',
+].join('');
 /** Overlay DOM fixture server. */
-const fixtureServer = await createFixtureServer();
+const fixtureServer = await createFixtureServer(() => FIXTURE_HTML);
 /** Browser instance. */
 const browser = await chromium.launch();
 /** Overlay fixture page. */
@@ -45,6 +51,17 @@ try {
       contentType: 'image/svg+xml',
     }),
   );
+  // Overlay host 는 카드 밖(body)에 붙으므로, 카드의 영상 ID로 host 를 찾는 도우미를 page 에 둔다.
+  await page.addInitScript(() => {
+    globalThis.__overlayHostOf = (cardSelector) => {
+      const href = document.querySelector(cardSelector + ' a#thumbnail')?.href;
+      const videoId = href ? new URL(href).searchParams.get('v') : null;
+
+      return videoId
+        ? document.querySelector('[data-mytube-extract-overlay][data-video-id="' + videoId + '"]')
+        : null;
+    };
+  });
   await page.addInitScript(() => {
     globalThis.__myTubeExtractOverlayRequests = [];
     globalThis.__myTubeExtractOverlayResponseDelayMs = 50;
@@ -308,8 +325,7 @@ try {
   await page.waitForFunction(
     () =>
       [
-        ...(document
-          .querySelector('#dynamic-card [data-mytube-extract-overlay]')
+        ...(globalThis.__overlayHostOf('#dynamic-card')
           ?.shadowRoot?.querySelectorAll('button') ?? []),
       ].every((button) => !button.disabled),
     null,
@@ -435,56 +451,6 @@ console.log(
   ),
 );
 
-/** Overlay 동작을 확인하는 fixture HTML server를 만든다. */
-function createFixtureServer() {
-  /** Fixture HTML. */
-  const fixtureHtml = [
-    '<!doctype html><html><head><style>body{margin:16px;font-family:sans-serif} #cards{display:flex;flex-wrap:wrap;gap:16px;align-items:flex-start} a#thumbnail{display:block} .thumb{width:320px;height:180px;background:#6b7280} ytd-compact-video-renderer .thumb{width:168px;height:94px}</style></head><body><main id="cards">',
-    '<ytd-rich-item-renderer id="audio-card">',
-    '<a id="thumbnail" href="https://www.youtube.com/watch?v=abc123_DEF0"><div class="thumb"></div></a>',
-    '<a id="video-title-link">Fixture audio title</a></ytd-rich-item-renderer>',
-    '<ytd-compact-video-renderer id="video-card">',
-    '<a id="thumbnail" href="https://www.youtube.com/watch?v=video12_XYZ"><div class="thumb"></div></a>',
-    '<a id="video-title-link">Fixture video title</a></ytd-compact-video-renderer>',
-    '<ytd-rich-item-renderer id="shorts-card">',
-    '<a id="thumbnail" href="https://www.youtube.com/shorts/short123_XYZ"><div class="thumb"></div></a>',
-    '<a id="video-title-link">Fixture Shorts title</a></ytd-rich-item-renderer>',
-    '</main></body></html>',
-  ].join('');
-  /** Static fixture server. */
-  const server = http.createServer((_request, response) => {
-    response.setHeader('Content-Type', 'text/html; charset=utf-8');
-    response.end(fixtureHtml);
-  });
-
-  return new Promise((resolve) => {
-    server.listen(0, '127.0.0.1', () => {
-      /** Fixture server address. */
-      const address = server.address();
-
-      if (!address || typeof address === 'string') {
-        throw new Error('Could not determine the fixture server address.');
-      }
-
-      resolve({
-        origin: 'http://127.0.0.1:' + address.port,
-        close() {
-          return new Promise((closeResolve, closeReject) => {
-            server.close((error) => {
-              if (error) {
-                closeReject(error);
-                return;
-              }
-
-              closeResolve();
-            });
-          });
-        },
-      });
-    });
-  });
-}
-
 /** 캡처 폴더가 지정되면 현재 화면을 저장한다. */
 async function saveScreenshot(page, fileName) {
   if (!screenshotDirectory) {
@@ -499,8 +465,7 @@ async function saveScreenshot(page, fileName) {
 function readOverlayVisible(page, cardSelector) {
   return page.evaluate(
     (selector) =>
-      document
-        .querySelector(selector + ' [data-mytube-extract-overlay]')
+      globalThis.__overlayHostOf(selector)
         ?.shadowRoot?.querySelector('.overlay')
         ?.hasAttribute('data-visible') === true,
     cardSelector,
@@ -512,8 +477,7 @@ async function waitForOverlayVisible(page, cardSelector, expected) {
   await page.waitForFunction(
     ([selector, visible]) => {
       /** 카드 Overlay layout root. */
-      const overlay = document
-        .querySelector(selector + ' [data-mytube-extract-overlay]')
+      const overlay = globalThis.__overlayHostOf(selector)
         ?.shadowRoot?.querySelector('.overlay');
 
       return (
@@ -532,7 +496,7 @@ async function waitForOverlayVisible(page, cardSelector, expected) {
 function readOverlayControls(page, cardSelector) {
   return page.evaluate((selector) => {
     /** 카드 Overlay Shadow Root. */
-    const root = document.querySelector(selector + ' [data-mytube-extract-overlay]')?.shadowRoot;
+    const root = globalThis.__overlayHostOf(selector)?.shadowRoot;
 
     return {
       formats: [...(root?.querySelectorAll('.formats button') ?? [])].map(
@@ -554,8 +518,7 @@ async function clickInOverlay(page, cardSelector, controlSelector) {
   const box = await page.evaluate(
     ([selector, control]) => {
       /** 누를 Shadow Root 안 control. */
-      const element = document
-        .querySelector(selector + ' [data-mytube-extract-overlay]')
+      const element = globalThis.__overlayHostOf(selector)
         ?.shadowRoot?.querySelector(control);
       /** control 화면 영역. */
       const rect = element?.getBoundingClientRect();
@@ -660,8 +623,7 @@ function setStoredJobs(page, jobs) {
 function readCardStatus(page, cardSelector) {
   return page.evaluate((selector) => {
     /** 카드 상태 자리. */
-    const status = document
-      .querySelector(selector + ' [data-mytube-extract-overlay]')
+    const status = globalThis.__overlayHostOf(selector)
       ?.shadowRoot?.querySelector('[role="status"]');
     /** 실패 배지 버튼. */
     const button = status?.querySelector('button');
@@ -686,8 +648,7 @@ function readCardStatus(page, cardSelector) {
 async function waitForCardStatus(page, cardSelector, expected) {
   await page.waitForFunction(
     ([selector, state]) =>
-      (document
-        .querySelector(selector + ' [data-mytube-extract-overlay]')
+      (globalThis.__overlayHostOf(selector)
         ?.shadowRoot?.querySelector('[role="status"]')
         ?.getAttribute('data-state') ?? '') === state,
     [cardSelector, expected],
@@ -699,7 +660,7 @@ async function waitForCardStatus(page, cardSelector, expected) {
 function readStatusOverlapsControls(page, cardSelector) {
   return page.evaluate((selector) => {
     /** 카드 Overlay Shadow Root. */
-    const root = document.querySelector(selector + ' [data-mytube-extract-overlay]')?.shadowRoot;
+    const root = globalThis.__overlayHostOf(selector)?.shadowRoot;
     /** 상태 배지 화면 영역. */
     const statusRect = root?.querySelector('[role="status"]')?.firstElementChild?.getBoundingClientRect();
 
@@ -719,18 +680,4 @@ function readStatusOverlapsControls(page, cardSelector) {
       );
     });
   }, cardSelector);
-}
-
-/** 기대값이 다르면 browser smoke를 실패시킨다. */
-function assertEqual(actual, expected, label) {
-  if (actual !== expected) {
-    throw new Error(
-      'Unexpected ' +
-        label +
-        ': expected ' +
-        String(expected) +
-        ', got ' +
-        String(actual),
-    );
-  }
 }

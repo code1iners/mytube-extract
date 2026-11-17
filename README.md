@@ -247,7 +247,7 @@ http://localhost:3000/popup.html
 
 ```bash
 WXT_MYTUBE_EXTRACT_API_BASE_URL=http://127.0.0.1:5011 pnpm --filter chrome-extension run dev
-WXT_MYTUBE_EXTRACT_API_BASE_URL=https://mytube-extract-api.codeliners.cc pnpm --filter chrome-extension run build
+pnpm --filter chrome-extension run build:production
 ```
 
 자동 open을 끄려면 아래처럼 실행한다.
@@ -283,6 +283,8 @@ pnpm --filter chrome-extension run lint
 ```bash
 pnpm --filter chrome-extension run test:browser
 ```
+
+`test:browser`와 `test:browser:overlay`는 `.env` 값과 관계없이 운영 API 주소로 빌드한다(`build:production`). 검사 뒤에도 `.output/chrome-mv3`를 그대로 unpacked 확장 프로그램으로 쓸 수 있게 하기 위해서다. 로컬 API 주소로 빌드하려면 `build`를 직접 실행한다.
 
 `test:browser`는 먼저 API `/health`를 확인하고, WXT production build를 Chromium load unpacked로 렌더링한 뒤, built popup을 브라우저에서 실행해 무대 자동 지정·붙여넣기 칸·잘못된 주소, 서버 확인 실패·접수 거부, 다운로드 진행, 파일명 편집, 최근 요청, 설정 화면 흐름과 Overlay 스모크를 검증한다. 실제 API에는 `/health`만 보내고 나머지는 가짜 응답을 쓴다. `dev:smoke`는 이미 실행 중인 WXT dev output으로 popup 렌더링만 빠르게 확인하며 production build를 만들지 않는다. Chrome Web Store 배포, 고정 extension ID 기반 CORS 허용, 백분율 다운로드 진행률 표시는 후속 범위다.
 

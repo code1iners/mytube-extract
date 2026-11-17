@@ -47,7 +47,7 @@ API 서버 제품 개요는 `docs/api/current-implementation-prd.md`, endpoint�
 - 확장 아이콘 클릭으로 부여되는 `activeTab`으로 Popup을 열 때 활성 탭 URL·제목을 한 번 읽는다. manifest 권한은 늘리지 않는다.
 - 썸네일 기능은 Popup 설정 화면의 썸네일 버튼 스위치를 켤 때 `https://www.youtube.com/*` optional Host Permission을 요청하고, 스위치를 끄면 그 권한을 해제해 이후 자동 주입을 멈춘다. 이미 열린 탭의 버튼은 다음 이동이나 새로고침 때 사라진다. 거부해도 Popup 흐름은 유지한다.
 - 테마 선호, 썸네일 버튼 스위치, 정책 안내, 완료 파일 보관 기간 안내는 Popup 내부 설정 화면에 둔다. 헤더 격자 아이콘의 점이 썸네일 버튼 상태(아직 켜지 않음·켜짐·거부)를 보여 준다.
-- 썸네일 Overlay는 홈, 검색 결과, 구독 피드, 시청 페이지 추천 영역의 표준 영상 카드만 대상으로 하고 Shorts는 제외한다.
+- 썸네일 Overlay는 홈, 검색 결과, 구독 피드, 시청 페이지 추천 영역, 채널 홈·동영상 탭·채널 안 검색의 표준 영상 카드만 대상으로 하고 Shorts와 재생목록 카드는 제외한다.
 - MP3 품질은 `128/192/320 kbps`, MP4 품질은 `360/720/1080p`이며 숫자 선택 즉시 Background가 job 생성 요청을 만든다. Popup·Overlay message 경계에서도 mode별 조합을 재검증한다.
 - 썸네일 제목은 Background에서 안전한 `filename`으로 정리해 전달한다. 접수·실패는 미니 썸네일·상태 아이콘·형식·품질의 페이지 전역 Toast로 알리고, 실패 Toast와 실패 카드 배지에서 같은 조건으로 다시 요청할 수 있다.
 - Overlay는 새 background→content 메시지 없이 저장된 최근 요청 목록의 storage 변경을 구독해, 카드 영상 ID와 job 영상 ID가 같은 카드 위에 대기·처리·완료·실패 상태를 그린다. 그래서 최근 5건 보관 목록에 있는 job만 Overlay에 표시된다.
@@ -81,8 +81,8 @@ API 서버 제품 개요는 `docs/api/current-implementation-prd.md`, endpoint�
 - Chrome extension load unpacked 환경에서 WXT generated manifest, popup asset, script 경로가 깨지지 않는지 확인한다.
 - package test는 Chrome runtime 없이 URL 검증, job API mapping, popup 상태 전이를 검증하고, package build는 WXT build output의 manifest/popup 정적 파일 참조를 검증한다.
 - browser smoke는 built popup의 무대·붙여넣기 칸·잘못된 주소·서버 실패·접수 거부·다운로드 흐름, 파일명 편집, 진행 복원, 최근 요청 줄·목록, 설정 화면의 테마와 썸네일 버튼 권한 흐름을 확인한다.
-- Overlay browser smoke는 Shadow Root 형식 아이콘과 품질 막대, 품질 클릭 제출, 저장된 job 변경에 따른 카드 상태 배지, 실패 배지 재시도, 전역 Toast, Shorts 제외, 무한 스크롤에 해당하는 동적 카드, 중복 주입을 확인한다.
-- 실제 Chrome 검증은 새 프로필에서 권한 허용 후 YouTube 홈·검색·구독·시청 추천 영역을 직접 열고 DOM 주입, console 오류, API 요청, 실제 다운로드를 분리해 확인한다.
+- Overlay browser smoke는 Shadow Root 형식 아이콘과 품질 막대, 품질 클릭 제출, 저장된 job 변경에 따른 카드 상태 배지, 실패 배지 재시도, 전역 Toast, Shorts 제외, 무한 스크롤에 해당하는 동적 카드, 중복 주입을 확인한다. 채널 smoke는 채널 홈·동영상 탭·채널 안 검색 카드의 Overlay 부착과 제목 읽기, 재생목록 카드·지원하지 않는 채널 탭 제외, shelf 이동 뒤 상태 배지 위치를 확인한다.
+- 실제 Chrome 검증은 새 프로필에서 권한 허용 후 YouTube 홈·검색·구독·시청 추천 영역·채널 화면을 직접 열고 DOM 주입, console 오류, API 요청, 실제 다운로드를 분리해 확인한다.
 
 ## Out of Scope
 
